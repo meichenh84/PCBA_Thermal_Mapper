@@ -1,10 +1,18 @@
+import sys
+import os
+# 设置标准输出编码为 UTF-8，避免中文输出问题
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 import tkinter as tk
 from tkinter import Canvas, filedialog, messagebox, simpledialog, ttk
 from PIL import Image, ImageTk
 from magnifier import ImageMagnifier
 from load_tempA import TempLoader
 from toast import show_toast  # 使用独立的toast组件
-import os
 import cv2
 import numpy as np
 import pandas as pd
@@ -13,7 +21,6 @@ import json
 import threading
 import time
 import math
-import sys
 import argparse
 from datetime import datetime
 from dialog_template import TemplateDialog

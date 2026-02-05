@@ -107,13 +107,14 @@ class RectEditor:
                 # 直接更新现有矩形的坐标
                 self.canvas.coords(rectId, left, top, right, bottom)
                 
-                # 更新名称标签位置
+                # 更新名称标签位置（置中于矩形框上方）
                 if nameId:
-                    self.canvas.coords(nameId, left + 10, top - 10)
-                
-                # 更新温度文本位置
+                    name_center_x = (left + right) / 2
+                    self.canvas.coords(nameId, name_center_x, top - 15 * self.display_scale)
+
+                # 更新温度文本位置（置中于矩形框内）
                 if tempTextId:
-                    self.canvas.coords(tempTextId, cx, cy - 16)
+                    self.canvas.coords(tempTextId, cx, cy - 16 * self.display_scale)
                 
                 # 更新三角形位置
                 if triangleId:
@@ -159,10 +160,11 @@ class RectEditor:
         
         if nameId:
             self.canvas.itemconfig(nameId, text=name)
-            self.canvas.coords(nameId, display_x1 + 10, display_y1 - 10)
+            name_center_x = (display_x1 + display_x2) / 2
+            self.canvas.coords(nameId, name_center_x, display_y1 - 15 * self.display_scale)
         if tempTextId:
             self.canvas.itemconfig(tempTextId, text=max_temp)
-            self.canvas.coords(tempTextId, display_cx, display_cy - 16)
+            self.canvas.coords(tempTextId, display_cx, display_cy - 16 * self.display_scale)
         if triangleId:
             size = max(7, int(8 * self.display_scale))
             self.canvas.coords(triangleId, display_cx, display_cy - size // 2, 
@@ -453,9 +455,16 @@ class RectEditor:
                         # 将原图像坐标转换为显示坐标
                         display_cx = cx * self.display_scale if self.display_scale > 0 else cx
                         display_cy = cy * self.display_scale if self.display_scale > 0 else cy
-                        
-                        # 更新canvas显示
-                        self.canvas.coords(tempTextId, display_cx, display_cy - 16)
+                        display_x1 = x1 * self.display_scale if self.display_scale > 0 else x1
+                        display_y1 = y1 * self.display_scale if self.display_scale > 0 else y1
+                        display_x2 = x2 * self.display_scale if self.display_scale > 0 else x2
+
+                        # 更新名称标签位置（置中于矩形框上方）
+                        name_center_x = (display_x1 + display_x2) / 2
+                        self.canvas.coords(nameId, name_center_x, display_y1 - 15 * self.display_scale)
+
+                        # 更新温度文本位置（置中于矩形框内）
+                        self.canvas.coords(tempTextId, display_cx, display_cy - 16 * self.display_scale)
                         self.canvas.itemconfig(tempTextId, text=max_temp)
                         
                         # 更新三角形
@@ -808,18 +817,20 @@ class RectEditor:
         else:
             orig_x1, orig_y1, orig_x2, orig_y2 = x1, y1, x2, y2
         
-        # 更新名称标签位置（使用显示坐标）
-        self.canvas.coords(nameId, x1 + 10, y1 - 10)
+        # 更新名称标签位置（置中于矩形框上方）
+        name_center_x = (x1 + x2) / 2
+        self.canvas.coords(nameId, name_center_x, y1 - 15 * self.display_scale)
 
         # 使用原图像坐标查询温度和最高温度位置
         max_temp = self.tempALoader.get_max_temp(int(orig_x1), int(orig_y1), int(orig_x2), int(orig_y2), 1.0)
         orig_cx, orig_cy = self.tempALoader.get_max_temp_coords(int(orig_x1), int(orig_y1), int(orig_x2), int(orig_y2), 1.0)
-        
+
         # 将原图像坐标转换为显示坐标来显示温度文本和三角形
         display_cx = orig_cx * self.display_scale
         display_cy = orig_cy * self.display_scale
-        
-        self.canvas.coords(tempTextId, display_cx, display_cy - 16)
+
+        # 更新温度文本位置（置中于矩形框内）
+        self.canvas.coords(tempTextId, display_cx, display_cy - 16 * self.display_scale)
         self.canvas.itemconfig(tempTextId, text=max_temp)
 
         # 计算新的三角形三个顶点（使用显示坐标）

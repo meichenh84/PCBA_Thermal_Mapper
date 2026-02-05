@@ -132,6 +132,9 @@ class EditorCanvas:
         # 绑定窗口关闭事件
         self.dialog.protocol("WM_DELETE_WINDOW", self.on_window_close)
 
+        # 绑定右键选单事件
+        self.canvas.bind("<Button-3>", self.show_context_menu)
+
         # mark_rect = []
         # rectItem1 = {"x1": 0,  "y1": 0, "x2": 100, "y2": 100, "cx": 50, "cy": 50, "max_temp": 73.2, "name": "A","rectId": 0,"nameId": 0, "triangleId": 0, "tempTextId": 0}
         # rectItem2 = {"x1": 200,  "y1": 200, "x2": 300, "y2": 350, "cx": 220, "cy": 290, "max_temp": 50.3, "name": "A1","rectId": 0,"nameId": 0, "triangleId": 0, "tempTextId": 0}
@@ -1573,6 +1576,180 @@ class EditorCanvas:
             print(f"✗ Layout查询器初始化失败: {e}")
             print("将使用默认的矩形框创建方式（显示弹窗）")
             self.layout_query = None
+
+    def show_context_menu(self, event):
+        """显示右键选单"""
+        print(f">>> show_context_menu 被调用，位置: ({event.x_root}, {event.y_root})")
+        context_menu = tk.Menu(self.dialog, tearoff=0)
+
+        # 直接显示选项（不使用子选单）
+        context_menu.add_command(label="元器件名称字体大小...", command=self.show_name_font_size_dialog)
+        context_menu.add_command(label="温度字体大小...", command=self.show_temp_font_size_dialog)
+
+        # 显示选单
+        context_menu.post(event.x_root, event.y_root)
+        print(f">>> 右键选单已显示")
+
+    def show_name_font_size_dialog(self):
+        """显示元器件名称字体大小调整对话框"""
+        self._show_font_size_dialog("heat_name_font_size", "元器件名称字体大小", 8, 36)
+
+    def show_temp_font_size_dialog(self):
+        """显示温度字体大小调整对话框"""
+        self._show_font_size_dialog("heat_temp_font_size", "温度字体大小", 6, 24)
+
+    def _show_font_size_dialog(self, config_key, title, min_size, max_size):
+        """显示字体大小调整对话框"""
+        from config import GlobalConfig
+        config = GlobalConfig()
+
+        # 创建对话框
+        dialog = tk.Toplevel(self.dialog)
+        dialog.title(title)
+        dialog.geometry("350x180")
+        dialog.resizable(False, False)
+        dialog.transient(self.dialog)
+        dialog.grab_set()
+
+        # 获取当前字体大小
+        current_size = config.get(config_key, 12)
+
+        # 标签
+        label = tk.Label(dialog, text=f"字体大小 ({min_size}-{max_size}):", font=UIStyle.LABEL_FONT)
+        label.pack(pady=(15, 5))
+
+        # 字体大小输入框和滑动条框架
+        input_frame = tk.Frame(dialog)
+        input_frame.pack(pady=5, padx=20, fill='x')
+
+        # 字体大小变量
+        size_var = tk.IntVar(value=current_size)
+
+        # 滑动条
+        scale = tk.Scale(
+            input_frame,
+            from_=min_size,
+            to=max_size,
+            orient='horizontal',
+            variable=size_var,
+            length=200
+        )
+        scale.pack(side='left', fill='x', expand=True)
+
+        # 数字输入框
+        spinbox = tk.Spinbox(
+            input_frame,
+            from_=min_size,
+            to=max_size,
+            textvariable=size_var,
+            width=5,
+            font=UIStyle.LABEL_FONT
+        )
+        spinbox.pack(side='left', padx=(10, 0))
+
+        # 按钮框架
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack(pady=15)
+
+        def apply_font_size():
+            """应用字体大小"""
+            try:
+                new_size = size_var.get()
+                print(f"apply_font_size 被调用，new_size={new_size}, config_key={config_key}")
+                if min_size <= new_size <= max_size:
+                    # 先保存到配置
+                    config.set(config_key, new_size)
+                    config.save_to_json()
+                    print(f"✓ {title}已更新为 {new_size}")
+
+                    # 验证配置是否保存成功
+                    saved_value = config.get(config_key)
+                    print(f"验证：config.get({config_key}) = {saved_value}")
+
+                    # 关闭对话框
+                    dialog.destroy()
+
+                    # 重新绘制所有矩形框
+                    print("开始调用 redraw_all_items...")
+                    self.redraw_all_items()
+                    print("redraw_all_items 调用完成")
+                else:
+                    print(f"✗ 字体大小必须在 {min_size}-{max_size} 之间")
+            except Exception as e:
+                print(f"✗ apply_font_size 错误: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # 确定按钮
+        ok_btn = tk.Button(
+            btn_frame,
+            text="确定",
+            command=apply_font_size,
+            width=8,
+            bg=UIStyle.PRIMARY_BLUE,
+            fg='white',
+            font=UIStyle.BUTTON_FONT
+        )
+        ok_btn.pack(side='left', padx=5)
+
+        # 取消按钮
+        cancel_btn = tk.Button(
+            btn_frame,
+            text="取消",
+            command=dialog.destroy,
+            width=8,
+            font=UIStyle.BUTTON_FONT
+        )
+        cancel_btn.pack(side='left', padx=5)
+
+    def redraw_all_items(self):
+        """重新绘制所有矩形框（更新字体大小后调用）"""
+        if not hasattr(self, 'editor_rect') or self.editor_rect is None:
+            print("✗ editor_rect 不存在，无法重绘")
+            return
+
+        # 读取当前配置确认字体大小
+        from config import GlobalConfig
+        config = GlobalConfig()
+        name_font = config.get("heat_name_font_size", 28)
+        temp_font = config.get("heat_temp_font_size", 14)
+        print(f"当前配置 - 名称字体: {name_font}, 温度字体: {temp_font}")
+
+        # 获取当前所有矩形数据
+        rectangles = self.editor_rect.rectangles.copy()
+        display_scale = self.editor_rect.display_scale
+        print(f"准备重绘 {len(rectangles)} 个矩形框，display_scale: {display_scale}")
+
+        # 删除旧的canvas元素
+        for rect in rectangles:
+            if rect.get("rectId"):
+                self.canvas.delete(rect["rectId"])
+            if rect.get("nameId"):
+                self.canvas.delete(rect["nameId"])
+            if rect.get("triangleId"):
+                self.canvas.delete(rect["triangleId"])
+            if rect.get("tempTextId"):
+                self.canvas.delete(rect["tempTextId"])
+
+        # 清空并重新创建
+        self.editor_rect.rectangles = []
+        self.editor_rect.delete_anchors()
+
+        # 重新绘制所有矩形
+        from draw_rect import draw_canvas_item
+        for rect in rectangles:
+            rectId, triangleId, tempTextId, nameId = draw_canvas_item(
+                self.canvas, rect, display_scale, (0, 0), 0
+            )
+            rect["rectId"] = rectId
+            rect["triangleId"] = triangleId
+            rect["tempTextId"] = tempTextId
+            rect["nameId"] = nameId
+            self.editor_rect.rectangles.append(rect)
+
+        # 强制更新canvas
+        self.canvas.update_idletasks()
+        print(f"✓ 已重新绘制 {len(rectangles)} 个矩形框")
 
     def on_window_close(self):
         # 检查editor_rect属性是否存在

@@ -60,12 +60,12 @@ class GlobalConfig:
             try:
                 with open(file_path, mode='r', encoding='utf-8') as file:
                     self._config = json.load(file)
-                print(f"从JSON文件加载配置: {file_path}")
+                print(f"Load config from: {file_path}")
             except (json.JSONDecodeError, FileNotFoundError) as e:
-                print(f"加载JSON配置文件失败: {e}，使用默认配置")
+                print(f"Load config failed: {e}, using default config")
                 self._config = self._get_default_config()
         else:
-            print(f"配置文件不存在: {file_path}，使用默认配置")
+            print(f"Config file not found: {file_path}, using default config")
             self._config = self._get_default_config()
     
     def _get_default_config(self):
@@ -78,9 +78,9 @@ class GlobalConfig:
             # 热力图标记颜色和字体设置
             "heat_rect_color": "#BCBCBC",           # 矩形框颜色
             "heat_name_color": "#FFFFFF",           # 元器件名称颜色
-            "heat_name_font_size": 12,              # 元器件名称字体大小
+            "heat_name_font_size": 28,              # 元器件名称字体大小
             "heat_temp_color": "#FF0000",           # 最高温度颜色
-            "heat_temp_font_size": 10,              # 最高温度字体大小
+            "heat_temp_font_size": 14,              # 最高温度字体大小
             "heat_selected_color": "#4A90E2",       # 选中矩形框颜色
             "heat_anchor_color": "#FF0000",         # 选中矩形框锚点颜色
             "heat_anchor_radius": 4,                # 选中矩形框锚点半径
@@ -88,9 +88,9 @@ class GlobalConfig:
             # Layout图标记颜色和字体设置
             "layout_rect_color": "#BCBCBC",         # 矩形框颜色
             "layout_name_color": "#FFFFFF",         # 元器件名称颜色
-            "layout_name_font_size": 12,            # 元器件名称字体大小
+            "layout_name_font_size": 28,            # 元器件名称字体大小
             "layout_temp_color": "#FF0000",         # 最高温度颜色
-            "layout_temp_font_size": 10,            # 最高温度字体大小
+            "layout_temp_font_size": 14,            # 最高温度字体大小
         }
 
     def update(self, newObj):

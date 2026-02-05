@@ -193,13 +193,17 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
     # 使用配置的字体大小
     name_font_size_scaled = int(name_font_size * font_scale)
     temp_font_size_scaled = int(temp_font_size * font_scale)
+    print(f"draw_canvas_item: name_font={name_font_size}*{font_scale:.2f}={name_font_size_scaled}, temp_font={temp_font_size}*{font_scale:.2f}={temp_font_size_scaled}")
 
     # 绘制实际文本
-    tempTextId = canvas.create_text(cx - 0, cy - 16 * imageScale, text=f'{max_temp}', 
-                       font=("Arial", temp_font_size_scaled), fill=tempColor)
-    
-    nameId = canvas.create_text(left + 10 * imageScale, top - 10 * imageScale, text=f'{name}', 
-                       font=("Arial", name_font_size_scaled), fill=textColor)
+    # 温度文字置中于矩形框内
+    tempTextId = canvas.create_text(cx, cy - 16 * imageScale, text=f'{max_temp}',
+                       font=("Arial", temp_font_size_scaled), fill=tempColor, anchor="center")
+
+    # 名称文字置中于矩形框上方外侧
+    name_center_x = (left + right) / 2  # 矩形框水平中心
+    nameId = canvas.create_text(name_center_x, top - 15 * imageScale, text=f'{name}',
+                       font=("Arial", name_font_size_scaled, "bold"), fill=textColor, anchor="center")
     
     return rectId, triangleId, tempTextId, nameId
 
@@ -229,14 +233,14 @@ def update_canvas_item(canvas, item, imageScale=1, ):
 
     canvas.coords(rectId, x1, y1, x2, y2)
 
-    canvas.coords(nameId, x1 + 10*imageScale, y1 - 10*imageScale)
-    canvas.itemconfig(nameId, font=("Arial", int(12 * font_scale)))
+    # 名称文字置中于矩形框上方外侧
+    name_center_x = (x1 + x2) / 2
+    canvas.coords(nameId, name_center_x, y1 - 15 * imageScale)
+    canvas.itemconfig(nameId, font=("Arial", int(28 * font_scale), "bold"))
 
-    # max_temp = self.tempALoader.get_max_temp(x1, y1, x2, y2, self.img_scale_ratio)
-    # cx, cy = self.tempALoader.get_max_temp_coords(x1, y1, x2, y2, self.img_scale_ratio)
+    # 温度文字置中于矩形框内
     canvas.coords(tempTextId, cx, cy - 16 * imageScale)
-    # self.canvas.itemconfig(tempTextId, text=max_temp)
-    canvas.itemconfig(tempTextId, font=("Arial", int(10 * font_scale)))
+    canvas.itemconfig(tempTextId, font=("Arial", int(14 * font_scale)))
 
     # 计算新的三角形三个顶点
     point1 = (cx, cy - size // 2)  # 顶点1 (尖角)
