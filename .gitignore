@@ -1,0 +1,54 @@
+# Virtual Environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Local config
+config/
+
+# Embedded Python (too large)
+Python312/
+
+# Install files
+install/get_pip.py
+
+# Temporary files
+*.tmp
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# User data (test files)
+user_data/
+
+# Font files
+font/
+
+# Claude settings
+.claude/
+src/.claude/
+
+# Analysis markdown
+*.md

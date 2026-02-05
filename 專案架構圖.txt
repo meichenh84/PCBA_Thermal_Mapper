@@ -1,0 +1,443 @@
+================================================================================
+                    PCBA Thermal Mapper 專案架構圖
+================================================================================
+
+                                    ┌─────────────────┐
+                                    │    main.py      │  ← 主程式入口
+                                    │ ResizableImages │
+                                    │      App        │
+                                    └────────┬────────┘
+                                             │
+            ┌────────────────────────────────┼────────────────────────────────┐
+            │                                │                                │
+            ▼                                ▼                                ▼
+┌───────────────────────┐      ┌─────────────────────────┐      ┌─────────────────────────┐
+│     UI 對話框模組      │      │      核心功能模組        │      │      圖像處理模組        │
+└───────────────────────┘      └─────────────────────────┘      └─────────────────────────┘
+            │                                │                                │
+     ┌──────┴──────┐              ┌──────────┼──────────┐           ┌────────┴────────┐
+     │             │              │          │          │           │                 │
+     ▼             ▼              ▼          ▼          ▼           ▼                 ▼
+┌─────────┐  ┌──────────┐  ┌──────────┐ ┌────────┐ ┌────────┐ ┌───────────┐   ┌───────────┐
+│dialog_  │  │dialog_   │  │editor_   │ │load_   │ │magnif- │ │recognize_ │   │recognize_ │
+│template │  │setting   │  │canvas    │ │tempA   │ │ier     │ │circle     │   │image      │
+│.py      │  │.py       │  │.py       │ │.py     │ │.py     │ │.py        │   │.py        │
+└────┬────┘  └────┬─────┘  └────┬─────┘ └────────┘ └───┬────┘ └───────────┘   └─────┬─────┘
+     │            │             │                      │                            │
+     │            │             ▼                      │                            │
+     │            │       ┌──────────┐                 │         ┌──────────────────┼──────────────────┐
+     │            │       │editor_   │                 │         │                  │                  │
+     │            │       │rect.py   │                 │         ▼                  ▼                  ▼
+     │            │       └────┬─────┘                 │   ┌───────────┐    ┌───────────┐    ┌─────────────┐
+     │            │            │                       │   │recognize_ │    │recognize_ │    │yolo_v8.py   │
+     │            │            │                       │   │component_ │    │pcb_       │    │YOLOv8       │
+     │            │            │                       │   │boundary   │    │boundary   │    │Instance     │
+     │            │            │                       │   └───────────┘    └───────────┘    └─────────────┘
+     │            │            │                       │
+     │            │            ▼                       ▼
+     │            │   ┌────────────────┐      ┌────────────────┐
+     │            │   │dialog_         │      │circle_ring_    │
+     │            │   │component_      │      │draw.py         │
+     │            │   │setting.py      │      └────────────────┘
+     │            │   └────────────────┘
+     │            │
+     ▼            ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    共用模組層                                             │
+├───────────┬───────────┬───────────┬───────────┬──────────────┬──────────────────────────┤
+│ config.py │constants  │point_     │draw_      │temperature_  │layout_temperature_       │
+│Global     │.py        │transformer│rect.py    │config_       │query_optimized.py        │
+│Config     │Constants  │.py        │           │manager.py    │                          │
+└─────┬─────┴───────────┴─────┬─────┴─────┬─────┴──────────────┴──────────────────────────┘
+      │                       │           │
+      │                       │           │
+      ▼                       ▼           ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    工具模組層                                             │
+├───────────┬───────────┬───────────┬───────────┬───────────┬─────────────────────────────┤
+│toast.py   │ui_style   │color_     │coordinate_│placeholder│bean/canvas_rect_item.py    │
+│           │.py        │range.py   │converter  │_entry.py  │CanvasRectItem              │
+│           │UIStyle    │           │.py        │           │                            │
+└───────────┴───────────┴───────────┴───────────┴───────────┴─────────────────────────────┘
+
+
+================================================================================
+                              依賴關係詳細圖
+================================================================================
+
+main.py ─────────────────────────────────────────────────────────────────────────────────┐
+    │                                                                                     │
+    ├──→ magnifier.py ──→ circle_ring_draw.py                                            │
+    ├──→ load_tempA.py                                                                   │
+    ├──→ toast.py                                                                        │
+    ├──→ dialog_template.py ──┬──→ config.py                                             │
+    │                         └──→ temperature_config_manager.py                         │
+    ├──→ dialog_setting.py ──→ config.py                                                 │
+    ├──→ constants.py                                                                    │
+    ├──→ point_transformer.py                                                            │
+    ├──→ config.py                                                                       │
+    ├──→ ui_style.py                                                                     │
+    ├──→ circle_ring_draw.py                                                             │
+    ├──→ recognize_circle.py                                                             │
+    ├──→ draw_rect.py ──→ config.py                                                      │
+    ├──→ editor_canvas.py ──┬──→ ui_style.py                                             │
+    │                       └──→ editor_rect.py ──┬──→ dialog_component_setting.py       │
+    │                                             ├──→ load_tempA.py                     │
+    │                                             └──→ draw_rect.py                      │
+    ├──→ layout_temperature_query_optimized.py ──→ point_transformer.py                  │
+    └──→ temperature_config_manager.py                                                   │
+                                                                                         │
+recognize_image.py ──────────────────────────────────────────────────────────────────────┤
+    ├──→ recognize_component_boundary.py                                                 │
+    ├──→ recognize_pcb_boundary.py                                                       │
+    ├──→ point_transformer.py                                                            │
+    ├──→ color_range.py                                                                  │
+    ├──→ load_tempA.py                                                                   │
+    └──→ yolo_v8.py                                                                      │
+                                                                                         │
+margin_point.py ──→ constants.py                                                         │
+point_margin.py ──→ constants.py                                                         │
+─────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+                              各檔案詳細資訊
+================================================================================
+
+【FILE: bean/canvas_rect_item.py】
+  IMPORTS FROM: 無 (無本地引用)
+  DEFINES:
+    - Class: CanvasRectItem
+
+--------------------------------------------------------------------------------
+
+【FILE: circle_ring_draw.py】
+  IMPORTS FROM: 無 (僅 cv2, numpy)
+  DEFINES:
+    - Function: draw_circle_ring_text
+    - Function: draw_circle_ring
+    - Function: draw_points_circle_ring_text
+    - Function: draw_points_circle_ring
+    - Function: draw_points
+
+--------------------------------------------------------------------------------
+
+【FILE: color_range.py】
+  IMPORTS FROM: 無 (僅 cv2, numpy)
+  DEFINES:
+    - Function: get_mask_boundary
+
+--------------------------------------------------------------------------------
+
+【FILE: config.py】
+  IMPORTS FROM: 無 (僅 json, os)
+  DEFINES:
+    - Class: GlobalConfig
+
+--------------------------------------------------------------------------------
+
+【FILE: constants.py】
+  IMPORTS FROM: 無
+  DEFINES:
+    - Class: Constants
+
+--------------------------------------------------------------------------------
+
+【FILE: coordinate_converter.py】
+  IMPORTS FROM: 無 (僅 numpy)
+  DEFINES:
+    - Class: CoordinateConverter
+    - Function: demo_coordinate_conversion
+    - Function: quick_convert
+
+--------------------------------------------------------------------------------
+
+【FILE: dialog_component_setting.py】
+  IMPORTS FROM: 無 (僅 tkinter)
+  DEFINES:
+    - Class: ComponentSettingDialog
+
+--------------------------------------------------------------------------------
+
+【FILE: dialog_setting.py】
+  IMPORTS FROM:
+    - config.py (GlobalConfig)
+  DEFINES:
+    - Class: SettingDialog
+
+--------------------------------------------------------------------------------
+
+【FILE: dialog_template.py】
+  IMPORTS FROM:
+    - config.py (GlobalConfig)
+    - temperature_config_manager.py (TemperatureConfigManager)
+  DEFINES:
+    - Class: TemplateDialog
+
+--------------------------------------------------------------------------------
+
+【FILE: draw_rect.py】
+  IMPORTS FROM:
+    - config.py (GlobalConfig)
+  DEFINES:
+    - Function: draw_triangle_and_text
+    - Function: draw_canvas_item
+    - Function: update_canvas_item
+    - Function: draw_points_on_canvas
+    - Function: draw_numpy_image_item
+
+--------------------------------------------------------------------------------
+
+【FILE: editor_canvas.py】
+  IMPORTS FROM:
+    - ui_style.py (UIStyle)
+    - editor_rect.py (RectEditor)
+  DEFINES:
+    - Class: EditorCanvas
+    - Function: on_window_close
+
+--------------------------------------------------------------------------------
+
+【FILE: editor_rect.py】
+  IMPORTS FROM:
+    - dialog_component_setting.py (ComponentSettingDialog)
+    - load_tempA.py (TempLoader)
+    - draw_rect.py (draw_canvas_item)
+  DEFINES:
+    - Class: RectEditor
+    - Class: CustomEvent
+
+--------------------------------------------------------------------------------
+
+【FILE: layout_temperature_query_optimized.py】
+  IMPORTS FROM:
+    - point_transformer.py (PointTransformer)
+  DEFINES:
+    - Class: LayoutTemperatureQueryOptimized
+
+--------------------------------------------------------------------------------
+
+【FILE: load_tempA.py】
+  IMPORTS FROM: 無 (僅 pandas, numpy, os, time)
+  DEFINES:
+    - Class: TempLoader
+
+--------------------------------------------------------------------------------
+
+【FILE: magnifier.py】
+  IMPORTS FROM:
+    - circle_ring_draw.py (draw_points_circle_ring_text)
+  DEFINES:
+    - Class: ImageMagnifier
+
+--------------------------------------------------------------------------------
+
+【FILE: main.py】
+  IMPORTS FROM:
+    - magnifier.py (ImageMagnifier)
+    - load_tempA.py (TempLoader)
+    - toast.py (show_toast)
+    - dialog_template.py (TemplateDialog)
+    - dialog_setting.py (SettingDialog)
+    - constants.py (Constants)
+    - point_transformer.py (PointTransformer)
+    - config.py (GlobalConfig)
+    - circle_ring_draw.py (draw_points_circle_ring_text, draw_points_circle_ring)
+    - recognize_circle.py (detect_A_circles, detect_B_circles, find_circle_containing_point)
+    - draw_rect.py (draw_triangle_and_text, draw_canvas_item, update_canvas_item, draw_numpy_image_item)
+    - editor_canvas.py (EditorCanvas)
+    - layout_temperature_query_optimized.py (LayoutTemperatureQueryOptimized)
+    - temperature_config_manager.py (TemperatureConfigManager)
+  DEFINES:
+    - Class: ResizableImagesApp
+    - Function: setup_logging
+    - Function: parse_arguments
+
+--------------------------------------------------------------------------------
+
+【FILE: margin_point.py】
+  IMPORTS FROM:
+    - constants.py (Constants)
+  DEFINES:
+    - Class: MarginPoint
+
+--------------------------------------------------------------------------------
+
+【FILE: placeholder_entry.py】
+  IMPORTS FROM: 無 (僅 tkinter)
+  DEFINES:
+    - Class: PlaceholderEntry
+    - Function: test_placeholder_entry
+
+--------------------------------------------------------------------------------
+
+【FILE: point_margin.py】
+  IMPORTS FROM:
+    - constants.py (Constants)
+  DEFINES:
+    - Class: MarginPoint
+
+--------------------------------------------------------------------------------
+
+【FILE: point_matrix.py】
+  IMPORTS FROM: 無 (僅 cv2, numpy)
+  DEFINES:
+    - Class: PointTransformer
+
+--------------------------------------------------------------------------------
+
+【FILE: point_transformer.py】
+  IMPORTS FROM: 無 (僅 cv2, numpy)
+  DEFINES:
+    - Class: PointTransformer
+
+--------------------------------------------------------------------------------
+
+【FILE: recognize_circle.py】
+  IMPORTS FROM: 無 (僅 cv2, numpy, math)
+  DEFINES:
+    - Function: detect_A_circles
+    - Function: detect_B_circles
+    - Function: find_circle_containing_point
+
+--------------------------------------------------------------------------------
+
+【FILE: recognize_component_boundary.py】
+  IMPORTS FROM: 無
+  DEFINES:
+    - Function: recognize_component_boundary
+
+--------------------------------------------------------------------------------
+
+【FILE: recognize_image.py】
+  IMPORTS FROM:
+    - recognize_component_boundary.py (recognize_component_boundary)
+    - recognize_pcb_boundary.py (recognize_pcb_boundary)
+    - point_transformer.py (PointTransformer)
+    - color_range.py (get_mask_boundary)
+    - load_tempA.py (TempLoader)
+    - yolo_v8.py (YOLOv8Instance)
+  DEFINES:
+    - Function: yolo_process_pcb_image
+    - Function: process_pcb_image
+
+--------------------------------------------------------------------------------
+
+【FILE: recognize_pcb_boundary.py】
+  IMPORTS FROM: 無 (僅 cv2, numpy)
+  DEFINES:
+    - Function: recognize_pcb_boundary
+
+--------------------------------------------------------------------------------
+
+【FILE: temperature_config_manager.py】
+  IMPORTS FROM: 無 (僅 json, os, threading, pathlib)
+  DEFINES:
+    - Class: TemperatureConfigManager
+
+--------------------------------------------------------------------------------
+
+【FILE: template_mark_pcb.py】
+  IMPORTS FROM: 無 (僅 cv2, numpy, random, pandas, time)
+  DEFINES:
+    - Function: A2B
+    - Function: B2A
+    - Function: B2A_m
+    - Function: A2B_m
+    - Function: divide_into_parts
+    - Function: find_boundaries
+
+--------------------------------------------------------------------------------
+
+【FILE: toast.py】
+  IMPORTS FROM: 無 (條件式引用 main，有備用預設值)
+  DEFINES:
+    - Class: Toast
+    - Function: show_toast
+    - Function: hide_toast
+
+--------------------------------------------------------------------------------
+
+【FILE: ui_style.py】
+  IMPORTS FROM: 無 (僅 tkinter)
+  DEFINES:
+    - Class: UIStyle
+
+--------------------------------------------------------------------------------
+
+【FILE: yolo_v8.py】
+  IMPORTS FROM: 無 (僅 ultralytics, cv2, numpy, time, torch)
+  DEFINES:
+    - Class: YOLOv8Instance
+
+
+================================================================================
+                              模組功能說明
+================================================================================
+
+【核心入口】
+--------------------------------------------------------------------------------
+  main.py              | 主程式，ResizableImagesApp 類別，熱力圖溫度點位自動識別
+
+【UI 對話框】
+--------------------------------------------------------------------------------
+  dialog_template.py          | 模板設定對話框
+  dialog_setting.py           | 全局設定對話框
+  dialog_component_setting.py | 元器件設定對話框
+
+【編輯器】
+--------------------------------------------------------------------------------
+  editor_canvas.py     | 畫布編輯器，處理圖像顯示和互動
+  editor_rect.py       | 矩形編輯器，處理元器件邊界框編輯
+
+【圖像識別】
+--------------------------------------------------------------------------------
+  recognize_image.py           | 圖像處理主模組
+  recognize_circle.py          | 圓形檢測 (霍夫變換)
+  recognize_component_boundary | 元器件邊界識別
+  recognize_pcb_boundary.py    | PCB 邊界識別
+  yolo_v8.py                   | YOLOv8 深度學習物件偵測
+  color_range.py               | 顏色範圍遮罩處理
+
+【溫度處理】
+--------------------------------------------------------------------------------
+  load_tempA.py                        | 溫度數據加載器 (CSV/Excel)
+  temperature_config_manager.py        | 溫度配置管理
+  layout_temperature_query_optimized   | 佈局溫度查詢優化版
+
+【繪圖工具】
+--------------------------------------------------------------------------------
+  draw_rect.py         | 矩形、三角形繪製
+  circle_ring_draw.py  | 圓環繪製
+  magnifier.py         | 放大鏡功能
+
+【座標轉換】
+--------------------------------------------------------------------------------
+  point_transformer.py   | 點座標轉換 (熱力圖<->佈局圖)
+  coordinate_converter   | 座標系統轉換
+  template_mark_pcb.py   | PCB 模板標記座標轉換
+
+【配置與常數】
+--------------------------------------------------------------------------------
+  config.py            | 全局配置 (GlobalConfig 單例)
+  constants.py         | 常數定義
+  ui_style.py          | UI 樣式定義
+
+【其他工具】
+--------------------------------------------------------------------------------
+  toast.py               | 提示訊息元件
+  placeholder_entry.py   | 帶佔位符的輸入框
+  bean/canvas_rect_item  | 畫布矩形項目資料類別
+
+
+================================================================================
+                                 統計資訊
+================================================================================
+
+  Python 檔案總數:  27 個
+  主要類別數量:     17 個
+  主要函數數量:     28+ 個
+  循環依賴:         無 (架構設計良好)
+  主程式入口點:     main.py (ResizableImagesApp)
+
+================================================================================
