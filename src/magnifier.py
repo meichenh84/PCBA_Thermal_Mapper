@@ -84,33 +84,37 @@ class ImageMagnifier:
 
         double_rect_width = self.rect_width * 2
         half_rect_width = self.rect_width // 2
-        
+
         # 计算理想的裁剪区域（相对于原图的坐标）
         center_x = x - self.x_min
         center_y = y - self.y_min
-        
-        # 调整裁剪中心点，确保裁剪区域始终是完整的正方形且在图像边界内
-        # 限制中心点位置，使得裁剪区域不会超出边界
-        center_x = max(half_rect_width, min(self.original_width - half_rect_width, center_x))
-        center_y = max(half_rect_width, min(self.original_height - half_rect_width, center_y))
-        
-        # 计算裁剪区域，确保始终是 rect_width x rect_width 的正方形
+
+        # 不再限制中心点，让放大镜始终跟随游标
+        # 计算裁剪区域（可能超出图像边界）
         left = center_x - half_rect_width
         top = center_y - half_rect_width
         right = center_x + half_rect_width
         bottom = center_y + half_rect_width
-        
-        # 确保裁剪区域在图像范围内（虽然上面已经调整过，但这是双重保险）
-        left = max(0, min(left, self.original_width - self.rect_width))
-        top = max(0, min(top, self.original_height - self.rect_width))
-        right = left + self.rect_width
-        bottom = top + self.rect_width
 
-         # 更新放大镜的矩形位置
-        # self.canvas.coords(self.magnifier_rect, left, top, right, bottom)
+        # 创建带背景色的画布，用于处理超出边界的情况
+        cropped_image = Image.new('RGB', (self.rect_width, self.rect_width), (50, 50, 50))  # 深灰色背景
 
-        # 从原图中裁剪出放大区域（现在裁剪区域始终是 rect_width x rect_width）
-        cropped_image = self.mix_image.crop((left, top, right, bottom))
+        # 计算实际可裁剪的区域（在图像范围内的部分）
+        src_left = max(0, left)
+        src_top = max(0, top)
+        src_right = min(self.original_width, right)
+        src_bottom = min(self.original_height, bottom)
+
+        # 计算粘贴到目标画布的位置
+        dst_left = max(0, -left)
+        dst_top = max(0, -top)
+
+        # 只有当有有效的裁剪区域时才进行裁剪和粘贴
+        if src_right > src_left and src_bottom > src_top:
+            # 从原图裁剪有效区域
+            valid_crop = self.mix_image.crop((src_left, src_top, src_right, src_bottom))
+            # 粘贴到带背景的画布上
+            cropped_image.paste(valid_crop, (int(dst_left), int(dst_top)))
 
         # 放大图像，使用LANCZOS进行高质量缩放（等比例放大，不会扭曲）
         zoomed_image = cropped_image.resize((double_rect_width, double_rect_width), Image.Resampling.LANCZOS)
