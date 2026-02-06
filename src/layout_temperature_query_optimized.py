@@ -402,6 +402,9 @@ class LayoutTemperatureQueryOptimized:
                     cr1_cx = int(cr1_x)
                     cr1_cy = int(cr1_y)
                     
+                    # 從 component 中取得描述資訊
+                    description = component.get('Description', '')
+
                     # 添加到候选列表
                     all_rects.append({
                         'rectA': {
@@ -413,7 +416,8 @@ class LayoutTemperatureQueryOptimized:
                             "cy": ar1_cy,
                             "max_temp": max_temp_value,
                             "name": refdes,
-                            "refdes": refdes
+                            "refdes": refdes,
+                            "description": description
                         },
                         'rectB': {
                             "x1": int(cr1_left),
@@ -424,7 +428,8 @@ class LayoutTemperatureQueryOptimized:
                             "cy": int(cr1_cy),
                             "max_temp": max_temp_value,
                             "name": refdes,
-                            "refdes": refdes
+                            "refdes": refdes,
+                            "description": description
                         },
                         'temp': max_temp_value
                     })

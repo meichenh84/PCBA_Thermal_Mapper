@@ -246,7 +246,7 @@ class EditorCanvas:
     def create_rect_list_panel(self, parent):
         """创建左侧矩形框列表面板"""
         # 创建左侧面板框架
-        left_panel = tk.Frame(parent, width=200, bg=UIStyle.VERY_LIGHT_BLUE)
+        left_panel = tk.Frame(parent, width=400, bg=UIStyle.VERY_LIGHT_BLUE)
         left_panel.grid(row=0, column=0, sticky="ns", padx=5, pady=5)
         left_panel.grid_propagate(False)  # 保持固定宽度
         
@@ -340,6 +340,21 @@ class EditorCanvas:
             command=self.toggle_sort_by_name
         )
         self.name_header_btn.pack(side=tk.LEFT, padx=4, pady=3)
+
+        # 描述欄位標頭（可點擊）- 使用 pack 佈局與列表項對齊
+        self.desc_header_btn = tk.Button(
+            header_frame,
+            text="描述",
+            font=("Arial", 10),
+            bg=UIStyle.LIGHT_GRAY,
+            fg=UIStyle.BLACK,
+            relief="flat",
+            bd=0,
+            anchor="w",
+            width=20,
+            command=self.toggle_sort_by_desc
+        )
+        self.desc_header_btn.pack(side=tk.LEFT, padx=4, pady=3)
 
         # 溫度欄位標頭（可點擊）- 使用 pack 佈局與列表項對齊
         self.temp_header_btn = tk.Button(
@@ -578,11 +593,16 @@ class EditorCanvas:
         rect_name = rect.get('name', f'AR{index+1}')
         max_temp = rect.get('max_temp', 0)
         rect_id = rect.get('rectId', index)
-        
+        description = rect.get('description', '')  # 獲取描述資訊
+
         # 不可编辑的名称标签
         name_label = tk.Label(item_frame, text=rect_name, width=10, font=UIStyle.SMALL_FONT, bg=UIStyle.WHITE, anchor='w')
         name_label.pack(side=tk.LEFT, padx=4, pady=3)
-        
+
+        # 创建描述标签（在名称和温度之间）
+        desc_label = tk.Label(item_frame, text=description, width=20, font=UIStyle.SMALL_FONT, bg=UIStyle.WHITE, anchor='w')
+        desc_label.pack(side=tk.LEFT, padx=4, pady=3)
+
         # 创建温度标签
         temp_text = f"{max_temp:.1f}°C"
         temp_label = tk.Label(item_frame, text=temp_text, font=UIStyle.SMALL_FONT, bg=UIStyle.WHITE)
@@ -622,15 +642,18 @@ class EditorCanvas:
         item_frame.bind("<Double-Button-1>", on_item_double_click)
         name_label.bind("<Button-1>", on_item_click)
         name_label.bind("<Double-Button-1>", on_item_double_click)
+        desc_label.bind("<Button-1>", on_item_click)
+        desc_label.bind("<Double-Button-1>", on_item_double_click)
         temp_label.bind("<Button-1>", on_item_click)
         temp_label.bind("<Double-Button-1>", on_item_double_click)
-        
+
         # 移除下拉按钮
-        
+
         # 存储列表项信息
         list_item = {
             'frame': item_frame,
             'name_label': name_label,
+            'desc_label': desc_label,
             'temp_label': temp_label,
             'rect_id': rect_id
         }
@@ -1587,6 +1610,17 @@ class EditorCanvas:
             self.apply_sort()
             self.update_sort_indicators()
 
+    def toggle_sort_by_desc(self):
+        """切換按描述排序"""
+        if self.sort_mode == "desc_asc":
+            # 已經是描述升序，不需要切換（保持當前狀態）
+            return
+        else:
+            # 切換到描述升序
+            self.sort_mode = "desc_asc"
+            self.apply_sort()
+            self.update_sort_indicators()
+
     def apply_sort(self):
         """應用當前的排序模式"""
         if not hasattr(self, 'editor_rect') or not self.editor_rect:
@@ -1605,6 +1639,11 @@ class EditorCanvas:
             def get_name(rect):
                 return rect.get('name', '').upper()  # 轉大寫以忽略大小寫
             sorted_rectangles = sorted(rectangles, key=get_name)
+        elif self.sort_mode == "desc_asc":
+            # 按描述升序排序（A~Z）
+            def get_description(rect):
+                return rect.get('description', '').upper()  # 轉大寫以忽略大小寫
+            sorted_rectangles = sorted(rectangles, key=get_description)
         elif self.sort_mode == "temp_desc":
             # 按溫度降序排序（大到小）
             def get_temperature(rect):
@@ -1626,18 +1665,25 @@ class EditorCanvas:
 
     def update_sort_indicators(self):
         """更新排序指示符號"""
-        if not hasattr(self, 'name_header_btn') or not hasattr(self, 'temp_header_btn'):
+        if not hasattr(self, 'name_header_btn') or not hasattr(self, 'temp_header_btn') or not hasattr(self, 'desc_header_btn'):
             return
 
         # 更新名稱欄位標頭
         if self.sort_mode == "name_asc":
             self.name_header_btn.config(text="名稱 ▼", fg=UIStyle.PRIMARY_BLUE, font=("Arial", 10, "bold"))
+            self.desc_header_btn.config(text="描述", fg=UIStyle.BLACK, font=("Arial", 10))
+            self.temp_header_btn.config(text="溫度   ", fg=UIStyle.BLACK, font=("Arial", 10))
+        elif self.sort_mode == "desc_asc":
+            self.name_header_btn.config(text="名稱", fg=UIStyle.BLACK, font=("Arial", 10))
+            self.desc_header_btn.config(text="描述 ▼", fg=UIStyle.PRIMARY_BLUE, font=("Arial", 10, "bold"))
             self.temp_header_btn.config(text="溫度   ", fg=UIStyle.BLACK, font=("Arial", 10))
         elif self.sort_mode == "temp_desc":
             self.name_header_btn.config(text="名稱", fg=UIStyle.BLACK, font=("Arial", 10))
+            self.desc_header_btn.config(text="描述", fg=UIStyle.BLACK, font=("Arial", 10))
             self.temp_header_btn.config(text="溫度 ▼ ", fg=UIStyle.PRIMARY_BLUE, font=("Arial", 10, "bold"))
         else:
             self.name_header_btn.config(text="名稱", fg=UIStyle.BLACK, font=("Arial", 10))
+            self.desc_header_btn.config(text="描述", fg=UIStyle.BLACK, font=("Arial", 10))
             self.temp_header_btn.config(text="溫度", fg=UIStyle.BLACK, font=("Arial", 10))
 
     # def sort_by_temperature(self):

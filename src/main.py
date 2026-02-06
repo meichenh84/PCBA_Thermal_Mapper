@@ -1217,7 +1217,12 @@ class ResizableImagesApp:
                     l = item_row['L']
                     w = item_row['W']
                     t = item_row['T']
-                    
+
+                    # 提取「对象描述」欄位（如果存在）
+                    description = item_row.get('对象描述', '')
+                    if pd.isna(description):
+                        description = ''
+
                     # 计算边界框（考虑旋转角度）
                     if orient == 0 or pd.isna(orient):
                         # 如果角度为0或NaN，使用简单计算
@@ -1228,7 +1233,7 @@ class ResizableImagesApp:
                     else:
                         # 使用旋转计算
                         left, top, right, bottom = self.calculate_rotated_bounding_box(x, y, l, w, orient)
-                    
+
                     c_info.append({
                         'RefDes': refdes,
                         'left': left,
@@ -1240,7 +1245,8 @@ class ResizableImagesApp:
                         'L': l,
                         'W': w,
                         'T': t,
-                        'Orient.': orient
+                        'Orient.': orient,
+                        'Description': description
                     })
                 # else:
                     # print(f"未找到RefDes {refdes} 对应的尺寸信息，跳过")
@@ -1397,10 +1403,15 @@ class ResizableImagesApp:
                     l = item_row['L']  # 长
                     w = item_row['W']  # 宽
                     t = item_row['T']  # 高
-                    
+
+                    # 提取「对象描述」欄位（如果存在）
+                    description = item_row.get('对象描述', '')
+                    if pd.isna(description):
+                        description = ''
+
                     # 计算外接矩形的四个角点坐标（考虑旋转）
                     left, top, right, bottom = self.calculate_rotated_rectangle(x, y, l, t, orient)
-                    
+
                     c_info.append({
                         'RefDes': refdes,
                         'left': left,
@@ -1412,7 +1423,8 @@ class ResizableImagesApp:
                         'L': l,
                         'W': w,
                         'T': t,
-                        'Orient.': orient
+                        'Orient.': orient,
+                        'Description': description
                     })
                 # else:
                     # print(f"未找到RefDes {refdes} 对应的尺寸信息，跳过")
