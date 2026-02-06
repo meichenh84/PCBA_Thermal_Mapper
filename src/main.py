@@ -1513,22 +1513,27 @@ class ResizableImagesApp:
         if self.canvasB_magnifier:
             self.canvasB_magnifier.toggle_magnifier(0)
             self.canvasB_magnifier = None
-    def update_content(self):
+    def update_on_resize(self):
         """更新畫面顯示內容（視窗大小改變時觸發）。
 
         僅在畫布寬度確實發生變化時才重新渲染，避免不必要的效能消耗。
         根據對齊模式和放大鏡開關狀態決定是否初始化放大鏡。
         """
+        # 强制更新所有待处理的几何变化，确保 winfo_width() 返回最新值
+        self.root.update_idletasks()
+
         # 尺寸未变 不重复渲染
         old_canvas_width = self.canvasA_width
         new_canvas_width = self.canvasA.winfo_width()
+        print(f"🔧 update_on_resize: old={old_canvas_width}, new={new_canvas_width}")
         if old_canvas_width == new_canvas_width:
+            print(f"  ⏭️ 尺寸未變，跳過更新")
             return
-        
+
         # 检查图片是否已加载
         if not hasattr(self, 'imageA') or not hasattr(self, 'imageB') or not self.imageA or not self.imageB:
             return
-        
+
         # 直接更新图像显示，不修改原始坐标
         self.update_images()
         # 按开关控制放大镜
@@ -1667,7 +1672,7 @@ class ResizableImagesApp:
         # 每當視窗尺寸變化時，取消前一次的延遲更新，重新安排
         if self.resize_after:
             self.root.after_cancel(self.resize_after)
-        self.resize_after = self.root.after(20, self.update_content)
+        self.resize_after = self.root.after(20, self.update_on_resize)
     def load_default_imgs(self, showTip = True):
         """載入預設圖片或從當前資料夾載入圖片。
 
