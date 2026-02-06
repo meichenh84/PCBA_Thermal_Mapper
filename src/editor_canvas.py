@@ -331,9 +331,11 @@ class EditorCanvas:
         filter_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
         filter_frame.grid(row=2, column=0, sticky="ew", pady=(0, 5))
 
-        # 名稱篩選輸入框
-        self.filter_name_entry = tk.Entry(
+        # 名稱篩選輸入框（使用 PlaceholderEntry）
+        self.filter_name_entry = PlaceholderEntry(
             filter_frame,
+            placeholder='輸入"C"',
+            placeholder_color="gray",
             font=("Arial", 9),
             width=10,
             bg=UIStyle.WHITE,
@@ -343,11 +345,13 @@ class EditorCanvas:
         self.filter_name_entry.pack(side=tk.LEFT, padx=4, pady=3)
         self.filter_name_entry.bind('<KeyRelease>', self.on_filter_changed)
 
-        # 描述篩選輸入框
-        self.filter_desc_entry = tk.Entry(
+        # 描述篩選輸入框（使用 PlaceholderEntry）
+        self.filter_desc_entry = PlaceholderEntry(
             filter_frame,
+            placeholder='輸入"EC"',
+            placeholder_color="gray",
             font=("Arial", 9),
-            width=20,
+            width=12,
             bg=UIStyle.WHITE,
             relief="solid",
             bd=1
@@ -355,9 +359,11 @@ class EditorCanvas:
         self.filter_desc_entry.pack(side=tk.LEFT, padx=4, pady=3)
         self.filter_desc_entry.bind('<KeyRelease>', self.on_filter_changed)
 
-        # 溫度篩選輸入框
-        self.filter_temp_entry = tk.Entry(
+        # 溫度篩選輸入框（使用 PlaceholderEntry）
+        self.filter_temp_entry = PlaceholderEntry(
             filter_frame,
+            placeholder='<75',
+            placeholder_color="gray",
             font=("Arial", 9),
             width=8,
             bg=UIStyle.WHITE,
@@ -396,7 +402,7 @@ class EditorCanvas:
             relief="flat",
             bd=0,
             anchor="w",
-            width=20,
+            width=12,
             command=self.toggle_sort_by_desc
         )
         self.desc_header_btn.pack(side=tk.LEFT, padx=4, pady=3)
@@ -758,7 +764,7 @@ class EditorCanvas:
         name_label.pack(side=tk.LEFT, padx=4, pady=3)
 
         # 创建描述标签（在名称和温度之间）
-        desc_label = tk.Label(item_frame, text=description, width=20, font=UIStyle.SMALL_FONT, bg=UIStyle.WHITE, anchor='w')
+        desc_label = tk.Label(item_frame, text=description, width=12, font=UIStyle.SMALL_FONT, bg=UIStyle.WHITE, anchor='w')
         desc_label.pack(side=tk.LEFT, padx=4, pady=3)
 
         # 创建温度标签
@@ -2007,23 +2013,69 @@ class EditorCanvas:
 
             # 檢查溫度篩選
             if temp_filter:
-                try:
-                    # 嘗試將溫度篩選條件轉換為數字
-                    temp_value = float(temp_filter)
-                    rect_temp = rect.get('max_temp', 0)
-                    # 支持範圍搜索：如果輸入的是數字，則匹配大於等於該值的溫度
-                    if rect_temp < temp_value:
-                        continue  # 不符合溫度條件，跳過
-                except ValueError:
-                    # 如果無法轉換為數字，則作為字符串匹配
-                    rect_temp_str = f"{rect.get('max_temp', 0):.1f}"
-                    if temp_filter not in rect_temp_str:
-                        continue  # 不符合溫度條件，跳過
+                rect_temp = rect.get('max_temp', 0)
+                if not self._check_temperature_condition(rect_temp, temp_filter):
+                    continue  # 不符合溫度條件，跳過
 
             # 通過所有篩選條件，加入結果列表
             filtered.append(rect)
 
         self.filtered_rectangles = filtered
+
+    def _check_temperature_condition(self, temp_value, condition_str):
+        """
+        檢查溫度值是否符合條件式。
+
+        支持的條件式格式：
+        - >60   : 大於 60
+        - <75   : 小於 75
+        - >=60.5: 大於等於 60.5
+        - <=70  : 小於等於 70
+        - =60   : 等於 60
+        - 60    : 等於 60（兼容舊版）
+
+        Args:
+            temp_value (float): 要檢查的溫度值
+            condition_str (str): 條件式字符串
+
+        Returns:
+            bool: 是否符合條件
+        """
+        import re
+
+        condition_str = condition_str.strip()
+        if not condition_str:
+            return True
+
+        # 嘗試匹配條件式：運算符 + 數字
+        # 支持 >=, <=, >, <, =
+        match = re.match(r'^\s*(>=|<=|>|<|=)?\s*([0-9]+\.?[0-9]*)\s*$', condition_str)
+
+        if not match:
+            # 無法解析，不符合條件
+            return False
+
+        operator = match.group(1) or '='  # 如果沒有運算符，默認為等於
+        try:
+            threshold = float(match.group(2))
+        except ValueError:
+            # 無法轉換為數字
+            return False
+
+        # 根據運算符進行比較
+        if operator == '>':
+            return temp_value > threshold
+        elif operator == '<':
+            return temp_value < threshold
+        elif operator == '>=':
+            return temp_value >= threshold
+        elif operator == '<=':
+            return temp_value <= threshold
+        elif operator == '=':
+            # 等於比較，允許小數點後1位的誤差
+            return abs(temp_value - threshold) < 0.1
+        else:
+            return False
 
     def on_search_changed(self, event=None):
         """搜索框内容变化时的回调"""
