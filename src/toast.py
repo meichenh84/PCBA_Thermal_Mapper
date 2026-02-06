@@ -1,9 +1,29 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Toast 通知元件模組 (toast.py)
+
+用途：
+    提供非侵入式的浮動通知功能（Toast Notification），
+    在螢幕右上角彈出短暫的訊息提示，不會打斷使用者的操作流程。
+    支持 info/success/warning/error 四種通知類型，
+    每種類型以不同的標題顏色區分，背景統一使用淺藍色主題。
+    帶有淡入淡出動畫效果。
+
+在整個應用中的角色：
+    - 作為全域通知系統，供各模組呼叫 show_toast() 顯示操作結果回饋
+    - 替代傳統的 messagebox 彈窗，避免打斷使用者的工作流程
+
+關聯檔案：
+    - main.py：主頁面中匯入 show_toast() 用於顯示各種操作結果通知
+"""
+
 import tkinter as tk
 from tkinter import ttk
 import threading
 import time
 
-# 导入应用的UI样式常量
+# 匯入應用的 UI 樣式常數
 try:
     from main import UIStyle
 except ImportError:
@@ -24,7 +44,16 @@ except ImportError:
         SMALL_FONT = ("Arial", 9)
 
 class Toast:
-    """独立的Toast通知组件，不依赖系统通知"""
+    """獨立的 Toast 通知元件，不依賴系統通知功能。
+
+    在螢幕右上角顯示一個無邊框的浮動視窗，包含標題和訊息內容，
+    經過指定時間後自動消失。
+
+    屬性：
+        parent (tk.Widget): 父視窗元件
+        toast_window (tk.Toplevel): Toast 的浮動視窗實例
+        toast_thread (threading.Thread): 控制顯示和計時的背景執行緒
+        is_showing (bool): Toast 是否正在顯示中"""
     
     def __init__(self, parent=None):
         self.parent = parent

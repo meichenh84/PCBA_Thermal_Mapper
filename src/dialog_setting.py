@@ -1,14 +1,62 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+顯示設定對話框模組 (dialog_setting.py)
+
+用途：
+    提供一個彈出式設定對話框，讓使用者調整熱力圖和 Layout 圖上
+    矩形標記的顏色、字型大小等顯示設定。設定項包括：
+    - 熱力圖標記：矩形框顏色、元器件名稱顏色/字型、最高溫度顏色/字型、
+      選中框顏色、錨點顏色/半徑
+    - Layout 圖標記：矩形框顏色、元器件名稱顏色/字型、最高溫度顏色/字型
+
+在整個應用中的角色：
+    - 當使用者點擊「設定」按鈕時彈出，修改的設定會儲存至 config.json
+    - 設定立即生效，不需重啟應用
+
+關聯檔案：
+    - main.py：建立 SettingDialog 實例並傳入回呼函式
+    - config.py：透過 GlobalConfig 讀取/儲存設定值
+    - draw_rect.py：使用本模組儲存的顏色設定繪製標記
+
+UI 元件對應命名：
+    - dialog (tk.Toplevel): 設定對話框視窗
+    - heat_frame (ttk.LabelFrame): 「熱力圖標記」設定群組框
+    - layout_frame (ttk.LabelFrame): 「Layout 圖標記」設定群組框
+    - color_preview (tk.Label): 顏色預覽方塊
+    - rgb_entry (tk.Entry): RGB 色碼輸入框
+    - color_button (tk.Button): 「選擇顏色」按鈕
+    - confirm_button (tk.Button): 「確認」按鈕
+    - cancel_button (tk.Button): 「取消」按鈕
+"""
+
 import tkinter as tk
 from tkinter import ttk, colorchooser
 from config import GlobalConfig
 
+
 class SettingDialog:
+    """顯示設定對話框。
+
+    管理熱力圖和 Layout 圖的標記顏色、字型大小等設定。
+    使用單例模式防止重複開啟，修改後儲存至 config.json。
+
+    屬性：
+        master (tk.Widget): 主視窗元件
+        settings_button (tk.Button): 觸發本對話框的設定按鈕（用於定位）
+        callback (callable): 確認後的回呼函式
+        dialog (tk.Toplevel): 對話框視窗實例
+        config (GlobalConfig): 全域配置管理器
+        color_settings (dict): 目前的顏色與字型設定值
+    """
+
     def __init__(self, master, settings_button, callback):
-        """
-        初始化设置对话框
-        :param master: 主窗口
-        :param settings_button: 设置按钮
-        :param callback: 外部回调函数，用于处理设置的逻辑
+        """初始化設定對話框。
+
+        Args:
+            master (tk.Widget): 主視窗元件
+            settings_button (tk.Button): 設定按鈕元件（用於計算對話框位置）
+            callback (callable): 確認後的回呼函式
         """
         self.master = master
         self.settings_button = settings_button
@@ -18,7 +66,7 @@ class SettingDialog:
         self.dialog = None  # 对话框实例，用于单例模式
 
     def open(self):
-        # 检查对话框是否已经存在且可见
+        """開啟設定對話框。若已存在則提到前台，否則建立新對話框。"""
         if self.dialog is not None and self.dialog.winfo_exists():
             # 如果对话框已存在，将其提到前台
             self.dialog.lift()
@@ -97,7 +145,7 @@ class SettingDialog:
         self.dialog.grab_set()
 
     def load_color_settings(self):
-        """加载颜色配置"""
+        """從 GlobalConfig 載入所有顏色和字型設定值。"""
         # 默认颜色配置
         self.color_settings = {
             # 热力图标记
@@ -119,7 +167,15 @@ class SettingDialog:
         }
 
     def create_color_setting(self, parent, label_text, config_key, default_color, row):
-        """创建颜色设置控件"""
+        """建立顏色設定控件（標籤 + 顏色預覽 + RGB 輸入框 + 選擇按鈕）。
+
+        Args:
+            parent (tk.Widget): 父元件
+            label_text (str): 設定項目名稱
+            config_key (str): 配置鍵名（如 "heat_rect_color"）
+            default_color (str): 預設顏色值
+            row (int): Grid 行號
+        """
         frame = tk.Frame(parent)
         frame.grid(row=row, column=0, sticky="ew", padx=5, pady=2)
         parent.grid_columnconfigure(0, weight=1)
@@ -168,7 +224,15 @@ class SettingDialog:
         color_button.pack(side=tk.LEFT, padx=(5, 0))
 
     def create_font_setting(self, parent, label_text, config_key, default_value, row):
-        """创建字体设置控件"""
+        """建立字型大小設定控件（標籤 + 數值輸入框）。
+
+        Args:
+            parent (tk.Widget): 父元件
+            label_text (str): 設定項目名稱
+            config_key (str): 配置鍵名（如 "heat_name_font_size"）
+            default_value (int): 預設字型大小
+            row (int): Grid 行號
+        """
         frame = tk.Frame(parent)
         frame.grid(row=row, column=0, sticky="ew", padx=5, pady=2)
         parent.grid_columnconfigure(0, weight=1)
@@ -194,7 +258,7 @@ class SettingDialog:
         value_entry.bind('<KeyRelease>', lambda e: update_font_value())
 
     def on_confirm(self):
-        """确认按钮点击事件"""
+        """確認按鈕點擊事件。儲存所有設定至 config.json 並通知主介面刷新。"""
         # 保存放大镜开关设置
         self.config.set("magnifier_switch", True)
         
@@ -225,7 +289,7 @@ class SettingDialog:
         self.on_dialog_close()
 
     def on_dialog_close(self):
-        """对话框关闭时的回调"""
+        """對話框關閉時的回呼。銷毀視窗並重設實例變數。"""
         if self.dialog is not None:
             self.dialog.destroy()
             self.dialog = None

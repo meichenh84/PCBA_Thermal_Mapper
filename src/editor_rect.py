@@ -1,23 +1,76 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-矩形编辑器模块
+矩形框編輯器模組 (editor_rect.py)
 
-主要功能：
-1. 矩形框的创建、编辑和删除
-2. 温度数据的查询和显示
-3. 智能文字定位
-4. 弹窗管理（单例模式）
-5. 坐标转换和缩放处理
+用途：
+    提供 Canvas 上矩形標記框的完整編輯功能，包括：
+    1. 矩形框的建立、拖曳移動、調整大小和刪除
+    2. 錨點（anchor）顯示和拖曳調整尺寸
+    3. 溫度資料的查詢和顯示
+    4. 智慧文字定位（避免重疊）
+    5. 雙擊矩形框彈出編輯對話框（單例模式）
+    6. 座標轉換和縮放處理
+    7. 多選框選功能
+
+在整個應用中的角色：
+    - 被 editor_canvas.py 建立，作為「編輯溫度」對話框中的核心編輯引擎
+    - 管理所有矩形標記框的互動操作
+
+關聯檔案：
+    - editor_canvas.py：建立 RectEditor 實例並提供 Canvas
+    - dialog_component_setting.py：雙擊矩形框時彈出的編輯對話框
+    - draw_rect.py：呼叫 draw_canvas_item() 繪製矩形標記
+    - load_tempA.py：載入溫度資料進行查詢
+    - bean/canvas_rect_item.py：矩形標記的資料模型
+
+UI 元件對應命名：
+    - canvas (tk.Canvas): 繪圖用的 Canvas 元件
+    - rectangles (list): 所有矩形框的 CanvasRectItem 列表
+    - anchors (list): 目前選中矩形框的 8 個錨點 ID 列表
+    - drag_data (dict): 拖曳操作的狀態資訊
+    - multi_select_rect (int): 多選框的 Canvas 物件 ID
+    - selected_rect_ids (set): 目前選中的矩形框 ID 集合
 """
 
 import tkinter as tk
-import numpy as np 
+import numpy as np
 
 from dialog_component_setting import ComponentSettingDialog
 from load_tempA import TempLoader
 from draw_rect import draw_canvas_item
 
+
 class RectEditor:
+    """矩形框編輯器。
+
+    管理 Canvas 上所有矩形標記框的建立、選取、拖曳、調整大小和刪除。
+    支援單選拖曳、多選框選、雙擊編輯等互動操作。
+
+    屬性：
+        canvas (tk.Canvas): 繫結的 Canvas 元件
+        parent (tk.Widget): 父元件
+        mark_rect (list): 元器件標記資料列表
+        temp_file_path (str): 溫度資料檔案路徑
+        on_rect_change_callback (callable): 矩形框變更時的回呼函式
+        display_scale (float): 目前顯示的縮放比例
+        drag_threshold (int): 拖曳閾值（小於此值不觸發拖曳）
+        rectangles (list): 所有矩形框的 CanvasRectItem 列表
+        anchors (list): 目前選中矩形框的錨點 ID 列表
+        multi_select_enabled (bool): 多選功能是否啟用
+        selected_rect_ids (set): 選中的矩形框 ID 集合
+    """
+
     def __init__(self, parent, canvas, mark_rect = None, temp_file_path = None, on_rect_change_callback=None):
+        """初始化矩形框編輯器。
+
+        Args:
+            parent (tk.Widget): 父元件
+            canvas (tk.Canvas): 繪圖用的 Canvas 元件
+            mark_rect (list|None): 初始的元器件標記資料列表
+            temp_file_path (str|None): 溫度資料檔案路徑
+            on_rect_change_callback (callable|None): 矩形框變更時的回呼函式
+        """
         super().__init__()
 
         self.canvas = canvas

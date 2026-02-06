@@ -1,13 +1,36 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-坐标转换工具
-支持不同原点之间的坐标转换
+座標原點轉換工具模組 (coordinate_converter.py)
+
+用途：
+    提供不同座標原點之間的座標轉換功能。支援左上角、右上角、
+    右下角、左下角四個原點位置之間的座標互轉。
+    例如：將以左上角為原點的座標轉換為以右下角為原點的座標。
+
+在整個應用中的角色：
+    - 當不同影像或不同工具使用不同座標原點時，提供統一的轉換方法
+    - 可獨立使用，也可被其他模組呼叫
+
+關聯檔案：
+    - point_transformer.py：主要的座標轉換模組（仿射變換），與本模組功能互補
+    - main.py：可能在座標系統不一致時呼叫本模組
 """
 
 import numpy as np
 
+
 class CoordinateConverter:
-    """坐标转换器类"""
+    """座標原點轉換器。
+
+    支援四個角落原點之間的座標互轉，透過先統一轉換為
+    左上角原點座標，再轉換為目標原點座標的兩步驟策略。
+
+    屬性：
+        width (int): 影像寬度（像素）
+        height (int): 影像高度（像素）
+        ORIGIN_POSITIONS (dict): 可用的原點位置對照表
+    """
     
     # 原点位置定义
     ORIGIN_POSITIONS = {
@@ -18,28 +41,26 @@ class CoordinateConverter:
     }
     
     def __init__(self, image_width, image_height):
-        """
-        初始化坐标转换器
-        
+        """初始化座標轉換器。
+
         Args:
-            image_width (int): 图像宽度
-            image_height (int): 图像高度
+            image_width (int): 影像寬度（像素）
+            image_height (int): 影像高度（像素）
         """
         self.width = image_width
         self.height = image_height
         
     def convert_coordinate(self, x, y, from_origin, to_origin):
-        """
-        坐标转换主函数
-        
+        """座標轉換主函式。
+
         Args:
-            x (float): 源坐标x
-            y (float): 源坐标y
-            from_origin (str): 源原点位置 ["左上角", "右上角", "右下角", "左下角"]
-            to_origin (str): 目标原点位置 ["左上角", "右上角", "右下角", "左下角"]
-            
+            x (float): 來源座標 X
+            y (float): 來源座標 Y
+            from_origin (str): 來源原點位置（"左上角"/"右上角"/"右下角"/"左下角"）
+            to_origin (str): 目標原點位置（"左上角"/"右上角"/"右下角"/"左下角"）
+
         Returns:
-            tuple: (x_new, y_new) 转换后的坐标
+            tuple: (x_new, y_new) 轉換後的座標
         """
         # 验证输入
         if from_origin not in self.ORIGIN_POSITIONS:
@@ -60,16 +81,15 @@ class CoordinateConverter:
         return x_new, y_new
     
     def _to_top_left_origin(self, x, y, origin):
-        """
-        将任意原点坐标转换为左上角原点坐标
-        
+        """將任意原點座標轉換為左上角原點座標（內部方法）。
+
         Args:
-            x (float): 源坐标x
-            y (float): 源坐标y
-            origin (str): 源原点位置
-            
+            x (float): 來源座標 X
+            y (float): 來源座標 Y
+            origin (str): 來源原點位置
+
         Returns:
-            tuple: (x_top_left, y_top_left) 左上角原点坐标
+            tuple: (x_top_left, y_top_left) 左上角原點座標
         """
         if origin == "左上角":
             return x, y
@@ -83,16 +103,15 @@ class CoordinateConverter:
             raise ValueError(f"无效的原点位置: {origin}")
     
     def _from_top_left_origin(self, x, y, origin):
-        """
-        将左上角原点坐标转换为任意原点坐标
-        
+        """將左上角原點座標轉換為任意原點座標（內部方法）。
+
         Args:
-            x (float): 左上角原点坐标x
-            y (float): 左上角原点坐标y
-            origin (str): 目标原点位置
-            
+            x (float): 左上角原點座標 X
+            y (float): 左上角原點座標 Y
+            origin (str): 目標原點位置
+
         Returns:
-            tuple: (x_new, y_new) 目标原点坐标
+            tuple: (x_new, y_new) 目標原點座標
         """
         if origin == "左上角":
             return x, y
@@ -106,16 +125,15 @@ class CoordinateConverter:
             raise ValueError(f"无效的原点位置: {origin}")
     
     def batch_convert(self, coordinates, from_origin, to_origin):
-        """
-        批量坐标转换
-        
+        """批次座標轉換。
+
         Args:
-            coordinates (list): 坐标列表，格式为 [(x1, y1), (x2, y2), ...]
-            from_origin (str): 源原点位置
-            to_origin (str): 目标原点位置
-            
+            coordinates (list): 座標列表，格式為 [(x1, y1), (x2, y2), ...]
+            from_origin (str): 來源原點位置
+            to_origin (str): 目標原點位置
+
         Returns:
-            list: 转换后的坐标列表
+            list: 轉換後的座標列表
         """
         converted_coords = []
         for x, y in coordinates:
@@ -124,17 +142,16 @@ class CoordinateConverter:
         return converted_coords
     
     def get_available_origins(self):
-        """
-        获取可用的原点位置列表
-        
+        """取得可用的原點位置列表。
+
         Returns:
-            list: 可用的原点位置列表
+            list: 可用的原點位置名稱列表（如 ["左上角", "右上角", ...]）
         """
         return list(self.ORIGIN_POSITIONS.keys())
 
 
 def demo_coordinate_conversion():
-    """坐标转换演示函数"""
+    """座標轉換示範函式。展示各種座標轉換操作並驗證往返轉換的正確性。"""
     print("=== 坐标转换工具演示 ===\n")
     
     # 创建坐标转换器（假设图像尺寸为800x600）
@@ -203,19 +220,18 @@ def demo_coordinate_conversion():
 
 
 def quick_convert(x, y, image_width, image_height, from_origin, to_origin):
-    """
-    快速坐标转换函数（无需创建类实例）
-    
+    """快速座標轉換函式（無需手動建立類別實例）。
+
     Args:
-        x (float): 源坐标x
-        y (float): 源坐标y
-        image_width (int): 图像宽度
-        image_height (int): 图像高度
-        from_origin (str): 源原点位置
-        to_origin (str): 目标原点位置
-        
+        x (float): 來源座標 X
+        y (float): 來源座標 Y
+        image_width (int): 影像寬度
+        image_height (int): 影像高度
+        from_origin (str): 來源原點位置
+        to_origin (str): 目標原點位置
+
     Returns:
-        tuple: (x_new, y_new) 转换后的坐标
+        tuple: (x_new, y_new) 轉換後的座標
     """
     converter = CoordinateConverter(image_width, image_height)
     return converter.convert_coordinate(x, y, from_origin, to_origin)

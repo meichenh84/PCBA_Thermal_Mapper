@@ -1,27 +1,71 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Layout 圖元器件溫度查詢模組（最佳化版）(layout_temperature_query_optimized.py)
+
+用途：
+    根據 Layout 圖（C_info）中的元器件座標資訊，查詢對應到
+    熱力圖上的最高溫度值。直接遍歷 Layout 資料中的每個元器件，
+    將其實體座標（mm）轉換為 Layout 圖像素座標，再透過仿射變換
+    映射到熱力圖座標系，最終從溫度矩陣中取得該區域的最高溫度。
+
+    相較於「先遍歷溫度點再反查元器件」的方法，本最佳化版本直接
+    遍歷元器件列表，效率更高。
+
+在整個應用中的角色：
+    - 當使用者匯入 Layout 資料（C_info CSV）時被呼叫
+    - 將 Layout 中每個元器件對應到熱力圖上的最高溫度
+    - 回傳的結果用於在兩張圖上建立矩形標記
+
+關聯檔案：
+    - main.py：呼叫本模組查詢溫度
+    - point_transformer.py：提供座標轉換功能
+    - temperature_config_manager.py：提供 PCB 參數和 padding 設定
+"""
+
 import numpy as np
 import cv2
 import pandas as pd
 from point_transformer import PointTransformer
 
+
 class LayoutTemperatureQueryOptimized:
-    """优化版基于Layout数据的温度查询类 - 直接遍历元器件而非温度点"""
-    
-    def __init__(self, layout_data, temp_data, point_transformer, 
+    """最佳化版 Layout 元器件溫度查詢器。
+
+    直接遍歷 Layout 資料中的元器件，將實體座標轉換為影像座標，
+    再查詢對應的溫度值。
+
+    屬性：
+        layout_data (pandas.DataFrame): Layout 元器件資訊（C_info 資料）
+        temp_data (numpy.ndarray): 溫度矩陣
+        point_transformer (PointTransformer): 座標轉換器
+        p_w (float): PCB 長度（mm）
+        p_h (float): PCB 寬度（mm）
+        p_origin (str): 座標原點位置（如 "左下"）
+        p_origin_offset_x (float): 原點 X 方向偏移（像素）
+        p_origin_offset_y (float): 原點 Y 方向偏移（像素）
+        c_padding_left/top/right/bottom (float): Layout 圖四邊 padding
+        layout_image: Layout 圖像（用於取得實際尺寸）
+        c_p_coord: 座標轉換參數
+    """
+
+    def __init__(self, layout_data, temp_data, point_transformer,
                  p_w, p_h, p_origin, p_origin_offset_x, p_origin_offset_y,
                  c_padding_left, c_padding_top, c_padding_right, c_padding_bottom,
                  layout_image=None):
-        """
-        初始化温度查询器
-        
+        """初始化溫度查詢器。
+
         Args:
-            layout_data: C_info数据，包含元器件信息
-            temp_data: 温度数据
-            point_transformer: 点转换器
-            p_w, p_h: PCB尺寸(mm)
-            p_origin: 坐标原点
-            p_origin_offset_x, p_origin_offset_y: PCB实物板原点偏移(px)
-            c_padding_*: Layout图padding参数
-            layout_image: Layout图像，用于获取实际尺寸
+            layout_data: C_info 資料，包含元器件資訊
+            temp_data (numpy.ndarray): 溫度矩陣
+            point_transformer (PointTransformer): 座標轉換器
+            p_w (float): PCB 長度（mm）
+            p_h (float): PCB 寬度（mm）
+            p_origin (str): 座標原點位置
+            p_origin_offset_x (float): 原點 X 偏移
+            p_origin_offset_y (float): 原點 Y 偏移
+            c_padding_left/top/right/bottom (float): Layout 圖 padding
+            layout_image: Layout 圖像（PIL.Image 或 numpy.ndarray）
         """
         self.layout_data = layout_data
         self.temp_data = temp_data
@@ -42,7 +86,7 @@ class LayoutTemperatureQueryOptimized:
         self.calculate_coordinate_transform()
     
     def calculate_coordinate_transform(self):
-        """计算Layout图到PCB坐标系的转换参数 - 严格按照test_layout.py实现"""
+        """計算 Layout 圖像素座標到 PCB 實體座標（mm）的轉換參數。"""
         # 从实际Layout图像获取尺寸，如果没有提供则使用默认值
         if self.layout_image is not None:
             # 处理PIL Image对象
@@ -115,22 +159,21 @@ class LayoutTemperatureQueryOptimized:
             raise ValueError(f"不支持的坐标原点: {self.p_origin}")
     
     def query_temperature_by_layout_optimized(self, min_temp, max_temp):
-        """
-        优化版温度查询：直接遍历C_info中的元器件
-        
-        算法流程：
-        1. 遍历C_info中的所有元器件
-        2. 将每个元器件的PCB坐标(PR1)转换为Layout图坐标(CR1)
-        3. 将Layout图坐标(CR1)转换为热力图坐标(AR1)
-        4. 在热力图中查询AR1区域的最高温度
-        5. 如果温度在过滤范围内，则记录该元器件
-        
+        """最佳化版溫度查詢：直接遍歷 C_info 中的元器件。
+
+        演算法流程：
+        1. 遍歷 C_info 中的所有元器件
+        2. 將每個元器件的 PCB 座標 (PR1) 轉換為 Layout 圖座標 (CR1)
+        3. 將 Layout 圖座標 (CR1) 轉換為熱力圖座標 (AR1)
+        4. 在熱力圖中查詢 AR1 區域的最高溫度
+        5. 若溫度在過濾範圍內，則記錄該元器件
+
         Args:
-            min_temp: 最低温度阈值
-            max_temp: 最高温度阈值
-            
+            min_temp (float): 最低溫度閾值
+            max_temp (float): 最高溫度閾值
+
         Returns:
-            tuple: (rectA_arr, rectB_arr) 热力图和Layout图的矩形区域列表
+            tuple: (rectA_arr, rectB_arr) 熱力圖和 Layout 圖的矩形區域列表
         """
         rectA_arr = []  # 热力图矩形区域
         rectB_arr = []  # Layout图矩形区域
@@ -279,21 +322,20 @@ class LayoutTemperatureQueryOptimized:
         return rectA_arr, rectB_arr
     
     def query_temperature_by_layout_smart_filter(self, min_temp, max_temp):
-        """
-        智能过滤版温度查询：避免重复检测相同热区域
-        
-        算法流程：
-        1. 遍历所有元器件，按温度降序排列
-        2. 对每个矩形框，将tempA中对应区域标为0
-        3. 重新计算区域内温度，过滤不符合条件的矩形框
-        4. 最终按温度重新排序返回
-        
+        """智慧過濾版溫度查詢：避免重複偵測相同熱區域。
+
+        演算法流程：
+        1. 遍歷所有元器件，按溫度降序排列
+        2. 對每個矩形框，將 tempA 中對應區域標為 0
+        3. 重新計算區域內溫度，過濾不符合條件的矩形框
+        4. 最終按溫度重新排序返回
+
         Args:
-            min_temp: 最低温度阈值
-            max_temp: 最高温度阈值
-            
+            min_temp (float): 最低溫度閾值
+            max_temp (float): 最高溫度閾值
+
         Returns:
-            tuple: (rectA_arr, rectB_arr) 热力图和Layout图的矩形区域列表
+            tuple: (rectA_arr, rectB_arr) 熱力圖和 Layout 圖的矩形區域列表
         """
         print(f"开始智能过滤版温度查询，共{len(self.layout_data)}个元器件")
         print(f"温度数据形状: {self.temp_data.shape}")
@@ -476,14 +518,13 @@ class LayoutTemperatureQueryOptimized:
         return final_rectA_arr, final_rectB_arr
     
     def convert_pcb_to_layout(self, p_left, p_top, p_right, p_bottom):
-        """
-        将PCB坐标转换为Layout图坐标
-        
+        """將 PCB 實體座標（mm）轉換為 Layout 圖像素座標。
+
         Args:
-            p_left, p_top, p_right, p_bottom: PCB坐标(毫米)
-            
+            p_left, p_top, p_right, p_bottom (float): PCB 座標（毫米）
+
         Returns:
-            tuple: (c_left, c_top, c_right, c_bottom) Layout图坐标(像素)
+            tuple|None: (c_left, c_top, c_right, c_bottom) Layout 圖座標（像素），失敗回傳 None
         """
         try:
             # 严格按照test_layout.py中的转换逻辑
@@ -507,14 +548,13 @@ class LayoutTemperatureQueryOptimized:
             return None
     
     def convert_layout_to_thermal(self, c_left, c_top, c_right, c_bottom):
-        """
-        将Layout图坐标转换为热力图坐标
-        
+        """將 Layout 圖像素座標轉換為熱力圖像素座標。
+
         Args:
-            c_left, c_top, c_right, c_bottom: Layout图坐标(像素)
-            
+            c_left, c_top, c_right, c_bottom (float): Layout 圖座標（像素）
+
         Returns:
-            tuple: (a_left, a_top, a_right, a_bottom) 热力图坐标(像素)
+            tuple|None: (a_left, a_top, a_right, a_bottom) 熱力圖座標（像素），失敗回傳 None
         """
         try:
             if self.point_transformer is None:
@@ -535,14 +575,14 @@ class LayoutTemperatureQueryOptimized:
             return None
     
     def query_component_by_thermal_coord(self, thermal_x, thermal_y):
-        """
-        根据热力图坐标查询对应的元器件名称
-        
+        """根據熱力圖座標查詢對應的元器件名稱。
+
         Args:
-            thermal_x, thermal_y: 热力图坐标
-            
+            thermal_x (float): 熱力圖 X 座標
+            thermal_y (float): 熱力圖 Y 座標
+
         Returns:
-            str: 元器件名称，如果找不到则返回None
+            str|None: 元器件名稱，若找不到則回傳 None
         """
         try:
             if not self.layout_data or self.point_transformer is None:

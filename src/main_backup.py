@@ -1,110 +1,67 @@
-"""
-=============================================================================
-PCBA 熱力圖溫度點位自動識別工具 - 主程式 (main.py)
-=============================================================================
-本程式為「PCBA 熱力圖溫度點位自動識別工具」的核心主程式，負責建立整個桌面應用
-程式的圖形化使用者介面 (GUI)，並整合資料夾管理、圖像對齊、溫度過濾、溫度編輯、
-匯出報告等功能。
-
-功能概述：
-  1. 資料夾管理：掃描資料夾中的熱力圖、Layout圖、溫度數據、Layout數據並分類
-  2. 圖像對齊：在熱力圖與Layout圖上標記對齊點，計算座標變換矩陣
-  3. 溫度過濾：根據Layout元器件位置與溫度數據，自動識別高溫區域
-  4. 溫度編輯：透過EditorCanvas對話框手動調整/新增/刪除標記框
-  5. 匯出報告：將識別結果匯出為Excel報表與標記圖片
-
-介面結構：
-  上方：工具列 [資料夾Tab] [對齊圖像] [溫度過濾] [匯出] [設定]
-  左側：資料夾檔案樹狀列表 (folder_tree)
-  中間左：canvasA（熱力圖顯示區）
-  中間右：canvasB（Layout圖顯示區）
-  下方：對齊前/後圖像預覽按鈕、清除對齊點按鈕
-
-主要類別：
-  - ResizableImagesApp：應用程式主類別，管理所有 UI 元件與業務邏輯
-
-版本：V20251011
-=============================================================================
-"""
 import sys
 import os
-# 設定標準輸出編碼為 UTF-8，避免中文輸出時產生亂碼
+# 设置标准输出编码为 UTF-8，避免中文输出问题
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
-# ===== 標準函式庫與第三方套件匯入 =====
-import tkinter as tk                          # Tkinter GUI 框架
-from tkinter import Canvas, filedialog, messagebox, simpledialog, ttk  # Tkinter 子模組（畫布、檔案對話框、訊息框、樹狀列表）
-from PIL import Image, ImageTk                # Pillow 圖像處理庫（讀取/縮放/轉換圖片）
-from magnifier import ImageMagnifier          # 自訂放大鏡元件（對齊模式下輔助精確打點）
-from load_tempA import TempLoader             # 溫度數據載入器（讀取 CSV/XLSX 溫度矩陣）
-from toast import show_toast                  # 浮動通知訊息元件（成功/警告/錯誤提示）
-import cv2                                    # OpenCV 圖像處理（色彩轉換、圖像混合、仿射變換）
-import numpy as np                            # NumPy 數值運算（矩陣計算、座標變換）
-import pandas as pd                           # Pandas 數據分析（讀取 Excel/CSV 檔案）
-import openpyxl                               # Excel 檔案操作（匯出報告）
-import json                                   # JSON 序列化/反序列化（儲存/讀取對齊點資料）
-import threading                              # 多執行緒支援（非同步載入大型檔案）
-import time                                   # 時間相關工具
-import math                                   # 數學運算（旋轉角度計算）
-import argparse                               # 命令列參數解析
-from datetime import datetime                 # 日期時間處理
+import tkinter as tk
+from tkinter import Canvas, filedialog, messagebox, simpledialog, ttk
+from PIL import Image, ImageTk
+from magnifier import ImageMagnifier
+from load_tempA import TempLoader
+from toast import show_toast  # 使用独立的toast组件
+import cv2
+import numpy as np
+import pandas as pd
+import openpyxl
+import json
+import threading
+import time
+import math
+import argparse
+from datetime import datetime
+from dialog_template import TemplateDialog
+from dialog_setting import SettingDialog
+from constants import Constants
+from point_transformer import PointTransformer
+from config import GlobalConfig
 
-# ===== 自訂模組匯入 =====
-from dialog_template import TemplateDialog    # 溫度過濾參數設定對話框
-from dialog_setting import SettingDialog      # 應用程式設定對話框
-from constants import Constants               # 全域常數定義（預設路徑等）
-from point_transformer import PointTransformer  # 座標變換器（A圖↔B圖座標轉換，支援仿射/透視變換）
-from config import GlobalConfig               # 全域配置管理器（儲存/讀取使用者偏好設定）
-
-# UI 樣式常數定義 —— 匯入 UIStyle 以保持全應用程式的視覺樣式統一
+# UI样式常量定义
+# 导入UIStyle以保持样式统一
 try:
     from .ui_style import UIStyle
 except ImportError:
     from ui_style import UIStyle
-from circle_ring_draw import draw_points_circle_ring_text, draw_points_circle_ring  # 繪製帶編號的圓環對齊點標記
-from recognize_circle import detect_A_circles, detect_B_circles, find_circle_containing_point  # 圓形區域偵測（輔助打點吸附）
-from draw_rect import draw_triangle_and_text, draw_canvas_item, update_canvas_item, draw_numpy_image_item  # 繪製矩形溫度標記框
-from editor_canvas import EditorCanvas        # 溫度標記編輯畫布（獨立對話框，可調整/新增/刪除標記框）
+from circle_ring_draw import draw_points_circle_ring_text, draw_points_circle_ring
+from recognize_circle import detect_A_circles, detect_B_circles, find_circle_containing_point
+from draw_rect import draw_triangle_and_text, draw_canvas_item, update_canvas_item, draw_numpy_image_item
+from editor_canvas import EditorCanvas
 from datetime import datetime
-import csv                                    # CSV 檔案操作（匯出日誌）
-import copy                                   # 深層複製工具（複製編輯日誌範本）
-from layout_temperature_query_optimized import LayoutTemperatureQueryOptimized  # Layout 溫度查詢最佳化模組
-from temperature_config_manager import TemperatureConfigManager  # 溫度配置管理器（每個資料夾獨立配置）
+import csv
+import copy
+from layout_temperature_query_optimized import LayoutTemperatureQueryOptimized
+from temperature_config_manager import TemperatureConfigManager
 
 
-# ===== 編輯日誌預設範本 =====
-# 記錄每次「溫度過濾 -> 編輯 -> 匯出」的操作統計資訊
-# 結構：{ 欄位名: [中文說明, 初始值] }
 DEFAULT_EDIT_LOG = {
-    "export_time": ["生成时间", ""],                 # 匯出時間戳記
-    "origin_mark": ["自动生成外框数量", 0],           # 自動識別產生的標記框數量
-    "final_mark": ["最终导出外框数量", 0],            # 最終匯出時的標記框數量
-    "add_new_mark": ["新增外框数量（手动增加导出时没有被删除）", 0],       # 使用者手動新增的標記框數量
-    "delete_origin_mark": ["删除外框数量（自动生成的外框被删除）", 0],     # 使用者刪除的自動標記框數量
-    "modify_origin_mark": ["调整外框数量（自动生成的外框被调整)", set()],  # 使用者調整過的標記框集合
+    "export_time": ["生成时间", ""],
+    "origin_mark": ["自动生成外框数量", 0],
+    "final_mark": ["最终导出外框数量", 0],
+    "add_new_mark": ["新增外框数量（手动增加导出时没有被删除）", 0],
+    "delete_origin_mark": ["删除外框数量（自动生成的外框被删除）", 0],
+    "modify_origin_mark": ["调整外框数量（自动生成的外框被调整)", set()],
 }
 
 def cv2_imread_unicode(image_path):
     """
-    讀取含有中文（Unicode）路徑的圖片檔案。
-
-    解決 OpenCV 在 Windows 上無法直接讀取含中文字元路徑的問題，
-    先用 NumPy 將檔案讀為位元組陣列，再用 cv2.imdecode 解碼為圖片。
-
-    參數：
-        image_path (str): 圖片檔案的完整路徑（可包含中文字元）
-
-    回傳：
-        numpy.ndarray 或 None: 成功時回傳 BGR 格式的圖片陣列，失敗時回傳 None
+    读取含有中文路径的图片文件（解决OpenCV在Windows上无法读取中文路径的问题）
     """
     try:
-        # 使用 NumPy 讀取檔案為位元組陣列，繞過 OpenCV 的路徑編碼限制
+        # 使用numpy读取文件字节，再用cv2解码
         img_array = np.fromfile(image_path, dtype=np.uint8)
-        # 將位元組陣列解碼為彩色圖片（BGR 格式）
         image = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
         return image
     except Exception as e:
@@ -113,133 +70,109 @@ def cv2_imread_unicode(image_path):
 
 class ResizableImagesApp:
     """
-    PCBA 熱力圖溫度點位自動識別 - 主應用程式類別。
-
-    本類別為整個應用程式的核心，負責管理所有 UI 元件、事件處理與業務邏輯。
-    採用 Tkinter 的 Grid 佈局管理器來安排介面元素。
-
+    热力图温度点位自动识别主应用程序
+    
     核心功能：
-        1. 熱力圖 (imageA) 與 Layout 圖 (imageB) 的座標映射（透過 PointTransformer）
-        2. 溫度數據的智慧查詢和過濾（透過 LayoutTemperatureQueryOptimized）
-        3. 元器件邊界的自動識別（根據 Layout 數據中的 RefDes、座標、尺寸）
-        4. 溫度數據的視覺化顯示（矩形標記框繪製在 Canvas 上）
-        5. 溫度標記的手動編輯（透過 EditorCanvas 對話框）
-        6. 匯出 Excel 報表和標記圖片
-
-    主要屬性：
-        canvasA (tk.Canvas): 左側畫布，顯示熱力圖
-        canvasB (tk.Canvas): 右側畫布，顯示 Layout 圖
-        points_A (list): 熱力圖上的對齊點座標列表 [[x1,y1], [x2,y2], ...]
-        points_B (list): Layout 圖上的對齊點座標列表
-        mark_rect_A (list): 熱力圖上的溫度標記矩形框列表
-        mark_rect_B (list): Layout 圖上的溫度標記矩形框列表
-        point_transformer (PointTransformer): 座標變換器（A圖↔B圖）
-        folder_tree (ttk.Treeview): 左側資料夾檔案樹狀列表
-        current_folder_path (str): 當前資料夾路徑
-        current_files (dict): 當前使用的各類型檔案 {heat, layout, heatTemp, layoutData}
+    1. 热力图与布局图的坐标映射
+    2. 温度数据的智能查询和过滤
+    3. 元器件边界的自动识别
+    4. 温度数据的可视化显示
+    5. 编辑和导出功能
     """
     def __init__(self, root):
         """
-        初始化主應用程式。
-
-        建立主視窗、初始化所有狀態變數、建構 UI 介面、綁定事件，
-        並在延遲 100ms 後自動載入上次使用的資料夾。
-
-        參數：
-            root (tk.Tk): Tkinter 根視窗物件
+        初始化主应用程序
+        
+        Args:
+            root: Tkinter根窗口对象
         """
         print("V20251011")
         
-        # 執行緒鎖，用於保護多執行緒環境下的共享資源
+        # 线程锁，用于保护共享资源
         self.lock = threading.Lock()
-        self.root = root  # Tkinter 根視窗物件的參考
+        self.root = root
         
-        # 設定主視窗屬性
-        self.root.title("Thermal温度点位自动识别")  # 視窗標題
-        self.root.minsize(width=400, height=500)       # 最小視窗尺寸
-        self.root.geometry("1200x600")                  # 初始視窗尺寸
+        # 设置主窗口属性
+        self.root.title("Thermal温度点位自动识别")
+        self.root.minsize(width=400, height=500)
+        self.root.geometry("1200x600")
         
-        # 畫布尺寸初始化（用於偵測視窗大小是否變化，避免重複渲染）
-        self.canvasA_width = 1   # canvasA（熱力圖畫布）的當前寬度
-        self.canvasA_height = 1  # canvasA（熱力圖畫布）的當前高度
+        # 画布尺寸初始化
+        self.canvasA_width = 1
+        self.canvasA_height = 1
         
-        # 圖像對齊狀態控制
-        self.is_aligning = False  # 是否處於「對齊模式」（True=打點中，False=一般瀏覽模式）
+        # 图像对齐状态控制
+        self.is_aligning = False  # 状态变量，用于跟踪按钮的当前状态
         
         # 配置管理器
-        self.config = GlobalConfig()    # 全域配置管理器（儲存視窗偏好、上次資料夾路徑等）
-        self.temp_config = None         # 溫度配置管理器，每個資料夾有獨立的 temperature_config.json
+        self.config = GlobalConfig()
+        self.temp_config = None  # 温度配置管理器，将在设置文件夹路径时初始化
         
-        # 放大鏡元件（對齊模式下啟用，輔助使用者精確標記對齊點）
-        self.canvasA_magnifier = None  # 熱力圖畫布的放大鏡實例
-        self.canvasB_magnifier = None  # Layout 圖畫布的放大鏡實例
+        # 放大镜组件
+        self.canvasA_magnifier = None
+        self.canvasB_magnifier = None
         
-        # 圖像對齊相關數據（原始圖片座標，非畫布座標）
-        self.points_A = []  # 熱力圖上的對齊點座標列表 [[x1,y1], [x2,y2], ...]
-        self.points_B = []  # Layout 圖上的對齊點座標列表（與 points_A 一一對應）
+        # 图像对齐相关数据
+        self.points_A = []  # 热力图上的对齐点坐标
+        self.points_B = []  # 布局图上的对齐点坐标
         
-        # 自動識別的圓形區域（用於打點時的吸附功能）
-        self.recognize_circle_A = []  # 熱力圖上識別的圓形區域
-        self.recognize_circle_B = []  # Layout 圖上識別的圓形區域
+        # 自动识别的圆形区域
+        self.recognize_circle_A = []  # 热力图上识别的圆形区域
+        self.recognize_circle_B = []  # 布局图上识别的圆形区域
         
-        # 溫度標記矩形框（溫度過濾後產生的高溫元器件標記）
-        self.mark_rect_A = []  # 熱力圖上的溫度標記矩形框列表（每項為一個 dict）
+        # 温度标记矩形框
+        self.mark_rect_A = []  # 热力图上的温度标记矩形框
         
-        # 畫布背景圖像 ID（Canvas.create_image 回傳的 item ID）
-        self.bg_imageA_id = None  # 熱力圖在 canvasA 上的圖片物件 ID
-        self.bg_imageB_id = None  # Layout 圖在 canvasB 上的圖片物件 ID
+        # 画布背景图像ID
+        self.bg_imageA_id = None  # 热力图在画布上的ID
+        self.bg_imageB_id = None  # 布局图在画布上的ID
         
-        # 座標變換器（用於熱力圖與 Layout 圖之間的座標互相轉換）
-        self.point_transformer = None  # PointTransformer 實例，對齊完成後建立
+        # 坐标变换器（用于热力图与布局图之间的坐标转换）
+        self.point_transformer = None
         
-        # 圖像數據（原始尺寸的 PIL Image 物件）
-        self.imageA = None  # 熱力圖的原始圖像數據 (PIL.Image)
-        self.imageB = None  # Layout 圖的原始圖像數據 (PIL.Image)
+        # 图像数据
+        self.imageA = None  # 热力图图像数据
+        self.imageB = None  # 布局图图像数据
         
-        # 狀態旗標
-        self.pont_marked = False  # 對齊點是否有被新增/刪除過（用於判斷是否需要清除舊標記框）
-        self.edit_log = None      # 編輯日誌記錄（追蹤本次操作的新增/刪除/修改數量）
+        # 状态标志
+        self.pont_marked = False  # 点位是否已标记
+        self.edit_log = None  # 编辑日志记录
         
-        # 資料夾選擇相關變數
-        self.current_folder_path = None  # 當前工作資料夾的完整路徑
-        self.folder_files = {"heat": [], "layout": [], "heatTemp": [], "layoutData": []}  # 資料夾中各分類的檔案列表
-        self.current_temp_file_path = None  # 當前使用的溫度數據檔案完整路徑
-        self.current_files = {"heat": None, "layout": None, "heatTemp": None, "layoutData": None}  # 各分類中當前選用的檔案名稱
+        # 文件夹选择相关变量
+        self.current_folder_path = None
+        self.folder_files = {"heat": [], "layout": [], "heatTemp": [], "layoutData": []}
+        self.current_temp_file_path = None  # 全局温度数据文件路径
+        self.current_files = {"heat": None, "layout": None, "heatTemp": None, "layoutData": None}  # 当前使用的文件
         
-        # Layout 數據相關變數
-        self.layout_data = None  # 儲存解析後的 Layout 元器件數據（list of dict，含 RefDes、座標、尺寸等）
+        # Layout数据相关变量
+        self.layout_data = None  # 存储解析后的layout数据
         
-        # 對話框實例（單例模式，避免重複開啟）
-        self.setting_dialog = None  # 設定對話框實例 (SettingDialog)
-        self.editor_canvas = None   # 溫度標記編輯畫布實例 (EditorCanvas)
+        # 对话框实例（单例模式）
+        self.setting_dialog = None  # 设置对话框实例
+        self.editor_canvas = None  # EditorCanvas实例
 
         # self.save_log_file()
 
-        self.init_UI_flow(root)  # 建構完整的 UI 介面佈局
+        self.init_UI_flow(root)
 
-        # 初始化時顯示圖片（目前已改為由資料夾自動載入）
+        # 初始化时显示图片
         # self.update_images()
 
-        # 綁定視窗大小變化事件，觸發圖片重新縮放
+        # 绑定窗口大小变化事件
         self.root.bind("<Configure>", self.on_resize)
 
-        # 控制更新頻率的延遲計時器 ID（防止視窗縮放時頻繁觸發重繪）
+        # 控制更新的频率
         self.resize_after = None
         # self.root.after(100, self.init_magnifier)  # 延迟100毫秒更新
         # self.background_opt()
-        self.root.after(100, self.background_opt)  # 延遲 100ms 後執行背景初始化（載入上次資料夾等）
+        self.root.after(100, self.background_opt)
 
     def background_opt(self):
-        """背景初始化作業，在主視窗建立後延遲執行，避免阻塞 UI 啟動。"""
-        # 載入上次使用的資料夾路徑並自動恢復工作狀態
+        # 加载上次使用的文件夹路径
         self.load_last_folder_path()
         
     def load_last_folder_path(self):
-        """從全域配置中載入上次使用的資料夾路徑，並自動恢復工作狀態。
-
-        若上次的資料夾路徑仍然存在，則自動掃描檔案、更新檔案樹、
-        載入圖片與對齊點數據，讓使用者無需重新選擇資料夾。
-        """
+        """加载上次使用的文件夹路径"""
         last_path = self.config.get("last_folder_path")
         if last_path and os.path.exists(last_path):
             print(f"启动时自动加载上次使用的文件夹: {last_path}")
@@ -272,16 +205,13 @@ class ResizableImagesApp:
             print("没有找到上次使用的文件夹路径或文件夹不存在")
     
     def save_folder_path(self):
-        """將當前資料夾路徑儲存到全域配置檔案中，以便下次啟動時自動載入。"""
+        """保存当前文件夹路径到配置"""
         if self.current_folder_path:
             self.config.set("last_folder_path", self.current_folder_path)
             self.config.save_to_json()
     
     def save_current_files_to_config(self):
-        """將當前各分類中選用的檔案名稱儲存到 temperature_config.json 配置檔中。
-
-        在切換資料夾或關閉程式前呼叫，確保下次開啟時能恢復檔案選擇狀態。
-        """
+        """保存当前选择的文件到配置"""
         if self.current_folder_path:
             # 保存当前选择的文件到temperature_config.json
             if self.temp_config:
@@ -295,11 +225,7 @@ class ResizableImagesApp:
                 print("temp_config未初始化，无法保存文件路径")
     
     def update_temp_config_files(self):
-        """同步更新溫度配置管理器中的當前檔案資訊。
-
-        將 self.current_files 中的各分類檔案路徑寫入 temperature_config.json，
-        供溫度過濾對話框等其他模組讀取。
-        """
+        """更新温度配置管理器中的当前文件信息"""
         print(f"update_temp_config_files: 开始更新文件信息")
         print(f"update_temp_config_files: temp_config存在: {self.temp_config is not None}")
         print(f"update_temp_config_files: current_folder_path: {self.current_folder_path}")
@@ -317,10 +243,7 @@ class ResizableImagesApp:
             print(f"update_temp_config_files: 跳过更新，条件不满足")
     
     def load_current_files_from_config(self):
-        """從 temperature_config.json 配置檔載入上次選擇的檔案。
-
-        驗證檔案是否仍然存在，若不存在則自動選擇第一個可用的檔案。
-        """
+        """从配置加载上次选择的文件"""
         if self.current_folder_path:
             # 从temperature_config.json加载上次选择的文件
             if self.temp_config:
@@ -347,13 +270,7 @@ class ResizableImagesApp:
             print(f"文件选择完成: {self.current_files}")
     
     def _load_or_default_file(self, file_type, saved_file, display_name):
-        """載入指定檔案類型，若配置的檔案不存在則使用預設的第一個可用檔案。
-
-        參數：
-            file_type (str): 檔案分類鍵值（"heat", "layout", "heatTemp", "layoutData"）
-            saved_file (str): 從配置中讀取的檔案名稱
-            display_name (str): 用於日誌輸出的中文顯示名稱
-        """
+        """加载指定文件类型，如果配置的文件不存在则使用默认操作"""
         if saved_file and saved_file in self.folder_files.get(file_type, []):
             # 配置的文件存在，使用配置的文件
             self.current_files[file_type] = saved_file
@@ -385,11 +302,7 @@ class ResizableImagesApp:
             print(f"⚠ 没有可用的{display_name}文件")
     
     def clear_old_data(self):
-        """清空記憶體中的舊數據，在切換資料夾時呼叫。
-
-        清除對齊點、座標變換器、標記框、圖片、溫度數據等，
-        但不刪除磁碟上的任何檔案。
-        """
+        """清空内存中的旧数据，切换文件夹时调用（不删除文件）"""
         # 清空点位数据
         self.points_A = []
         self.points_B = []
@@ -428,11 +341,7 @@ class ResizableImagesApp:
     
     
     def select_folder(self):
-        """開啟資料夾選擇對話框，讓使用者選擇工作資料夾。
-
-        選擇後會依序執行：儲存舊資料夾配置 -> 清空舊數據 -> 掃描新資料夾 ->
-        更新檔案樹 -> 載入對齊點 -> 更新按鈕文字。
-        """
+        """选择文件夹"""
         folder_path = filedialog.askdirectory(title="选择包含热力图和Layout图的文件夹")
         if folder_path:
             # 保存当前文件夹的文件选择
@@ -461,13 +370,7 @@ class ResizableImagesApp:
             self.folder_control_button.config(text=f"隐藏文件夹Tab")
     
     def scan_folder_files(self):
-        """掃描當前資料夾中的所有檔案，並根據檔案內容自動分類。
-
-        分類邏輯：
-            - 圖片檔 (.jpg/.jpeg/.png)：判斷為熱力圖或 Layout 圖
-            - 數據檔 (.csv/.xlsx)：判斷為溫度數據或 Layout 數據
-        分類完成後自動載入圖片。
-        """
+        """扫描文件夹中的文件并分类"""
         if not self.current_folder_path:
             return
             
@@ -515,17 +418,7 @@ class ResizableImagesApp:
             print(f"扫描文件夹时出错: {e}")
     
     def _is_heat_image(self, image_path):
-        """判斷指定圖片是否為熱力圖。
-
-        透過分析 HSV 色彩空間的飽和度平均值和色調變異數來判定。
-        熱力圖通常具有較高的色彩飽和度（>80）和較大的色調變化（>1000）。
-
-        參數：
-            image_path (str): 圖片檔案路徑
-
-        回傳：
-            bool: True 表示判定為熱力圖
-        """
+        """判断是否为热力图（颜色丰富的图像）"""
         try:
             image = cv2_imread_unicode(image_path)
             if image is None:
@@ -547,17 +440,7 @@ class ResizableImagesApp:
             return False
 
     def _is_layout_image(self, image_path):
-        """判斷指定圖片是否為 Layout 圖。
-
-        透過計算灰階影像中黑色像素（亮度<50）的比例來判定。
-        Layout 圖通常有超過 60% 的黑色背景。
-
-        參數：
-            image_path (str): 圖片檔案路徑
-
-        回傳：
-            bool: True 表示判定為 Layout 圖
-        """
+        """判断是否为Layout图（背景大部分是黑色的图像）"""
         try:
             image = cv2_imread_unicode(image_path)
             if image is None:
@@ -577,17 +460,7 @@ class ResizableImagesApp:
             return False
     
     def _is_layout_data_file(self, file_path):
-        """判斷指定檔案是否為 Layout 數據檔案。
-
-        僅檢查 .xlsx 檔案，讀取第一行欄位名稱，若包含 'RefDes' 欄位
-        則判定為 Layout 數據檔案。
-
-        參數：
-            file_path (str): 檔案路徑
-
-        回傳：
-            bool: True 表示判定為 Layout 數據檔案
-        """
+        """判断是否为layout数据文件（包含RefDes字段的xlsx文件）"""
         try:
             if not file_path.lower().endswith('.xlsx'):
                 return False
@@ -599,15 +472,7 @@ class ResizableImagesApp:
             return False
     
     def auto_load_images(self):
-        """自動載入各分類中當前選用的檔案。
-
-        執行順序：
-            1. 從配置恢復上次選擇的檔案
-            2. 同步載入熱力圖和 Layout 圖（快速顯示）
-            3. 同步載入對齊點數據
-            4. 非同步載入溫度數據（子執行緒，避免阻塞 UI）
-            5. 非同步載入 Layout 數據（子執行緒）
-        """
+        """自动加载可用的图片"""
         try:
             # 首先尝试从配置恢复上次选择的文件
             self.load_current_files_from_config()
@@ -640,11 +505,7 @@ class ResizableImagesApp:
             print(f"自动加载图片时出错: {e}")
     
     def update_folder_display(self):
-        """更新左側面板的資料夾檔案樹狀列表顯示。
-
-        清空現有內容後，依分類（熱力圖/Layout圖/溫度數據/Layout數據）
-        重新建構樹狀結構。當前選用的檔案會以粗體高亮顯示。
-        """
+        """更新文件夹文件显示"""
         if hasattr(self, 'folder_tree'):
             # 记录当前展开状态
             expanded_items = []
@@ -684,7 +545,7 @@ class ResizableImagesApp:
                             item = self.folder_tree.insert(category_item, "end", text=display_text, values=(category, filename))
     
     def update_folder_path_label(self):
-        """更新左側面板頂部的「當前資料夾」路徑標籤文字。"""
+        """更新文件夹路径标签"""
         if hasattr(self, 'folder_path_label'):
             if self.current_folder_path:
                 # 显示文件夹名称而不是完整路径
@@ -693,16 +554,7 @@ class ResizableImagesApp:
             else:
                 self.folder_path_label.config(text="当前文件夹：未选择")
     def on_file_click(self, event):
-        """處理檔案樹狀列表的單擊事件。
-
-        根據點擊位置判斷行為：
-            - 點擊分類標題右側的資料夾圖示：開啟檔案選擇對話框
-            - 點擊分類標題文字區域：折疊/展開該分類
-            - 點擊檔案項目：切換到該檔案（載入並更新顯示）
-
-        參數：
-            event: Tkinter 滑鼠事件物件（包含 x, y 座標等資訊）
-        """
+        """处理文件单击事件"""
         # 通过点击位置确定实际点击的项目，而不是使用selection()
         item = self.folder_tree.identify_row(event.y)
         if not item:
@@ -779,13 +631,7 @@ class ResizableImagesApp:
             self.update_folder_display()
     
     def select_and_replace_current_file(self, category):
-        """開啟檔案選擇對話框，選擇新檔案並替換當前使用的資源。
-
-        若選擇的檔案不在當前資料夾中，會自動複製過來。不會刪除原檔案。
-
-        參數：
-            category (str): 檔案分類（"heat", "layout", "heatTemp", "layoutData"）
-        """
+        """选择新文件并替换当前使用的资源（不删除原文件）"""
         try:
             print(f"select_and_replace_current_file 被调用，category = {category}")
             # 根据分类设置文件类型过滤器
@@ -875,14 +721,7 @@ class ResizableImagesApp:
             messagebox.showerror("错误", f"替换文件失败: {e}")
     
     def select_and_replace_file(self, category, old_filename):
-        """選擇新檔案並替換（刪除）舊檔案。
-
-        與 select_and_replace_current_file 不同，本方法會刪除舊檔案。
-
-        參數：
-            category (str): 檔案分類（"heat", "pcb", "heatTemp"）
-            old_filename (str): 要被替換的舊檔案名稱
-        """
+        """选择新文件并替换当前文件"""
         try:
             # 根据分类设置文件类型过滤器
             if category == "heat":
@@ -963,11 +802,7 @@ class ResizableImagesApp:
             messagebox.showerror("错误", f"替换文件失败: {e}")
     
     def select_and_copy_file(self, category):
-        """選擇外部檔案並複製到當前資料夾中，然後設為當前使用的檔案。
-
-        參數：
-            category (str): 檔案分類（"heat", "pcb", "heatTemp"）
-        """
+        """选择并复制文件到当前文件夹"""
         try:
             # 根据分类设置文件类型过滤器
             if category == "heat":
@@ -1038,13 +873,7 @@ class ResizableImagesApp:
             messagebox.showerror("错误", f"选择文件失败: {e}")
     
     def load_temperature_file(self, file_path):
-        """同步載入溫度數據檔案（CSV 或 XLSX 格式）。
-
-        建立 TempLoader 實例並設定全域溫度檔案路徑。
-
-        參數：
-            file_path (str): 溫度數據檔案的完整路徑
-        """
+        """加载温度数据文件"""
         try:
             if file_path.lower().endswith(('.csv', '.xlsx')):
                 # 设置全局温度文件路径
@@ -1058,11 +887,7 @@ class ResizableImagesApp:
             messagebox.showerror("错误", f"加载温度数据文件失败: {e}")
     
     def load_temperature_file_async(self, file_path):
-        """在子執行緒中非同步載入溫度數據檔案，避免阻塞 UI。
-
-        參數：
-            file_path (str): 溫度數據檔案的完整路徑
-        """
+        """异步加载温度数据文件"""
         def load_temp_data():
             try:
                 print(f"开始异步加载温度数据: {file_path}")
@@ -1088,11 +913,7 @@ class ResizableImagesApp:
         temp_thread.start()
     
     def load_layout_data_async(self, file_path):
-        """在子執行緒中非同步載入單一 Layout 數據檔案。
-
-        參數：
-            file_path (str): Layout 數據檔案的完整路徑
-        """
+        """异步加载Layout数据文件"""
         def load_layout_data():
             try:
                 print(f"开始异步加载Layout数据: {file_path}")
@@ -1108,11 +929,7 @@ class ResizableImagesApp:
         layout_thread.start()
     
     def load_all_layout_data_async(self):
-        """在子執行緒中非同步載入資料夾內所有 Layout 數據檔案。
-
-        自動識別 C.xlsx（元器件位置）和 C_item.xlsx（元器件尺寸）檔案，
-        解析後合併為完整的元器件資訊列表。
-        """
+        """异步加载所有Layout数据文件"""
         def load_all_layout_data():
             try:
                 print(f"开始异步加载所有Layout数据文件...")
@@ -1142,18 +959,7 @@ class ResizableImagesApp:
         layout_thread.start()
     
     def parse_all_layout_data(self, layout_files):
-        """解析所有 Layout 數據檔案，回傳合併後的元器件資訊列表。
-
-        自動判斷哪個是 C 檔（含 Orient./X/Y 欄位）和 C_item 檔（含 L/W/T 欄位），
-        然後根據 RefDes 欄位合併兩個檔案的數據，計算每個元器件的邊界框。
-
-        參數：
-            layout_files (list): Layout 數據檔案路徑列表
-
-        回傳：
-            list 或 None: 元器件資訊列表，每項為 dict 包含
-                {RefDes, left, top, right, bottom, X, Y, L, W, T, Orient.}
-        """
+        """解析所有Layout数据文件，返回C_info数据"""
         try:
             c_file = None
             c_item_file = None
@@ -1253,20 +1059,15 @@ class ResizableImagesApp:
             return None
     
     def calculate_rotated_bounding_box(self, x, y, length, width, angle_deg):
-        """計算元器件旋轉後的軸對齊邊界框 (AABB)。
-
-        根據元器件的中心座標、長寬尺寸和旋轉角度，計算旋轉後
-        能完整包含元器件的最小軸對齊矩形。
-
-        參數：
-            x (float): 元器件中心 X 座標 (mm)
-            y (float): 元器件中心 Y 座標 (mm)
-            length (float): 元器件長度 (mm)
-            width (float): 元器件寬度 (mm)
-            angle_deg (float): 旋轉角度（度），正值為順時針
-
-        回傳：
-            tuple: (left, top, right, bottom) 旋轉後的邊界框座標
+        """计算旋转后的边界框
+        
+        Args:
+            x, y: 元器件中心坐标 (mm)
+            length, width: 元器件的长和宽 (mm)
+            angle_deg: 旋转角度 (度)，正值为顺时针，负值为逆时针
+            
+        Returns:
+            tuple: (left, top, right, bottom) 旋转后的边界框坐标
         """
         import math
         
@@ -1305,17 +1106,7 @@ class ResizableImagesApp:
         return left, top, right, bottom
     
     def parse_layout_data(self, file_path):
-        """解析 Layout 數據檔案，回傳元器件資訊列表 (C_info)。
-
-        先從已識別的 layoutData 檔案中尋找 C 檔和 C_item 檔，
-        若未找到則回退到資料夾掃描模式。
-
-        參數：
-            file_path (str): Layout 數據檔案路徑（用於取得資料夾位置）
-
-        回傳：
-            list 或 None: 元器件資訊列表
-        """
+        """解析Layout数据文件，返回C_info数据"""
         try:
             # 直接使用已经识别出的layout数据文件
             folder_path = os.path.dirname(file_path)
@@ -1427,20 +1218,7 @@ class ResizableImagesApp:
             return None
     
     def calculate_rotated_rectangle(self, x, y, l, t, orient):
-        """計算元器件旋轉後的外接矩形邊界座標。
-
-        將矩形的四個角點進行旋轉變換，再取外接矩形的邊界。
-
-        參數：
-            x (float): 中心 X 座標
-            y (float): 中心 Y 座標
-            l (float): 長度
-            t (float): 高度
-            orient (float): 旋轉角度（度）
-
-        回傳：
-            tuple: (left, top, right, bottom) 外接矩形邊界
-        """
+        """计算旋转后的矩形四个角点坐标"""
         try:
             # 将旋转角度转换为弧度
             # orient为.270表示顺时针旋转270度，orient为-270表示逆时针旋转270度
@@ -1483,17 +1261,11 @@ class ResizableImagesApp:
             return x - l/2, y - t/2, x + l/2, y + t/2
 
     def update_magnifier_point(self):
-        """更新放大鏡元件中的對齊點資料，使放大鏡能正確顯示點位標記。"""
         if hasattr(self, 'canvasA_magnifier') and self.canvasA_magnifier:
             self.canvasA_magnifier.update_points(self.points_A)
         if hasattr(self, 'canvasB_magnifier') and self.canvasB_magnifier:
             self.canvasB_magnifier.update_points(self.points_B)
     def init_magnifier(self):
-        """初始化左右畫布的放大鏡元件。
-
-        先清除舊的放大鏡實例，再根據當前縮放後的圖片建立新的放大鏡。
-        僅在圖片已載入的情況下才會建立。
-        """
         self.clean_magnifier()
         # 检查图片是否已加载
         if hasattr(self, 'resized_imageA') and hasattr(self, 'resized_imageB') and self.resized_imageA and self.resized_imageB:
@@ -1504,8 +1276,7 @@ class ResizableImagesApp:
                 self.canvasB_magnifier.toggle_magnifier(1)
         else:
             print("图片未加载，跳过初始化放大镜")
-    def clean_magnifier(self):
-        """關閉並清除左右畫布的放大鏡元件。"""     
+    def clean_magnifier(self):     
         if self.canvasA_magnifier:
             self.canvasA_magnifier.toggle_magnifier(0)
             self.canvasA_magnifier = None
@@ -1514,11 +1285,7 @@ class ResizableImagesApp:
             self.canvasB_magnifier.toggle_magnifier(0)
             self.canvasB_magnifier = None
     def update_content(self):
-        """更新畫面顯示內容（視窗大小改變時觸發）。
-
-        僅在畫布寬度確實發生變化時才重新渲染，避免不必要的效能消耗。
-        根據對齊模式和放大鏡開關狀態決定是否初始化放大鏡。
-        """
+        """更新显示内容 - 简化版本，不再修改原始坐标"""
         # 尺寸未变 不重复渲染
         old_canvas_width = self.canvasA_width
         new_canvas_width = self.canvasA.winfo_width()
@@ -1537,23 +1304,7 @@ class ResizableImagesApp:
         else:
             self.clean_magnifier()
     def update_images(self):
-        """重新縮放並繪製熱力圖和 Layout 圖到畫布上。
-
-        根據畫布當前尺寸計算縮放比例，保持原始寬高比。
-        若處於對齊模式，會在圖片上繪製帶編號的對齊點標記。
-        若有溫度標記框 (mark_rect_A/B)，會在非對齊模式下繪製。
-
-        重要變數說明：
-            self.imageA_scale: 熱力圖的縮放比例（畫布寬度 / 原始寬度）
-            self.imageB_scale: Layout 圖的縮放比例
-            self.canvasA_offset: 熱力圖在畫布上的偏移量 (offsetX, offsetY)
-            self.canvasB_offset: Layout 圖在畫布上的偏移量
-            self.resized_imageA: 縮放後的熱力圖 (PIL.Image)
-            self.resized_imageB: 縮放後的 Layout 圖 (PIL.Image)
-            self.tk_imageA: 畫布用的 PhotoImage 物件（需持有參考避免被 GC 回收）
-            self.tk_imageB: 同上
-        """
-        # 檢查圖片是否存在，至少需要一張圖片
+        # 检查图片是否存在，至少需要一张图片
         if not hasattr(self, 'imageA') or not self.imageA:
             print("热力图未加载，跳过更新")
             return
@@ -1657,25 +1408,12 @@ class ResizableImagesApp:
         self.canvasB.config(height=imageB_height)  # 重新设置 Canvas 的高度
 
     def on_resize(self, event):
-        """視窗大小改變時的事件處理器。
-
-        使用延遲更新機制（20ms debounce），避免拖曳縮放時頻繁觸發重繪。
-
-        參數：
-            event: Tkinter Configure 事件物件
-        """
-        # 每當視窗尺寸變化時，取消前一次的延遲更新，重新安排
+        # 每当窗口尺寸变化时，延迟更新图像，避免频繁触发更新
         if self.resize_after:
             self.root.after_cancel(self.resize_after)
         self.resize_after = self.root.after(20, self.update_content)
     def load_default_imgs(self, showTip = True):
-        """載入預設圖片或從當前資料夾載入圖片。
-
-        若已選擇資料夾，則重新掃描檔案並載入；否則嘗試載入預設路徑的圖片。
-
-        參數：
-            showTip (bool): 是否顯示載入結果的浮動通知
-        """
+        """加载默认图片或从当前文件夹加载图片"""
         if self.current_folder_path:
             # 如果已经选择了文件夹，从文件夹中加载图片
             self.scan_folder_files()
@@ -1707,11 +1445,6 @@ class ResizableImagesApp:
                     toast_type='error'
                 )
     def check_points_finish(self):
-        """檢查兩側的對齊點是否已標記完成（各至少 3 個）。
-
-        回傳：
-            str: 若未完成，回傳錯誤訊息字串；若已完成，回傳空字串
-        """
         content = ""
         if len(self.points_A) < 3:
         # if not os.path.isfile(Constants.imageA_point_path()):  # 检查文件是否存在
@@ -1730,13 +1463,7 @@ class ResizableImagesApp:
             )
         return content
     def update_points(self, clearAll = False):
-        """更新畫布上的對齊點圓點顯示。
-
-        將原始圖像座標經過縮放和偏移轉換為畫布座標後繪製。
-
-        參數：
-            clearAll (bool): True 表示清除所有對齊點顯示，False 表示重新繪製
-        """
+        """更新画布上的打点显示 - 将原始图像坐标转换为canvas坐标"""
         if clearAll:
             self.canvasA.delete("points_A")
             self.canvasB.delete("points_B")
@@ -1778,12 +1505,7 @@ class ResizableImagesApp:
             y1 = min(canvas_y + radius, self.canvasB.winfo_height())
             self.canvasB.create_oval(canvas_x - radius, y0, canvas_x + radius, y1, fill="red", tags="points_B")
     def save_points_json(self):
-        """將對齊點數據儲存為 JSON 格式檔案。
-
-        檔案儲存在 {資料夾}/points/{熱力圖名}_{Layout圖名}.json，
-        使用原始圖像座標（非畫布座標），同時記錄圖像尺寸和時間戳記。
-        需要兩側各至少 3 個對齊點才會儲存。
-        """
+        """保存打点数据为JSON格式，使用图像坐标"""
         try:
             if len(self.points_A) >= 3 and len(self.points_B) >= 3:
                 # 获取原始图像尺寸
@@ -1832,11 +1554,6 @@ class ResizableImagesApp:
             traceback.print_exc()
 
     def save_points_csv(self):
-        """將對齊點數據儲存為 CSV 格式檔案（舊版格式，已逐步被 JSON 取代）。
-
-        CSV 檔案第一行為畫布尺寸 [w, h]，後續行為對齊點座標。
-        檔案命名格式：{熱力圖名}_{Layout圖名}_imageA.csv / _imageB.csv
-        """
         aW, aH = self.resized_imageA.size
         points_A_save = np.vstack([np.array([[aW, aH]], dtype='float32'), self.points_A])
         # 检查 points_A 的每一行数据是否符合条件
@@ -1906,15 +1623,6 @@ class ResizableImagesApp:
             else:
                 np.savetxt(Constants.imageB_point_path(), points_B_save, delimiter=',', fmt='%d')
     def get_points(self, points_path, canvas):
-        """從 CSV 檔案讀取對齊點數據，並根據當前畫布尺寸進行縮放。
-
-        參數：
-            points_path (str): 對齊點 CSV 檔案路徑
-            canvas (tk.Canvas): 對應的畫布元件（用於取得當前寬度）
-
-        回傳：
-            list: 縮放後的對齊點座標列表，若檔案不存在或數據不足則回傳空列表
-        """
          # 如果文件不存在，返回空数组
         if not os.path.exists(points_path):
             return []
@@ -1927,7 +1635,6 @@ class ResizableImagesApp:
         print("get_points -> ", canvas.winfo_width(), w, scale, points * scale)
         return points * scale
     def clear_point_file(self):
-        """刪除當前檔案組合對應的對齊點 CSV 檔案。"""
         if self.current_folder_path:
             points_dir = os.path.join(self.current_folder_path, "points")
             
@@ -1956,11 +1663,6 @@ class ResizableImagesApp:
             self.remove_file(Constants.imageA_point_path())
             self.remove_file(Constants.imageB_point_path())
     def remove_file(self, file_path):
-        """安全刪除指定檔案，捕獲常見例外（檔案不存在、權限不足等）。
-
-        參數：
-            file_path (str): 要刪除的檔案完整路徑
-        """
         try:
             os.remove(file_path)
             # print(f"{file_path} 已成功删除。")

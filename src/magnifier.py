@@ -1,12 +1,64 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+影像放大鏡元件模組 (magnifier.py)
+
+用途：
+    提供滑鼠游標處的圓形放大鏡功能。當使用者在影像上移動滑鼠時，
+    在游標位置顯示該區域的 2 倍放大圖，以圓形遮罩呈現。
+    放大鏡可透過外部控制啟用/禁用。支援影像邊界處理
+    （超出邊界部分以深灰色背景填充）。
+
+在整個應用中的角色：
+    - 作為主介面的輔助工具，幫助使用者精確定位和查看細節
+    - 被 main.py 在熱力圖和 Layout 圖的 Canvas 上建立
+
+關聯檔案：
+    - main.py：建立 ImageMagnifier 實例並控制開關
+    - circle_ring_draw.py：在放大鏡的原始影像上繪製圓形標記點
+    - config.py：透過 magnifier_switch 設定控制開關狀態
+
+UI 元件對應命名：
+    - zoomed_image_id (int): Canvas 上放大鏡影像的物件 ID
+    - zoomed_image (ImageTk.PhotoImage): 放大後的影像（Tkinter 格式）
+"""
+
 import tkinter as tk
 from PIL import Image, ImageTk, ImageDraw
 import numpy as np
 import cv2
 from circle_ring_draw import draw_points_circle_ring_text
 
-# 放大镜
+
 class ImageMagnifier:
+    """影像放大鏡元件。
+
+    在 Canvas 上跟隨滑鼠游標顯示圓形放大鏡，將游標周圍的區域
+    裁剪後放大 2 倍，以圓形遮罩呈現。
+
+    屬性：
+        canvas (tk.Canvas): 繫結的 Canvas 元件
+        original_image (PIL.Image): 原始影像
+        mix_image (PIL.Image): 疊加了圓形標記點的影像
+        index (int): 影像索引（0=熱力圖使用紅色標記，1=Layout 圖使用黑色標記）
+        original_width (int): 原始影像寬度
+        original_height (int): 原始影像高度
+        x_min, y_min (int): 影像在 Canvas 上的左上角座標
+        x_max, y_max (int): 影像在 Canvas 上的右下角座標
+        rect_width (int): 放大鏡裁剪區域的邊長（原始影像寬度的 1/10）
+        zoomed_image (ImageTk.PhotoImage): 目前的放大影像
+        zoomed_image_id (int): Canvas 上放大影像的物件 ID
+        is_zoom_enabled (bool): 放大鏡是否啟用
+    """
     def __init__(self, canvas, original_image, points, index):
+        """初始化放大鏡元件。
+
+        Args:
+            canvas (tk.Canvas): 要繫結放大鏡的 Canvas 元件
+            original_image (PIL.Image): 原始影像
+            points (list): 圓形標記點列表
+            index (int): 影像索引（0=熱力圖，1=Layout 圖）
+        """
         self.canvas = canvas
 
         self.original_image = original_image
@@ -40,7 +92,11 @@ class ImageMagnifier:
         # self.canvas.bind("<Leave>", self.on_mouse_leave)
 
     def toggle_magnifier(self, enable):
-        """通过外部控制开关启用或禁用放大镜功能"""
+        """透過外部控制啟用或禁用放大鏡功能。
+
+        Args:
+            enable (bool|int): True/1 啟用，False/0 禁用
+        """
         self.is_zoom_enabled = bool(enable)
         if not self.is_zoom_enabled:
             self.canvas.itemconfig(self.zoomed_image_id, image="")  # 禁用时清除放大镜
@@ -54,6 +110,11 @@ class ImageMagnifier:
             self.canvas.bind("<Leave>", self.on_mouse_leave)
 
     def update_img(self, points):
+        """更新放大鏡使用的基礎影像（在原始影像上疊加圓形標記點）。
+
+        Args:
+            points (list): 圓形標記點座標列表
+        """
         image_np = np.array(self.original_image.copy())  # 使用 .copy() 确保 image_np 是原图的副本
         # image_np = np.array(self.original_image)
         if self.index == 1:
@@ -69,10 +130,11 @@ class ImageMagnifier:
         self.mix_image = Image.fromarray(cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB))
 
     def update_points(self, points):
+        """更新標記點並重新生成疊加影像。"""
         self.update_img(points)
 
     def on_mouse_move(self, event):
-        """鼠标移动时更新放大镜区域"""
+        """滑鼠移動事件處理器。裁剪游標周圍區域、放大 2 倍並以圓形遮罩顯示。"""
         # print("on_mouse_move :", self.is_zoom_enabled)
         if not self.is_zoom_enabled:
             return  # 如果放大镜被禁用，则不做任何事情
@@ -140,6 +202,7 @@ class ImageMagnifier:
         self.canvas.coords(self.zoomed_image_id, x + 0, y + 0)  # 放大镜框的位置
 
     def on_mouse_enter(self, event):
+        """滑鼠進入 Canvas 事件。重新計算影像在 Canvas 上的位置邊界。"""
         # print("on_mouse_enter :", self.is_zoom_enabled)
         if self.is_zoom_enabled:
             self.x_min = (self.canvas.winfo_width() - self.original_width) // 2
@@ -148,7 +211,7 @@ class ImageMagnifier:
             self.y_max = self.y_min + self.original_height
 
     def on_mouse_leave(self, event):
-        """鼠标离开时清空放大镜图像"""
+        """滑鼠離開 Canvas 事件。清空放大鏡影像。"""
         if self.is_zoom_enabled:
             self.canvas.itemconfig(self.zoomed_image_id, image="")
 

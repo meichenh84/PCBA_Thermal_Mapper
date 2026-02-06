@@ -1,3 +1,30 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+元器件自動識別模組 (recognize_image.py)
+
+用途：
+    提供兩種自動識別 PCB 元器件的方法：
+    1. yolo_process_pcb_image()：使用 YOLOv8 深度學習模型偵測 Layout 圖上的元器件
+    2. process_pcb_image()：使用傳統影像處理方法（分塊搜尋最大溫度 + 色彩遮罩邊界識別）
+
+    兩種方法都會回傳元器件在熱力圖（imageA）和 Layout 圖（imageB）上的
+    矩形框座標、中心點座標和最高溫度值。
+
+在整個應用中的角色：
+    - 核心識別引擎，被 main.py 呼叫以自動偵測元器件位置
+    - 將識別結果以字典列表回傳，供 editor_rect.py 繪製標記
+
+關聯檔案：
+    - main.py：呼叫本模組的識別函式
+    - recognize_component_boundary.py：被 process_pcb_image() 呼叫以識別單一元器件邊界
+    - recognize_pcb_boundary.py：被 process_pcb_image() 呼叫以排除 PCB 外的區域
+    - point_transformer.py：座標轉換（A 圖 ↔ B 圖）
+    - color_range.py：提供色彩遮罩
+    - yolo_v8.py：YOLOv8 模型實例
+    - load_tempA.py：溫度資料載入器
+"""
+
 import cv2
 import numpy as np
 import heapq
@@ -12,8 +39,33 @@ from yolo_v8 import YOLOv8Instance
 from PIL import Image, ImageTk
 
 
-
 def yolo_process_pcb_image(tempA, imageA, imageB, point_transformer, min_temp, max_temp, min_width, min_height, max_ratio, auto_reduce):
+    """使用 YOLOv8 模型偵測 Layout 圖上的元器件並對應到熱力圖。
+
+    流程：
+    1. 使用 YOLOv8 偵測 imageB 上的元器件邊界框
+    2. 透過 point_transformer 將邊界框座標從 B 圖轉換到 A 圖
+    3. 在 tempA（溫度矩陣）中取得該區域的最高溫度
+    4. 過濾不符合溫度範圍的元器件
+
+    Args:
+        tempA (numpy.ndarray): 溫度矩陣（2D 陣列）
+        imageA (numpy.ndarray): 熱力圖影像（BGR 格式）
+        imageB (numpy.ndarray): Layout 圖影像（BGR 格式）
+        point_transformer (PointTransformer): A 圖 ↔ B 圖座標轉換器
+        min_temp (float): 最低溫度閾值（低於此值的元器件不標記）
+        max_temp (float): 最高溫度閾值（高於此值的元器件不標記）
+        min_width (int): 最小寬度閾值（未使用）
+        min_height (int): 最小高度閾值（未使用）
+        max_ratio (float): 最大長寬比閾值（未使用）
+        auto_reduce (float): 自動縮減係數（未使用）
+
+    Returns:
+        tuple: (rectA_arr, rectB_arr)
+            - rectA_arr (list[dict]): 熱力圖上的元器件矩形框列表
+            - rectB_arr (list[dict]): Layout 圖上的元器件矩形框列表
+            - 每個字典包含 x1, y1, x2, y2, cx, cy, max_temp, name
+    """
     # 检查point_transformer是否为None
     if point_transformer is None:
         print("错误：point_transformer为None，无法进行坐标转换")
@@ -101,18 +153,32 @@ def yolo_process_pcb_image(tempA, imageA, imageB, point_transformer, min_temp, m
     return rectA_arr, rectB_arr
 
 def process_pcb_image(tempA, imageB, point_transformer, min_temp, max_temp, min_width, min_height, max_ratio, auto_reduce):
-    """
-    处理PCB图像，根据tempA和图像B计算出PCB的边界并更新图像A。
+    """使用傳統影像處理方法識別 PCB 上的元器件。
 
-    参数:
-        tempA (ndarray): 需要处理的温度矩阵。
-        imageA (ndarray): PCB图像A。
-        imageB (ndarray): PCB图像B，通常用于生成掩码。
-        min_temp (int): 阈值，控制最大值。
-        imgScalePCB (float): 图像缩放比例。
-    
-    返回:
-        imageA (ndarray): 经过处理后的图像A，标出边界框和最大值点。
+    演算法流程：
+    1. 生成 Layout 圖的色彩遮罩（green mask）
+    2. 識別 PCB 邊界，將 tempA 中 PCB 外的區域歸零
+    3. 將 tempA 分成小塊（60x80 像素），建立最大堆疊（max heap）
+    4. 依照溫度從高到低取出每個塊，定位最高溫度點
+    5. 將該點映射到 Layout 圖上，識別元器件邊界
+    6. 過濾不符合條件的元器件（寬度、高度、長寬比等）
+    7. 將已識別區域在 tempA 中歸零，避免重複偵測
+
+    Args:
+        tempA (numpy.ndarray): 溫度矩陣（2D 陣列，會被修改）
+        imageB (numpy.ndarray): Layout 圖影像（BGR 格式）
+        point_transformer (PointTransformer): A 圖 ↔ B 圖座標轉換器
+        min_temp (float): 最低溫度閾值
+        max_temp (float): 最高溫度閾值
+        min_width (int): 元器件最小寬度（像素）
+        min_height (int): 元器件最小高度（像素）
+        max_ratio (float): 最大長寬比（超過則過濾）
+        auto_reduce (float): 自動縮減係數（>1 時啟用外擴邊界檢查）
+
+    Returns:
+        tuple: (rectA_arr, rectB_arr)
+            - rectA_arr (list[dict]): 熱力圖上的元器件矩形框列表
+            - rectB_arr (list[dict]): Layout 圖上的元器件矩形框列表
     """
     # 获取掩码和点变换器
     mask_boundary = get_mask_boundary(imageB)

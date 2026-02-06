@@ -1,9 +1,52 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+元器件編輯對話框模組 (dialog_component_setting.py)
+
+用途：
+    提供一個彈出式對話框，讓使用者編輯單一元器件的屬性，
+    目前允許修改的欄位為「器件名稱」和「最高溫度」（唯讀）。
+    其他座標欄位（x1, y1, x2, y2, cx, cy）保留不變。
+
+在整個應用中的角色：
+    - 當使用者在主介面雙擊某個矩形標記時，彈出此對話框
+    - 編輯完成後透過 callback 回傳修改結果給主程式
+
+關聯檔案：
+    - main.py：在雙擊矩形框時建立本對話框
+    - editor_rect.py：管理矩形標記，可能觸發本對話框
+    - bean/canvas_rect_item.py：提供 oldRect 資料來源
+
+UI 元件對應命名：
+    - fields (list): 輸入欄位列表，每項包含 (key, label, Entry 元件)
+    - confirm_button (tk.Button): 「確認」按鈕
+    - frame (tk.Frame): 主要內容框架（含 20px 內邊距）
+"""
+
 import tkinter as tk
 from tkinter import messagebox
 
 
 class ComponentSettingDialog(tk.Toplevel):
+    """元器件屬性編輯對話框。
+
+    繼承自 tk.Toplevel，建立一個獨立的彈出視窗。
+    顯示元器件的名稱和最高溫度供編輯，確認後透過 callback 回傳結果。
+
+    屬性：
+        oldRect (dict): 原始的矩形框資料字典
+        callback (callable): 確認後的回呼函式，接收修改後的資料字典
+        fields (list): 輸入欄位列表 [(key, label, Entry), ...]
+    """
+
     def __init__(self, parent, oldRect, callback):
+        """初始化元器件編輯對話框。
+
+        Args:
+            parent (tk.Widget): 父視窗元件
+            oldRect (dict): 原始矩形框資料（包含 name, max_temp, x1, y1 等）
+            callback (callable): 確認後的回呼函式
+        """
         super().__init__(parent)
         self.title("Edit Area")
         # self.window_width = 350
@@ -48,7 +91,7 @@ class ComponentSettingDialog(tk.Toplevel):
         self.confirm_button.grid(row=len(self.fields), column=0, columnspan=2, pady=(20, 0))
 
     def center_window(self):
-        # 获取屏幕宽高
+        """將對話框置中於螢幕。"""
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
 
@@ -59,7 +102,7 @@ class ComponentSettingDialog(tk.Toplevel):
         self.geometry(f'{self.window_width}x{self.window_height}+{x}+{y}')
 
     def on_confirm(self):
-        # 获取输入的值并验证
+        """確認按鈕點擊事件處理器。驗證輸入值、保留原始座標資料，並透過 callback 回傳結果。"""
         values = {}
         for key, label, entry in self.fields:
             value = entry.get()

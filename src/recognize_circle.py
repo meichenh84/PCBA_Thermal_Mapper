@@ -1,16 +1,41 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+圓形標記偵測模組 (recognize_circle.py)
+
+用途：
+    使用 OpenCV 的霍夫圓變換（Hough Circle Transform）偵測影像中的圓形標記。
+    提供兩組偵測函式：detect_A_circles() 用於熱力圖（imageA），
+    detect_B_circles() 用於 Layout 圖（imageB），兩者的參數略有不同
+    （半徑範圍不同）。另外提供 find_circle_containing_point() 判斷
+    某個點是否落在某個偵測到的圓內。
+
+在整個應用中的角色：
+    - 用於偵測使用者手動標記的圓形對齊點
+    - 偵測結果用於 point_transformer.py 計算仿射變換矩陣
+
+關聯檔案：
+    - main.py：呼叫本模組偵測圓形標記
+    - point_transformer.py：使用偵測到的圓心座標計算仿射變換
+"""
+
 import cv2
 import numpy as np
 import math
 
+
 def detect_A_circles(image):
-    """
-    检测图像中的圆形，并返回圆心坐标 (x, y) 和半径 r 的数组。
+    """偵測熱力圖（imageA）中的圓形標記。
 
-    参数：
-        image (ndarray): 输入的图像（BGR 格式）。
+    使用霍夫圓變換偵測圓形，適用於熱力圖的參數設定
+    （最小半徑 4px，最大半徑 30px）。
 
-    返回：
-        circles (ndarray): 检测到的圆形参数数组，包含圆心 (x, y) 和半径 r。
+    Args:
+        image (numpy.ndarray): 輸入的熱力圖影像（BGR 格式）
+
+    Returns:
+        numpy.ndarray | list: 偵測到的圓形參數陣列 [[x, y, r], ...]，
+                              若無偵測到則回傳空列表
     """
     # 将图像转换为灰度图
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -40,14 +65,17 @@ def detect_A_circles(image):
     
 
 def detect_B_circles(image):
-    """
-    检测图像中的圆形，并返回圆心坐标 (x, y) 和半径 r 的数组。
+    """偵測 Layout 圖（imageB）中的圓形標記。
 
-    参数：
-        image (ndarray): 输入的图像（BGR 格式）。
+    使用霍夫圓變換偵測圓形，適用於 Layout 圖的參數設定
+    （最小半徑 13px，最大半徑 30px，較大的最小半徑避免誤偵測小型通孔）。
 
-    返回：
-        circles (ndarray): 检测到的圆形参数数组，包含圆心 (x, y) 和半径 r。
+    Args:
+        image (numpy.ndarray): 輸入的 Layout 圖影像（BGR 格式）
+
+    Returns:
+        numpy.ndarray | list: 偵測到的圓形參數陣列 [[x, y, r], ...]，
+                              若無偵測到則回傳空列表
     """
     # 将图像转换为灰度图
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -75,16 +103,18 @@ def detect_B_circles(image):
         return []  # 如果没有检测到圆形，返回 None
     
 def find_circle_containing_point(circles, px, py):
-    """
-    判断传入点 (px, py) 是否落在圆内，并返回包含该点的圆的 index 和 圆的参数 (x, y, r)。
+    """判斷指定的點 (px, py) 是否落在某個偵測到的圓內。
 
-    参数：
-        circles (list): 包含圆的参数 [x_center, y_center, radius] 的列表。
-        px (int): 传入点的 x 坐标。
-        py (int): 传入点的 y 坐标。
+    遍歷所有偵測到的圓，計算點到各圓心的歐幾里得距離，
+    若距離小於等於圓的半徑，則表示點在該圓內。
 
-    返回：
-        tuple: 包含圆的 index 和 圆的 (x, y, r) 参数。如果没有找到符合条件的圆，返回 None。
+    Args:
+        circles (list): 圓形參數列表 [[x_center, y_center, radius], ...]
+        px (int): 指定點的 X 座標
+        py (int): 指定點的 Y 座標
+
+    Returns:
+        tuple | None: 包含該點的圓的參數 (cx, cy, r)，若找不到則回傳 None
     """
 
     if len(circles) == 0:

@@ -1,16 +1,66 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+溫度過濾與 PCB 參數設定對話框模組 (dialog_template.py)
+
+用途：
+    提供「溫度過濾」對話框，讓使用者設定元器件自動識別的參數，包括：
+    - 溫度過濾範圍（最低/最高溫度閾值）
+    - PCB 參數（長度、寬度、座標原點位置）
+    - 元器件最小尺寸（寬度、高度）
+    設定完成後透過 callback 傳遞參數，並儲存至溫度配置檔。
+
+在整個應用中的角色：
+    - 當使用者點擊「溫度過濾」按鈕時彈出
+    - 設定的參數被傳遞給 recognize_image.py 進行元器件識別
+
+關聯檔案：
+    - main.py：建立 TemplateDialog 實例
+    - temperature_config_manager.py：儲存/讀取溫度配置參數
+    - config.py：全域配置管理器
+    - recognize_image.py：使用本對話框設定的參數進行識別
+
+UI 元件對應命名：
+    - dialog (tk.Toplevel): 對話框視窗
+    - min_temp_entry (ttk.Entry): 最低溫度輸入框
+    - max_temp_entry (ttk.Entry): 最高溫度輸入框
+    - p_w_entry (ttk.Entry): PCB 長度（mm）輸入框
+    - p_h_entry (ttk.Entry): PCB 寬度（mm）輸入框
+    - p_origin_var (tk.StringVar): 座標原點下拉選單變數
+    - min_width_entry (ttk.Entry): 元器件最小寬度輸入框
+    - min_height_entry (ttk.Entry): 元器件最小高度輸入框
+    - confirm_button (tk.Button): 「確認」按鈕
+"""
+
 import tkinter as tk
 from tkinter import ttk
 from config import GlobalConfig
 from temperature_config_manager import TemperatureConfigManager
 
+
 class TemplateDialog:
+    """溫度過濾與 PCB 參數設定對話框。
+
+    顯示溫度過濾範圍、PCB 尺寸、座標原點等設定項，
+    確認後儲存至配置檔並透過 callback 傳遞結果。
+
+    屬性：
+        master (tk.Widget): 主視窗元件
+        settings_button (tk.Button): 觸發本對話框的按鈕（用於定位）
+        callback (callable): 確認後的回呼函式
+        config (GlobalConfig): 全域配置管理器
+        temp_config (TemperatureConfigManager): 溫度配置管理器
+        dialog_result (dict): 對話框結果字典
+    """
+
     def __init__(self, master, settings_button, callback, current_folder_path=None):
-        """
-        初始化设置对话框
-        :param master: 主窗口
-        :param settings_button: 设置按钮
-        :param callback: 外部回调函数，用于处理设置的逻辑
-        :param current_folder_path: 当前文件夹路径
+        """初始化溫度過濾對話框。
+
+        Args:
+            master (tk.Widget): 主視窗元件
+            settings_button (tk.Button): 觸發按鈕（用於計算對話框位置）
+            callback (callable): 確認後的回呼函式，接收參數字典
+            current_folder_path (str|None): 目前的資料夾路徑（用於載入配置）
         """
         self.master = master
         self.settings_button = settings_button
@@ -47,13 +97,15 @@ class TemplateDialog:
         self.dialog_result = {}
 
     def on_dialog_close(self):
+        """對話框關閉時的回呼。收集參數並儲存。"""
         self.get_params()
         self.config.update(self.dialog_result)
         self.config.save_to_csv()
         self.dialog.destroy()
 
     def open(self):
-        print("开始创建温度过滤对话框...")
+        """開啟溫度過濾對話框，建立所有 UI 元件並顯示。"""
+        print("開始建立溫度過濾對話框...")
         try:
             # 创建新的对话框
             dialog = tk.Toplevel(self.master)
@@ -219,6 +271,7 @@ class TemplateDialog:
         print("温度过滤对话框创建完成，应该已经显示")
 
     def get_params(self):
+        """從所有輸入框收集參數值並存入 dialog_result 字典。"""
         self.dialog_result = {
             "min_temp": float(self.min_temp_entry.get()),
             "max_temp": float(self.max_temp_entry.get()),

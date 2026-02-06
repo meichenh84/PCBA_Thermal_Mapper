@@ -1,11 +1,27 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-热力图绘制模块
+熱力圖標記繪製模組 (draw_rect.py)
 
-主要功能：
-1. 在热力图上绘制温度标记（三角形和文字）
-2. 智能文字定位算法，避免文字重叠
-3. 温度数据的可视化显示
-4. 支持多种绘制模式和样式
+用途：
+    在熱力圖（imageA）和 Layout 圖（imageB）上繪製元器件的溫度標記，
+    包括矩形邊框、元器件名稱文字、最高溫度三角形標記和溫度數值文字。
+    實作智慧文字定位演算法，自動避免文字與文字之間的重疊。
+    支援從 GlobalConfig 讀取自訂的顏色和字型大小設定。
+
+在整個應用中的角色：
+    - 被 editor_rect.py 呼叫，在 Canvas 畫面上繪製元器件標記
+    - 被 main.py 呼叫，在匯出影像時繪製標記
+
+關聯檔案：
+    - editor_rect.py：呼叫 draw_canvas_item() 繪製標記
+    - main.py：匯出影像時呼叫繪製函式
+    - config.py：讀取顏色和字型設定
+    - bean/canvas_rect_item.py：提供元器件資料
+
+主要函式：
+    - draw_triangle_and_text()：在影像上繪製三角形標記和溫度文字
+    - draw_canvas_item()：在 tkinter Canvas 上繪製矩形框和名稱標籤
 """
 
 import cv2
@@ -16,15 +32,18 @@ import traceback
 from config import GlobalConfig
 
 def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8):
-    """
-    在图像上绘制一个三角形并添加文本。
+    """在影像上繪製三角形溫度標記和文字。
 
-    参数：
-    imageA (numpy.ndarray): 输入的图像。
-    a_x (int): 三角形的中心点的 x 坐标。
-    a_y (int): 三角形的中心点的 y 坐标。
-    max_value (str): 要显示在图像上的文本值。
-    size (int): 三角形的边长（默认 6）。
+    在元器件最高溫度點的位置繪製一個倒三角形標記，
+    並在三角形上方顯示溫度數值文字，在矩形框左上方顯示元器件名稱。
+    顏色和字型大小從 GlobalConfig 中讀取。
+
+    Args:
+        imageA (numpy.ndarray): 輸入的影像（BGR 格式）
+        item (dict): 元器件資料字典（含 x1, y1, x2, y2, cx, cy, max_temp, name）
+        imageScale (float): 影像縮放比例（預設 1）
+        imageIndex (int): 影像索引（0=熱力圖，1=Layout 圖）
+        size (int): 三角形的邊長（預設 8）
     """
 
     imgWidth = imageA.shape[1]
@@ -98,15 +117,18 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
 
 
 def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, size=8):
-    """
-    在Canvas上绘制一个三角形并添加文本。
+    """在 tkinter Canvas 上繪製元器件的矩形框、名稱標籤、三角形標記和溫度文字。
 
-    参数：
-    canvas (tk.Canvas): Tkinter的Canvas控件。
-    item (dict): 包含绘制信息的字典。
-    imageScale (float): 缩放因子，默认为1。
-    imageIndex (int): 图像索引，决定颜色。
-    size (int): 三角形的边长，默认为8。
+    Args:
+        canvas (tk.Canvas): Tkinter Canvas 元件
+        item (dict): 元器件資料字典（含 x1, y1, x2, y2, cx, cy, max_temp, name）
+        imageScale (float): 縮放比例（預設 1）
+        offset (tuple): 偏移量 (offset_x, offset_y)（預設 (0, 0)）
+        imageIndex (int): 影像索引（0=熱力圖，1=Layout 圖）
+        size (int): 三角形標記邊長（預設 8）
+
+    Returns:
+        tuple: (rectId, nameId, tempTextId, triangleId) Canvas 繪圖物件 ID
     """
 
     canvas_width = canvas.winfo_width()
@@ -208,7 +230,14 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
     return rectId, triangleId, tempTextId, nameId
 
 
-def update_canvas_item(canvas, item, imageScale=1, ):
+def update_canvas_item(canvas, item, imageScale=1):
+    """更新 Canvas 上已存在的矩形標記位置和大小（用於縮放或拖曳後重繪）。
+
+    Args:
+        canvas (tk.Canvas): Tkinter Canvas 元件
+        item (dict): 元器件資料字典（需含 rectId, nameId 等 Canvas 物件 ID）
+        imageScale (float): 縮放比例
+    """
 
     x1, y1, x2, y2, cx, cy, rectId, nameId, tempTextId, triangleId = (
         item.get("x1"), item.get("y1"), item.get("x2"), item.get("y2"), item.get("cx"), item.get("cy"), 
@@ -250,9 +279,8 @@ def update_canvas_item(canvas, item, imageScale=1, ):
 
 
 def draw_points_on_canvas(canvas, points, radius_red=8, ring_width=2, scale_factor=1):
-    """
-    在给定的 Tkinter Canvas 上绘制内外圆圈，并返回处理后的图像。
-    
+    """在 Canvas 上繪製對齊點的內外圓圈標記（白色外環 + 紅色內圓 + 編號文字）。
+
     参数:
     - canvas: Tkinter Canvas 对象。
     - points: 一组点，每个点为 (x, y) 坐标。
@@ -306,6 +334,18 @@ def draw_points_on_canvas(canvas, points, radius_red=8, ring_width=2, scale_fact
 
 
 def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=8):
+    """在 NumPy 影像上繪製所有元器件標記（用於匯出影像）。
+
+    遍歷 mark_rect_A 列表，為每個元器件繪製矩形框、名稱文字、
+    三角形標記和溫度文字。使用智慧文字定位避免重疊。
+
+    Args:
+        imageA (numpy.ndarray): 輸入影像（BGR 格式，會被就地修改）
+        mark_rect_A (list[dict]): 元器件標記資料列表
+        imageScale (float): 縮放比例
+        imageIndex (int): 影像索引（0=熱力圖，1=Layout 圖）
+        size (int): 三角形標記邊長
+    """
     imgWidth = imageA.shape[1]
     textScale = imgWidth / 1024
     size = size * textScale

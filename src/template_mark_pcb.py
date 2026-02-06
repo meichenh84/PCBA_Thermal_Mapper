@@ -1,3 +1,25 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+PCB 元器件標記獨立腳本（早期版本）(template_mark_pcb.py)
+
+用途：
+    此為早期的獨立測試腳本，用於驗證 PCB 元器件自動識別演算法。
+    直接讀取熱力圖、Layout 圖和溫度矩陣，執行元器件邊界偵測，
+    並在影像上繪製標記結果。功能已整合至 recognize_image.py。
+
+    注意：此檔案為獨立執行的腳本（非模組），包含頂層執行程式碼。
+    主要保留作為演算法原型參考。
+
+在整個應用中的角色：
+    - 早期原型腳本，目前不被其他模組引用
+    - 可獨立執行用於測試和驗證演算法
+
+關聯檔案：
+    - recognize_image.py：整合後的正式版本
+    - recognize_component_boundary.py：元器件邊界識別（重構後的版本）
+"""
+
 import cv2
 import numpy as np
 import random

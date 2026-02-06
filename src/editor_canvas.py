@@ -1,7 +1,40 @@
-import tkinter as tk
-from PIL import Image, ImageTk, ImageGrab 
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+溫度編輯畫布對話框模組 (editor_canvas.py)
 
-# 导入UIStyle以保持样式统一
+用途：
+    提供「編輯溫度」的獨立彈出視窗，包含一個背景影像的 Canvas
+    和左側的元器件列表。使用者可以在 Canvas 上建立、編輯、刪除
+    矩形標記框，並在左側列表中查看和搜尋所有元器件。
+    支援視窗縮放時自動調整影像和矩形框的顯示比例。
+
+在整個應用中的角色：
+    - 被 main.py 的「編輯溫度」按鈕觸發，開啟獨立編輯視窗
+    - 內部建立 RectEditor 實例處理矩形框的互動操作
+
+關聯檔案：
+    - main.py：建立 EditorCanvas 實例
+    - editor_rect.py：提供矩形框編輯功能
+    - ui_style.py：統一的 UI 樣式常數
+    - draw_rect.py：矩形框繪製功能
+
+UI 元件對應命名：
+    - dialog (tk.Toplevel): 編輯對話框視窗
+    - canvas (tk.Canvas): 繪圖用的 Canvas 元件
+    - left_panel (tk.Frame): 左側面板（含搜尋和列表）
+    - search_entry (PlaceholderEntry): 搜尋輸入框
+    - list_frame (tk.Frame): 元器件列表容器
+    - list_canvas (tk.Canvas): 列表滾動區域的 Canvas
+    - scrollbar (tk.Scrollbar): 列表的垂直捲軸
+    - multi_select_checkbox (tk.Checkbutton): 多選開關勾選框
+    - delete_selected_btn (tk.Button): 刪除選中項目按鈕
+"""
+
+import tkinter as tk
+from PIL import Image, ImageTk, ImageGrab
+
+# 匯入 UIStyle 以保持樣式統一
 try:
     from .ui_style import UIStyle
 except ImportError:
@@ -12,8 +45,36 @@ try:
 except ImportError:
     from editor_rect import RectEditor
 
+
 class EditorCanvas:
+    """溫度編輯畫布對話框。
+
+    建立一個獨立的 Toplevel 視窗，包含背景影像的 Canvas、
+    左側元器件列表和搜尋功能。內部使用 RectEditor 處理
+    矩形框的互動操作。
+
+    屬性：
+        parent (tk.Widget): 父元件
+        mark_rect (list): 元器件標記資料列表（深拷貝）
+        temp_file_path (str): 溫度資料檔案路徑
+        on_close_callback (callable): 視窗關閉時的回呼函式
+        bg_image (PIL.Image): 背景影像
+        dialog (tk.Toplevel): 對話框視窗
+        canvas (tk.Canvas): 繪圖 Canvas
+        rect_editor (RectEditor): 矩形框編輯器實例
+        display_scale (float): 目前的顯示縮放比例
+    """
+
     def __init__(self, parent, image, mark_rect, on_close_callback=None, temp_file_path=None):
+        """初始化溫度編輯畫布對話框。
+
+        Args:
+            parent (tk.Widget): 父元件
+            image (PIL.Image): 背景影像
+            mark_rect (list): 元器件標記資料列表
+            on_close_callback (callable|None): 視窗關閉時的回呼函式
+            temp_file_path (str|None): 溫度資料檔案路徑
+        """
         super().__init__()
 
         self.on_close_callback = on_close_callback

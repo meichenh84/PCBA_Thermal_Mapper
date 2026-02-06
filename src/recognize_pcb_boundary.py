@@ -1,17 +1,44 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+PCB 邊界識別模組 (recognize_pcb_boundary.py)
+
+用途：
+    從 Layout 圖的色彩遮罩中找出 PCB 板的外輪廓邊界，
+    並將邊界座標轉換到熱力圖座標系，然後將 tempA（溫度矩陣）
+    中 PCB 邊界以外的區域歸零。這是元器件識別前的預處理步驟，
+    確保只在 PCB 板範圍內搜尋元器件。
+
+在整個應用中的角色：
+    - 被 recognize_image.py 的 process_pcb_image() 呼叫
+    - 在元器件自動識別前排除 PCB 板外的雜訊區域
+
+關聯檔案：
+    - recognize_image.py：呼叫本函式進行 PCB 邊界識別
+    - color_range.py：提供 mask_boundary 色彩遮罩
+    - point_transformer.py：B 圖座標轉換為 A 圖座標
+"""
+
 import cv2
 import numpy as np
 
+
 def recognize_pcb_boundary(mask_boundary, point_transformer, tempA):
-    """
-    处理绿色区域轮廓，生成边界掩码并应用到tempA。
+    """識別 PCB 板的外輪廓邊界，並將 tempA 中 PCB 外的區域歸零。
 
-    参数:
-        mask_boundary (ndarray): 二值化的掩码图像，其中绿色区域为1，背景为0。
-        point_transformer (object): 包含 B2A 方法的对象，用于坐标变换。
-        tempA (ndarray): 要处理的图像，将根据边界掩码进行更新。
+    流程：
+    1. 使用 OpenCV findContours 找出遮罩中的所有輪廓
+    2. 取面積最大的輪廓作為 PCB 板邊界
+    3. 取得外接矩形座標，透過 point_transformer 轉換到 A 圖座標系
+    4. 建立邊界遮罩，將 tempA 中邊界外的像素值歸零
 
-    返回:
-        tempA (ndarray): 更新后的图像。
+    Args:
+        mask_boundary (numpy.ndarray): 二值化遮罩影像（255=PCB 基板區域）
+        point_transformer (PointTransformer): B 圖 → A 圖座標轉換器
+        tempA (numpy.ndarray): 溫度矩陣（2D 陣列，會被就地修改）
+
+    Returns:
+        numpy.ndarray: 更新後的溫度矩陣 tempA
     """
     
     # 5. 找到绿色区域的轮廓

@@ -1,5 +1,47 @@
-# 从中心点向四个方向扩展以查找边界
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+元器件邊界識別模組 (recognize_component_boundary.py)
+
+用途：
+    從指定的中心點向上下左右四個方向擴展搜尋，利用 HSV 色彩遮罩
+    判斷元器件的矩形邊界範圍。根據遮罩值（0=元器件區域，255=PCB 基板區域）
+    的變化來確定元器件的左、右、上、下邊界座標。
+    支援兩種模式：元器件位於非基板區域（tag=0）和元器件位於基板區域（tag=255）。
+
+在整個應用中的角色：
+    - 被 recognize_image.py 呼叫，用於自動識別元器件的矩形邊界
+    - 識別結果用於在 Layout 圖上繪製矩形標記框
+
+關聯檔案：
+    - recognize_image.py：呼叫本函式取得元器件的邊界座標
+    - color_range.py：提供 mask_boundary 遮罩資料
+    - main.py：透過 recognize_image.py 間接使用本模組
+"""
+
+
 def recognize_component_boundary(center, mask_boundary):
+    """從中心點向四個方向擴展搜尋元器件的矩形邊界。
+
+    演算法策略（兩輪擴展）：
+    1. 第一輪：先向上下擴展確定垂直範圍，再向左右擴展確定水平範圍
+    2. 第二輪：根據第一輪的水平範圍重新向上下擴展，得到更精確的邊界
+
+    擴展時會在多個取樣點檢查遮罩值，使用投票機制決定是否繼續擴展
+    （多數取樣點仍在元器件區域內才繼續）。
+
+    Args:
+        center (tuple): 搜尋起始的中心點座標 (x, y)
+        mask_boundary (numpy.ndarray): HSV 色彩遮罩，0=元器件區域，255=PCB 基板區域
+
+    Returns:
+        tuple: (left, right, top, bottom, tag_component)
+            - left (int): 左邊界 X 座標
+            - right (int): 右邊界 X 座標
+            - top (int): 上邊界 Y 座標
+            - bottom (int): 下邊界 Y 座標
+            - tag_component (int): 中心點的遮罩值（0 或 255），指示元器件類型
+    """
     x, y = center
     left, right, top, bottom = x, x, y, y
     multiple = 1.05
