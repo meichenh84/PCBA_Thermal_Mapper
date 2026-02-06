@@ -112,6 +112,7 @@ class EditorCanvas:
         self.selected_rect_id = None  # 当前选中的矩形ID
         self.selected_rect_ids = set()  # 多选模式下选中的矩形ID集合
         self.multi_select_enabled = False  # 多选模式启用标志（默认关闭）
+        self.last_selected_index = None  # 記錄最後一次選中的項目索引（用於 Shift + 點擊範圍選擇）
 
         # 排序相关变量
         self.sort_mode = "name_asc"  # 排序模式: "name_asc"=名称升序(默认), "temp_desc"=温度降序
@@ -563,13 +564,23 @@ class EditorCanvas:
         temp_label.pack(side=tk.RIGHT, padx=4, pady=3)
         
         # 绑定点击事件
-        def on_item_click(event, rect_id=rect_id):
+        def on_item_click(event, rect_id=rect_id, index=index):
             # 阻止事件冒泡，避免点击触发滚动等副作用
             try:
                 event.widget.focus_set()
             except Exception:
                 pass
-            self.select_rect_item(rect_id, item_frame)
+
+            # 檢測是否按住 Shift 鍵（state & 0x0001 表示 Shift 鍵被按下）
+            shift_pressed = (event.state & 0x0001) != 0
+
+            if shift_pressed and self.last_selected_index is not None:
+                # Shift + 點擊：範圍選擇
+                self.select_range(self.last_selected_index, index)
+            else:
+                # 一般點擊：單選
+                self.select_rect_item(rect_id, item_frame)
+                self.last_selected_index = index
         
         # 绑定双击事件
         def on_item_double_click(event, rect_id=rect_id):
@@ -631,6 +642,67 @@ class EditorCanvas:
         # 确保选中项滚动到可见区域
         # 不自动滚动到顶部，保持当前滚动位置，避免跳动
 
+    def select_range(self, start_index, end_index):
+        """Shift + 點擊：選擇範圍內的所有項目（包含頭尾）"""
+        print(f"📋 範圍選擇: 從索引 {start_index} 到 {end_index}")
+
+        # 確保索引順序正確（小 -> 大）
+        if start_index > end_index:
+            start_index, end_index = end_index, start_index
+
+        # 清除之前的選擇
+        self.clear_all_selections()
+
+        # 選擇範圍內的所有項目
+        selected_rect_ids = []
+        for i in range(start_index, end_index + 1):
+            if i < len(self.rect_list_items):
+                list_item = self.rect_list_items[i]
+                rect_id = list_item['rect_id']
+                selected_rect_ids.append(rect_id)
+
+        # 高亮所有選中的項目
+        self.select_multiple_rect_items(selected_rect_ids)
+
+        # 更新最後選中的索引
+        self.last_selected_index = end_index
+
+    def select_multiple_rect_items(self, rect_ids):
+        """選中多個列表項並高亮對應的矩形框"""
+        print(f"🔍 多選模式：選中 {len(rect_ids)} 個項目")
+
+        # 清除之前的選擇
+        self.clear_list_selections()
+
+        # 更新選中的 ID 集合
+        self.selected_rect_ids = set(rect_ids)
+
+        # 從配置中讀取選中顏色
+        from config import GlobalConfig
+        config = GlobalConfig()
+        selected_color = config.get("heat_selected_color", "#4A90E2")
+
+        # 高亮所有選中的列表項
+        for list_item in self.rect_list_items:
+            if list_item['rect_id'] in rect_ids:
+                frame = list_item['frame']
+                frame.config(bg=selected_color)
+
+                for child in frame.winfo_children():
+                    if isinstance(child, (tk.Label, tk.Entry)):
+                        child.config(bg=selected_color, fg='white')
+                    elif isinstance(child, tk.Button):
+                        child.config(bg=selected_color, fg='white', activebackground=selected_color, activeforeground='white')
+
+        # 高亮 canvas 中的所有矩形框
+        self.highlight_multiple_rects_in_canvas(rect_ids)
+
+        # 更新刪除按鈕狀態
+        self.update_delete_button_state()
+
+        # 確保焦點回到對話框
+        self.dialog.focus_set()
+
     def clear_list_selections(self):
         """只清除列表项的选中状态"""
         for list_item in self.rect_list_items:
@@ -666,6 +738,7 @@ class EditorCanvas:
         
         # 清除选中状态并更新删除按钮
         self.selected_rect_id = None
+        self.last_selected_index = None  # 重置最後選中的索引
         self.update_delete_button_state()
 
     def set_all_rects_unselected(self):
@@ -754,6 +827,30 @@ class EditorCanvas:
             # 将矩形框移到最前面
             self.canvas.tag_raise(rect_id)
             print(f"✓ 已为矩形 {rect_id} 创建锚点并设置选中颜色边框")
+
+    def highlight_multiple_rects_in_canvas(self, rect_ids):
+        """在 canvas 中高亮多個矩形框（Shift + 點擊批量選擇）"""
+        if not hasattr(self, 'editor_rect') or not self.editor_rect:
+            return
+
+        # 先將所有矩形設置為未選中狀態
+        self.set_all_rects_unselected()
+
+        # 清除所有錨點（多選模式不顯示錨點）
+        self.editor_rect.delete_anchors()
+
+        # 從配置中讀取選中顏色
+        from config import GlobalConfig
+        config = GlobalConfig()
+        selected_color = config.get("heat_selected_color", "#4A90E2")
+
+        # 高亮所有選中的矩形框
+        for rect_id in rect_ids:
+            self.canvas.itemconfig(rect_id, outline=selected_color, width=2)
+            # 將矩形框移到最前面
+            self.canvas.tag_raise(rect_id)
+
+        print(f"✓ 已高亮 {len(rect_ids)} 個矩形框")
 
     def update_selected_item(self, rect_id):
         """只更新选中的列表项，不刷新整个列表"""
