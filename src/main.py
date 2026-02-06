@@ -2603,7 +2603,25 @@ class ResizableImagesApp:
         # 使用单例模式，只创建一个SettingDialog实例
         if self.setting_dialog is None:
             self.setting_dialog = SettingDialog(self.root, self.settings_button, None)
+            # 将 update_content 方法附加到 root 上，以便 SettingDialog 可以调用
+            self.root.update_content = self.update_content
         self.setting_dialog.open()
+
+    def update_content(self):
+        """設定對話框確認後的回調函數。
+
+        當使用者在設定對話框中修改字體大小或顏色後，
+        此方法會被調用以立即更新 canvasA 和 canvasB 上的顯示。
+        """
+        print("update_content 被調用 - 重新繪製 canvas")
+
+        # 如果有溫度標記數據，重新繪製 canvas
+        if hasattr(self, 'mark_rect_A') and len(self.mark_rect_A) > 0:
+            print(f"重新繪製 {len(self.mark_rect_A)} 個溫度標記")
+            self.update_images()
+        else:
+            print("沒有溫度標記數據，跳過重新繪製")
+
     def load_local_image(self, index):
         img_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg;*.png;*.jpeg")])
         if not img_path:

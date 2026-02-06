@@ -49,7 +49,7 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
     imgWidth = imageA.shape[1]
     textScale = imgWidth / 1024
     size = size * textScale
-    
+
     # 从配置中读取颜色
     config = GlobalConfig()
     if imageIndex == 0:
@@ -57,21 +57,21 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
         rect_color_hex = config.get("heat_rect_color", "#BCBCBC")
         name_color_hex = config.get("heat_name_color", "#FFFFFF")
         temp_color_hex = config.get("heat_temp_color", "#FF0000")
-        name_font_size = config.get("heat_name_font_size", 12)
-        temp_font_size = config.get("heat_temp_font_size", 10)
     else:
         # Layout图标记
         rect_color_hex = config.get("layout_rect_color", "#BCBCBC")
         name_color_hex = config.get("layout_name_color", "#FFFFFF")
         temp_color_hex = config.get("layout_temp_color", "#FF0000")
-        name_font_size = config.get("layout_name_font_size", 12)
-        temp_font_size = config.get("layout_temp_font_size", 10)
-    
+
+    # 两个canvas统一使用热力图的字体大小配置，确保文字大小完全一致
+    name_font_size = config.get("heat_name_font_size", 12)
+    temp_font_size = config.get("heat_temp_font_size", 10)
+
     # 转换十六进制颜色为RGB元组
     def hex_to_rgb(hex_color):
         hex_color = hex_color.lstrip('#')
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-    
+
     rectColor = hex_to_rgb(rect_color_hex)
     textColor = hex_to_rgb(name_color_hex)
     tempColor = hex_to_rgb(temp_color_hex)
@@ -186,15 +186,15 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
         rectColor = config.get("heat_rect_color", "#BCBCBC")
         textColor = config.get("heat_name_color", "#FFFFFF")
         tempColor = config.get("heat_temp_color", "#FF0000")
-        name_font_size = config.get("heat_name_font_size", 12)
-        temp_font_size = config.get("heat_temp_font_size", 10)
     else:
         # Layout图标记
         rectColor = config.get("layout_rect_color", "#BCBCBC")
         textColor = config.get("layout_name_color", "#FFFFFF")
         tempColor = config.get("layout_temp_color", "#FF0000")
-        name_font_size = config.get("layout_name_font_size", 12)
-        temp_font_size = config.get("layout_temp_font_size", 10)
+
+    # 两个canvas统一使用热力图的字体大小配置，确保文字大小完全一致
+    name_font_size = config.get("heat_name_font_size", 12)
+    temp_font_size = config.get("heat_temp_font_size", 10)
     
     shadowColor = "#000000"  # 黑色
 
@@ -357,21 +357,21 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
         rect_color_hex = config.get("heat_rect_color", "#BCBCBC")
         name_color_hex = config.get("heat_name_color", "#FFFFFF")
         temp_color_hex = config.get("heat_temp_color", "#FF0000")
-        name_font_size = config.get("heat_name_font_size", 12)
-        temp_font_size = config.get("heat_temp_font_size", 10)
     else:
         # Layout图标记
         rect_color_hex = config.get("layout_rect_color", "#BCBCBC")
         name_color_hex = config.get("layout_name_color", "#FFFFFF")
         temp_color_hex = config.get("layout_temp_color", "#FF0000")
-        name_font_size = config.get("layout_name_font_size", 12)
-        temp_font_size = config.get("layout_temp_font_size", 10)
-    
+
+    # 两个canvas统一使用热力图的字体大小配置，确保文字大小完全一致
+    name_font_size = config.get("heat_name_font_size", 12)
+    temp_font_size = config.get("heat_temp_font_size", 10)
+
     # 转换十六进制颜色为RGB元组
     def hex_to_rgb(hex_color):
         hex_color = hex_color.lstrip('#')
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-    
+
     rectColor = hex_to_rgb(rect_color_hex)
     textColor = hex_to_rgb(name_color_hex)
     tempColor = hex_to_rgb(temp_color_hex)
