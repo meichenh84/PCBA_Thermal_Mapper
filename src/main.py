@@ -2373,9 +2373,9 @@ class ResizableImagesApp:
         # 清空EditorCanvas实例引用
         self.editor_canvas = None
     def on_template_confirm(self, dialog_result):
-        min_temp, max_temp, min_width, min_height, max_ratio, auto_reduce, color = dialog_result.get("min_temp"), dialog_result.get("max_temp"), dialog_result.get("min_width"), \
-            dialog_result.get("min_height"), dialog_result.get("max_ratio"), dialog_result.get("auto_reduce"), dialog_result.get("color"), 
-        
+        min_temp, max_temp = dialog_result.get("min_temp"), dialog_result.get("max_temp")
+        # min_width 和 min_height 已移除（未實際使用）
+
         # 获取新的PCB参数
         p_w = dialog_result.get("p_w", 237)
         p_h = dialog_result.get("p_h", 194)

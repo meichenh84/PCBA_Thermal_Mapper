@@ -7,7 +7,6 @@
     提供「溫度過濾」對話框，讓使用者設定元器件自動識別的參數，包括：
     - 溫度過濾範圍（最低/最高溫度閾值）
     - PCB 參數（長度、寬度、座標原點位置）
-    - 元器件最小尺寸（寬度、高度）
     設定完成後透過 callback 傳遞參數，並儲存至溫度配置檔。
 
 在整個應用中的角色：
@@ -27,8 +26,6 @@ UI 元件對應命名：
     - p_w_entry (ttk.Entry): PCB 長度（mm）輸入框
     - p_h_entry (ttk.Entry): PCB 寬度（mm）輸入框
     - p_origin_var (tk.StringVar): 座標原點下拉選單變數
-    - min_width_entry (ttk.Entry): 元器件最小寬度輸入框
-    - min_height_entry (ttk.Entry): 元器件最小高度輸入框
     - confirm_button (tk.Button): 「確認」按鈕
 """
 
@@ -85,7 +82,7 @@ class TemplateDialog:
             self.temp_config = type('TempConfig', (), {
                 'get_all_parameters': lambda: {
                     "min_temp": 50.0, "max_temp": 80.0, "color": "绿色",
-                    "min_width": 10.0, "min_height": 10.0, "max_ratio": 10.0, "auto_reduce": 1.0,
+                    "max_ratio": 10.0, "auto_reduce": 1.0,
                     "p_w": 237.0, "p_h": 194.0, "p_origin": "左下",
                     "p_origin_offset_x": 0.0, "p_origin_offset_y": 0.0,
                     "c_padding_left": 0.0, "c_padding_top": 0.0, "c_padding_right": 0.0, "c_padding_bottom": 0.0
@@ -139,8 +136,6 @@ class TemplateDialog:
                 "min_temp": 50.0,
                 "max_temp": 80.0,
                 "color": "绿色",
-                "min_width": 10.0,
-                "min_height": 10.0,
                 "max_ratio": 10.0,
                 "auto_reduce": 1.0,
                 "p_w": 237.0,
@@ -156,9 +151,7 @@ class TemplateDialog:
         
         min_temp_var = params["min_temp"]
         max_temp_var = params["max_temp"]
-        min_width_var = params["min_width"]
-        min_height_var = params["min_height"]
-        
+
         # PCB参数设置
         p_w_var = str(params["p_w"])
         p_h_var = str(params["p_h"])
@@ -218,19 +211,8 @@ class TemplateDialog:
         
         # 移除原点偏移和Padding参数，使用默认值0
         
-        # 元器件最小尺寸
-        size_frame2 = ttk.Frame(main_frame)
-        size_frame2.pack(fill=tk.X, padx=5, pady=2)
-        
-        ttk.Label(size_frame2, text="最小尺寸 宽:").pack(side=tk.LEFT, padx=5)
-        self.min_width_entry = ttk.Entry(size_frame2, width=10)
-        self.min_width_entry.insert(0, str(min_width_var))
-        self.min_width_entry.pack(side=tk.LEFT, padx=5)
-        ttk.Label(size_frame2, text="高:").pack(side=tk.LEFT, padx=5)
-        self.min_height_entry = ttk.Entry(size_frame2, width=10)
-        self.min_height_entry.insert(0, str(min_height_var))
-        self.min_height_entry.pack(side=tk.LEFT, padx=5)
-        
+        # 移除元器件最小尺寸設定（該參數未實際使用）
+
         # 隐藏检查边缘比例
         # auto_frame = ttk.Frame(main_frame)
         # auto_frame.pack(fill=tk.X, padx=5, pady=2)
@@ -276,8 +258,7 @@ class TemplateDialog:
             "min_temp": float(self.min_temp_entry.get()),
             "max_temp": float(self.max_temp_entry.get()),
             "color": "绿色",  # 默认值
-            "min_width": float(self.min_width_entry.get()),
-            "min_height": float(self.min_height_entry.get()),
+            # min_width 和 min_height 已移除（未實際使用）
             "max_ratio": 10.0,  # 默认值
             "auto_reduce": 1.0,  # 默认值
             # PCB参数
