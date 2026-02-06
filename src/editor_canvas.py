@@ -45,6 +45,11 @@ try:
 except ImportError:
     from editor_rect import RectEditor
 
+try:
+    from .tooltip import Tooltip
+except ImportError:
+    from tooltip import Tooltip
+
 
 class EditorCanvas:
     """溫度編輯畫布對話框。
@@ -259,6 +264,26 @@ class EditorCanvas:
         # 标题（动态显示数量）
         self.title_label = tk.Label(title_row, text="元器件列表(0)", font=UIStyle.TITLE_FONT, bg=UIStyle.VERY_LIGHT_BLUE, fg=UIStyle.BLACK)
         self.title_label.pack(side="left")
+
+        # 提示圖示（驚嘆號）
+        help_icon = tk.Label(
+            title_row,
+            text="ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
+        )
+        help_icon.pack(side="left", padx=(5, 0))
+
+        # 為提示圖示添加 tooltip
+        Tooltip(
+            help_icon,
+            "多選操作說明：\n"
+            "• 單擊：選擇單一項目\n"
+            "• Shift + 點擊：選擇連續範圍\n"
+            "• Ctrl + 點擊：跳選個別項目"
+        )
 
         # 搜索框容器
         search_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
@@ -571,12 +596,18 @@ class EditorCanvas:
             except Exception:
                 pass
 
-            # 檢測是否按住 Shift 鍵（state & 0x0001 表示 Shift 鍵被按下）
+            # 檢測是否按住修飾鍵
+            # state & 0x0001 表示 Shift 鍵被按下
+            # state & 0x0004 表示 Ctrl 鍵被按下
             shift_pressed = (event.state & 0x0001) != 0
+            ctrl_pressed = (event.state & 0x0004) != 0
 
             if shift_pressed and self.last_selected_index is not None:
                 # Shift + 點擊：範圍選擇
                 self.select_range(self.last_selected_index, index)
+            elif ctrl_pressed:
+                # Ctrl + 點擊：跳選（toggle 選中狀態）
+                self.toggle_select_item(rect_id, index)
             else:
                 # 一般點擊：單選
                 self.select_rect_item(rect_id, item_frame)
@@ -666,6 +697,65 @@ class EditorCanvas:
 
         # 更新最後選中的索引
         self.last_selected_index = end_index
+
+    def toggle_select_item(self, rect_id, index):
+        """Ctrl + 點擊：跳選（toggle 該項目的選中狀態）"""
+        print(f"🔘 跳選: rect_id={rect_id}, index={index}")
+
+        # 從配置中讀取選中顏色
+        from config import GlobalConfig
+        config = GlobalConfig()
+        selected_color = config.get("heat_selected_color", "#4A90E2")
+
+        # 檢查該項目是否已選中
+        if rect_id in self.selected_rect_ids:
+            # 已選中 -> 取消選中
+            self.selected_rect_ids.remove(rect_id)
+            print(f"  ➖ 取消選中 {rect_id}")
+        else:
+            # 未選中 -> 添加選中
+            self.selected_rect_ids.add(rect_id)
+            print(f"  ➕ 添加選中 {rect_id}")
+
+        # 更新最後選中的索引
+        self.last_selected_index = index
+
+        # 更新列表項的視覺效果
+        for list_item in self.rect_list_items:
+            frame = list_item['frame']
+            item_rect_id = list_item['rect_id']
+
+            if item_rect_id in self.selected_rect_ids:
+                # 選中狀態：藍色背景
+                frame.config(bg=selected_color)
+                for child in frame.winfo_children():
+                    if isinstance(child, (tk.Label, tk.Entry)):
+                        child.config(bg=selected_color, fg='white')
+                    elif isinstance(child, tk.Button):
+                        child.config(bg=selected_color, fg='white', activebackground=selected_color, activeforeground='white')
+            else:
+                # 未選中狀態：白色背景
+                frame.config(bg='white')
+                for child in frame.winfo_children():
+                    if isinstance(child, (tk.Label, tk.Entry)):
+                        child.config(bg='white', fg='black')
+                    elif isinstance(child, tk.Button):
+                        child.config(bg='#f0f0f0', fg='black', activebackground='#e0e0e0', activeforeground='black')
+
+        # 更新 canvas 上的高亮效果
+        if len(self.selected_rect_ids) > 0:
+            self.highlight_multiple_rects_in_canvas(list(self.selected_rect_ids))
+        else:
+            # 如果沒有選中任何項目，清除所有高亮
+            self.set_all_rects_unselected()
+            if hasattr(self, 'editor_rect') and self.editor_rect:
+                self.editor_rect.delete_anchors()
+
+        # 更新刪除按鈕狀態
+        self.update_delete_button_state()
+
+        # 確保焦點回到對話框
+        self.dialog.focus_set()
 
     def select_multiple_rect_items(self, rect_ids):
         """選中多個列表項並高亮對應的矩形框"""
@@ -1550,32 +1640,32 @@ class EditorCanvas:
             self.name_header_btn.config(text="名稱", fg=UIStyle.BLACK, font=("Arial", 10))
             self.temp_header_btn.config(text="溫度", fg=UIStyle.BLACK, font=("Arial", 10))
 
-    def sort_by_temperature(self):
-        """按温度降序排序列表（保留此方法以兼容舊代碼）"""
-        self.sort_mode = "temp_desc"
-        self.apply_sort()
-        self.update_sort_indicators()
+    # def sort_by_temperature(self):
+    #     """按温度降序排序列表（保留此方法以兼容舊代碼）"""
+    #     self.sort_mode = "temp_desc"
+    #     self.apply_sort()
+    #     self.update_sort_indicators()
         
-        # 恢复选中状态
-        if current_selected:
-            self.selected_rect_id = current_selected
-            # 从配置中读取选中颜色
-            from config import GlobalConfig
-            config = GlobalConfig()
-            selected_color = config.get("heat_selected_color", "#4A90E2")
+    #     # 恢复选中状态
+    #     if current_selected:
+    #         self.selected_rect_id = current_selected
+    #         # 从配置中读取选中颜色
+    #         from config import GlobalConfig
+    #         config = GlobalConfig()
+    #         selected_color = config.get("heat_selected_color", "#4A90E2")
             
-            # 重新高亮选中的项
-            for list_item in self.rect_list_items:
-                if list_item.get('rect_id') == current_selected:
-                    list_item['frame'].config(bg=selected_color)
-                    for child in list_item['frame'].winfo_children():
-                        if isinstance(child, (tk.Label, tk.Entry)):
-                            child.config(bg=selected_color, fg='white')
-                    break
+    #         # 重新高亮选中的项
+    #         for list_item in self.rect_list_items:
+    #             if list_item.get('rect_id') == current_selected:
+    #                 list_item['frame'].config(bg=selected_color)
+    #                 for child in list_item['frame'].winfo_children():
+    #                     if isinstance(child, (tk.Label, tk.Entry)):
+    #                         child.config(bg=selected_color, fg='white')
+    #                 break
         
-        # 显示排序结果
-        temp_list = [f"{r.get('name', 'Unknown')}({get_temperature(r):.1f}°C)" for r in sorted_rectangles[:3]]
-        print(f"✓ 列表已按温度降序排序: {temp_list}")
+    #     # 显示排序结果
+    #     temp_list = [f"{r.get('name', 'Unknown')}({get_temperature(r):.1f}°C)" for r in sorted_rectangles[:3]]
+    #     print(f"✓ 列表已按温度降序排序: {temp_list}")
     
     def sort_rectangles_by_name_before_close(self):
         """关闭前按器件名称排序矩形框（字母优先、自然排序、不区分大小写）"""
