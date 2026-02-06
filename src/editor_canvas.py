@@ -120,7 +120,11 @@ class EditorCanvas:
         self.last_selected_index = None  # 記錄最後一次選中的項目索引（用於 Shift + 點擊範圍選擇）
 
         # 排序相关变量
-        self.sort_mode = "name_asc"  # 排序模式: "name_asc"=名称升序(默认), "temp_desc"=温度降序
+        self.sort_mode = "name_asc"  # 排序模式: "name_asc"=名称升序(默认), "temp_desc"=温度降序, "desc_asc"=描述升序
+
+        # 篩選相關變量
+        self.all_rectangles = []  # 保存所有矩形框（未經篩選）
+        self.filtered_rectangles = []  # 保存篩選後的矩形框
 
         # 先设置dialog属性
         self.dialog = dialog
@@ -253,8 +257,9 @@ class EditorCanvas:
         # 配置左侧面板的grid属性
         left_panel.grid_rowconfigure(0, weight=0)  # 标题行，固定高度
         left_panel.grid_rowconfigure(1, weight=0)  # 搜索框行，固定高度
-        left_panel.grid_rowconfigure(2, weight=0)  # 标题欄位行，固定高度
-        left_panel.grid_rowconfigure(3, weight=1)  # 滚动区域，自适应高度
+        left_panel.grid_rowconfigure(2, weight=0)  # 篩選條件行，固定高度
+        left_panel.grid_rowconfigure(3, weight=0)  # 标题欄位行，固定高度
+        left_panel.grid_rowconfigure(4, weight=1)  # 滚动区域，自适应高度
         left_panel.grid_columnconfigure(0, weight=1)  # 单列，占满宽度
 
         # 标题行
@@ -322,9 +327,49 @@ class EditorCanvas:
         # 绑定搜索事件
         self.search_entry.bind('<KeyRelease>', self.on_search_changed)
 
+        # 篩選條件輸入框框架（在表頭上方）
+        filter_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
+        filter_frame.grid(row=2, column=0, sticky="ew", pady=(0, 5))
+
+        # 名稱篩選輸入框
+        self.filter_name_entry = tk.Entry(
+            filter_frame,
+            font=("Arial", 9),
+            width=10,
+            bg=UIStyle.WHITE,
+            relief="solid",
+            bd=1
+        )
+        self.filter_name_entry.pack(side=tk.LEFT, padx=4, pady=3)
+        self.filter_name_entry.bind('<KeyRelease>', self.on_filter_changed)
+
+        # 描述篩選輸入框
+        self.filter_desc_entry = tk.Entry(
+            filter_frame,
+            font=("Arial", 9),
+            width=20,
+            bg=UIStyle.WHITE,
+            relief="solid",
+            bd=1
+        )
+        self.filter_desc_entry.pack(side=tk.LEFT, padx=4, pady=3)
+        self.filter_desc_entry.bind('<KeyRelease>', self.on_filter_changed)
+
+        # 溫度篩選輸入框
+        self.filter_temp_entry = tk.Entry(
+            filter_frame,
+            font=("Arial", 9),
+            width=8,
+            bg=UIStyle.WHITE,
+            relief="solid",
+            bd=1
+        )
+        self.filter_temp_entry.pack(side=tk.RIGHT, padx=4, pady=3)
+        self.filter_temp_entry.bind('<KeyRelease>', self.on_filter_changed)
+
         # 欄位標頭（名稱和溫度，可點擊排序）
         header_frame = tk.Frame(left_panel, bg=UIStyle.LIGHT_GRAY, relief="solid", bd=1)
-        header_frame.grid(row=2, column=0, sticky="ew", pady=(0, 5))
+        header_frame.grid(row=3, column=0, sticky="ew", pady=(0, 5))
 
         # 名称欄位標頭（可點擊）- 使用 pack 佈局與列表項對齊
         self.name_header_btn = tk.Button(
@@ -373,7 +418,7 @@ class EditorCanvas:
 
         # 创建滚动框架
         scroll_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
-        scroll_frame.grid(row=3, column=0, sticky="nsew")
+        scroll_frame.grid(row=4, column=0, sticky="nsew")
 
         # 创建Canvas和滚动条 - 使用明显的颜色标记滚动条
         self.list_canvas = tk.Canvas(scroll_frame, bg='white', highlightthickness=0)
@@ -530,14 +575,26 @@ class EditorCanvas:
 
     def update_rect_list(self):
         """更新矩形框列表"""
-        # 清除现有列表项
+        # 清除现有列表項
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
         self.rect_list_items.clear()
 
-        # 获取当前所有矩形框
+        # 檢查是否有篩選條件
+        has_filter = False
+        if hasattr(self, 'filter_name_entry') and hasattr(self, 'filter_desc_entry') and hasattr(self, 'filter_temp_entry'):
+            name_filter = self.filter_name_entry.get().strip()
+            desc_filter = self.filter_desc_entry.get().strip()
+            temp_filter = self.filter_temp_entry.get().strip()
+            has_filter = bool(name_filter or desc_filter or temp_filter)
+
+        # 獲取要顯示的矩形框列表
         rectangles = []
-        if hasattr(self, 'editor_rect') and self.editor_rect:
+        if has_filter and hasattr(self, 'filtered_rectangles') and self.filtered_rectangles is not None:
+            # 如果有篩選條件，使用篩選後的列表
+            rectangles = self.filtered_rectangles
+        elif hasattr(self, 'editor_rect') and self.editor_rect:
+            # 否則使用完整列表
             rectangles = self.editor_rect.rectangles
         elif hasattr(self, 'mark_rect') and self.mark_rect:
             # 如果editor_rect还没有初始化，使用mark_rect数据
@@ -1633,32 +1690,44 @@ class EditorCanvas:
             print("⚠️ 没有矩形框数据，无法排序")
             return
 
-        # 根據排序模式排序
+        # 定義排序函數
         if self.sort_mode == "name_asc":
             # 按名稱升序排序（A~Z）
-            def get_name(rect):
+            def sort_key(rect):
                 return rect.get('name', '').upper()  # 轉大寫以忽略大小寫
-            sorted_rectangles = sorted(rectangles, key=get_name)
+            reverse = False
         elif self.sort_mode == "desc_asc":
             # 按描述升序排序（A~Z）
-            def get_description(rect):
+            def sort_key(rect):
                 return rect.get('description', '').upper()  # 轉大寫以忽略大小寫
-            sorted_rectangles = sorted(rectangles, key=get_description)
+            reverse = False
         elif self.sort_mode == "temp_desc":
             # 按溫度降序排序（大到小）
-            def get_temperature(rect):
+            def sort_key(rect):
                 if 'max_temp' in rect:
                     return rect['max_temp']
                 elif 'temp' in rect:
                     return rect['temp']
                 else:
                     return 0.0
-            sorted_rectangles = sorted(rectangles, key=get_temperature, reverse=True)
+            reverse = True
+        else:
+            sort_key = None
+            reverse = False
+
+        # 對完整列表排序
+        if sort_key:
+            sorted_rectangles = sorted(rectangles, key=sort_key, reverse=reverse)
         else:
             sorted_rectangles = rectangles
 
         # 更新EditorRect中的矩形框順序
         self.editor_rect.rectangles = sorted_rectangles
+
+        # 如果有篩選後的列表，也需要排序
+        if hasattr(self, 'filtered_rectangles') and self.filtered_rectangles is not None and len(self.filtered_rectangles) > 0:
+            if sort_key:
+                self.filtered_rectangles = sorted(self.filtered_rectangles, key=sort_key, reverse=reverse)
 
         # 重新更新列表
         self.update_rect_list()
@@ -1791,11 +1860,75 @@ class EditorCanvas:
                 # 选中≤1个矩形框，按钮灰色不可用
                 self.merge_button.config(state='disabled', bg=UIStyle.GRAY, fg=UIStyle.DARK_GRAY)
 
+    def on_filter_changed(self, event=None):
+        """篩選條件變化時的回調"""
+        # 應用篩選並重新顯示列表
+        self.apply_filters()
+        self.update_rect_list()
+
+    def apply_filters(self):
+        """根據三個篩選條件過濾矩形框列表"""
+        # 獲取所有矩形框（未經篩選）
+        if hasattr(self, 'editor_rect') and self.editor_rect:
+            all_rects = self.editor_rect.rectangles
+        elif hasattr(self, 'mark_rect') and self.mark_rect:
+            all_rects = self.mark_rect
+        else:
+            all_rects = []
+
+        # 保存完整列表
+        self.all_rectangles = all_rects
+
+        # 獲取三個篩選條件的值
+        name_filter = self.filter_name_entry.get().strip().upper() if hasattr(self, 'filter_name_entry') else ""
+        desc_filter = self.filter_desc_entry.get().strip().upper() if hasattr(self, 'filter_desc_entry') else ""
+        temp_filter = self.filter_temp_entry.get().strip() if hasattr(self, 'filter_temp_entry') else ""
+
+        # 如果所有篩選條件都為空，返回完整列表
+        if not name_filter and not desc_filter and not temp_filter:
+            self.filtered_rectangles = all_rects
+            return
+
+        # 根據篩選條件過濾列表
+        filtered = []
+        for rect in all_rects:
+            # 檢查名稱篩選
+            if name_filter:
+                rect_name = rect.get('name', '').upper()
+                if name_filter not in rect_name:
+                    continue  # 不符合名稱條件，跳過
+
+            # 檢查描述篩選
+            if desc_filter:
+                rect_desc = rect.get('description', '').upper()
+                if desc_filter not in rect_desc:
+                    continue  # 不符合描述條件，跳過
+
+            # 檢查溫度篩選
+            if temp_filter:
+                try:
+                    # 嘗試將溫度篩選條件轉換為數字
+                    temp_value = float(temp_filter)
+                    rect_temp = rect.get('max_temp', 0)
+                    # 支持範圍搜索：如果輸入的是數字，則匹配大於等於該值的溫度
+                    if rect_temp < temp_value:
+                        continue  # 不符合溫度條件，跳過
+                except ValueError:
+                    # 如果無法轉換為數字，則作為字符串匹配
+                    rect_temp_str = f"{rect.get('max_temp', 0):.1f}"
+                    if temp_filter not in rect_temp_str:
+                        continue  # 不符合溫度條件，跳過
+
+            # 通過所有篩選條件，加入結果列表
+            filtered.append(rect)
+
+        self.filtered_rectangles = filtered
+
     def on_search_changed(self, event=None):
         """搜索框内容变化时的回调"""
         if not hasattr(self, 'search_entry'):
             return
-        
+
         search_text = self.search_entry.get().strip().lower()
         self.filter_rect_list(search_text)
     
