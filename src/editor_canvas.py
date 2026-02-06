@@ -113,6 +113,9 @@ class EditorCanvas:
         self.selected_rect_ids = set()  # 多选模式下选中的矩形ID集合
         self.multi_select_enabled = False  # 多选模式启用标志（默认关闭）
 
+        # 排序相关变量
+        self.sort_mode = "name_asc"  # 排序模式: "name_asc"=名称升序(默认), "temp_desc"=温度降序
+
         # 先设置dialog属性
         self.dialog = dialog
 
@@ -229,8 +232,10 @@ class EditorCanvas:
         # 同步多选模式状态到 editor_rect
         if hasattr(self, 'editor_rect') and self.editor_rect:
             self.editor_rect.multi_select_enabled = self.multi_select_enabled
-        # 最后更新列表
-        self.update_rect_list()
+        # 應用預設排序（名稱 A~Z）
+        self.apply_sort()
+        # 最后更新列表（apply_sort 內部已經調用了 update_rect_list，這裡可以移除）
+        # self.update_rect_list()
 
     def create_rect_list_panel(self, parent):
         """创建左侧矩形框列表面板"""
@@ -242,33 +247,17 @@ class EditorCanvas:
         # 配置左侧面板的grid属性
         left_panel.grid_rowconfigure(0, weight=0)  # 标题行，固定高度
         left_panel.grid_rowconfigure(1, weight=0)  # 搜索框行，固定高度
-        left_panel.grid_rowconfigure(2, weight=1)  # 滚动区域，自适应高度
+        left_panel.grid_rowconfigure(2, weight=0)  # 标题欄位行，固定高度
+        left_panel.grid_rowconfigure(3, weight=1)  # 滚动区域，自适应高度
         left_panel.grid_columnconfigure(0, weight=1)  # 单列，占满宽度
 
-        # 标题行容器
-        title_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
-        title_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        title_frame.grid_columnconfigure(0, weight=1)  # 标题占满剩余空间
-        title_frame.grid_columnconfigure(1, weight=0)  # 排序按钮固定宽度
-        
+        # 标题行
+        title_row = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
+        title_row.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+
         # 标题（动态显示数量）
-        self.title_label = tk.Label(title_frame, text="元器件列表(0)", font=UIStyle.TITLE_FONT, bg=UIStyle.VERY_LIGHT_BLUE, fg=UIStyle.BLACK)
-        self.title_label.grid(row=0, column=0, sticky="ew")
-        
-        # 排序按钮
-        self.sort_button = tk.Button(
-            title_frame,
-            text="↓",
-            font=UIStyle.BUTTON_FONT,
-            width=2,
-            height=1,
-            bg=UIStyle.VERY_LIGHT_BLUE,
-            fg=UIStyle.BLACK,
-            relief='flat',
-            bd=0,
-            command=self.sort_by_temperature
-        )
-        self.sort_button.grid(row=0, column=1, sticky="e", padx=(5, 0))
+        self.title_label = tk.Label(title_row, text="元器件列表(0)", font=UIStyle.TITLE_FONT, bg=UIStyle.VERY_LIGHT_BLUE, fg=UIStyle.BLACK)
+        self.title_label.pack(side="left")
 
         # 搜索框容器
         search_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
@@ -303,13 +292,47 @@ class EditorCanvas:
             command=self.clear_search
         )
         clear_button.grid(row=0, column=2, sticky="e")
-        
+
         # 绑定搜索事件
         self.search_entry.bind('<KeyRelease>', self.on_search_changed)
-        
+
+        # 欄位標頭（名稱和溫度，可點擊排序）
+        header_frame = tk.Frame(left_panel, bg=UIStyle.LIGHT_GRAY, relief="solid", bd=1)
+        header_frame.grid(row=2, column=0, sticky="ew", pady=(0, 5))
+
+        # 名称欄位標頭（可點擊）- 使用 pack 佈局與列表項對齊
+        self.name_header_btn = tk.Button(
+            header_frame,
+            text="名稱 ▼",
+            font=("Arial", 10, "bold"),
+            bg=UIStyle.LIGHT_GRAY,
+            fg=UIStyle.PRIMARY_BLUE,
+            relief="flat",
+            bd=0,
+            anchor="w",
+            width=10,
+            command=self.toggle_sort_by_name
+        )
+        self.name_header_btn.pack(side=tk.LEFT, padx=4, pady=3)
+
+        # 溫度欄位標頭（可點擊）- 使用 pack 佈局與列表項對齊
+        self.temp_header_btn = tk.Button(
+            header_frame,
+            text="溫度",
+            font=("Arial", 10),
+            bg=UIStyle.LIGHT_GRAY,
+            fg=UIStyle.BLACK,
+            relief="flat",
+            bd=0,
+            anchor="w",
+            width=8,
+            command=self.toggle_sort_by_temp
+        )
+        self.temp_header_btn.pack(side=tk.RIGHT, padx=4, pady=3)
+
         # 创建滚动框架
         scroll_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
-        scroll_frame.grid(row=2, column=0, sticky="nsew")
+        scroll_frame.grid(row=3, column=0, sticky="nsew")
 
         # 创建Canvas和滚动条 - 使用明显的颜色标记滚动条
         self.list_canvas = tk.Canvas(scroll_frame, bg='white', highlightthickness=0)
@@ -387,8 +410,9 @@ class EditorCanvas:
         self.list_canvas.bind("<Button-1>", self.on_canvas_click)
 
         # 移除名称推荐下拉框
-        
-        # 初始化列表
+
+        # 初始化列表（應用預設排序：名稱 A~Z）
+        # 注意：update_rect_list() 會自動調用 update_sort_indicators()
         self.update_rect_list()
 
     def _on_mousewheel(self, event):
@@ -514,6 +538,9 @@ class EditorCanvas:
         if hasattr(self, 'search_entry'):
             search_text = self.search_entry.get().strip().lower()
             self.filter_rect_list(search_text)
+
+        # 更新排序指示符號
+        self.update_sort_indicators()
 
     def create_list_item(self, rect, index):
         """创建单个列表项"""
@@ -1351,37 +1378,86 @@ class EditorCanvas:
             count = len(self.rect_list_items)
             self.title_label.config(text=f"元器件列表({count})")
     
-    def sort_by_temperature(self):
-        """按温度降序排序列表"""
+    def toggle_sort_by_name(self):
+        """切換按名稱排序"""
+        if self.sort_mode == "name_asc":
+            # 已經是名稱升序，不需要切換（保持當前狀態）
+            return
+        else:
+            # 切換到名稱升序
+            self.sort_mode = "name_asc"
+            self.apply_sort()
+            self.update_sort_indicators()
+
+    def toggle_sort_by_temp(self):
+        """切換按溫度排序"""
+        if self.sort_mode == "temp_desc":
+            # 已經是溫度降序，不需要切換（保持當前狀態）
+            return
+        else:
+            # 切換到溫度降序
+            self.sort_mode = "temp_desc"
+            self.apply_sort()
+            self.update_sort_indicators()
+
+    def apply_sort(self):
+        """應用當前的排序模式"""
         if not hasattr(self, 'editor_rect') or not self.editor_rect:
             print("⚠️ EditorRect未初始化，无法排序")
             return
-            
+
         # 获取当前所有矩形框
         rectangles = self.editor_rect.rectangles
         if not rectangles:
             print("⚠️ 没有矩形框数据，无法排序")
             return
-        
-        # 按温度降序排序
-        def get_temperature(rect):
-            if 'max_temp' in rect:
-                return rect['max_temp']
-            elif 'temp' in rect:
-                return rect['temp']
-            else:
-                return 0.0
-        
-        sorted_rectangles = sorted(rectangles, key=get_temperature, reverse=True)
-        
-        # 保存当前选中状态
-        current_selected = self.selected_rect_id
-        
-        # 更新EditorRect中的矩形框顺序
+
+        # 根據排序模式排序
+        if self.sort_mode == "name_asc":
+            # 按名稱升序排序（A~Z）
+            def get_name(rect):
+                return rect.get('name', '').upper()  # 轉大寫以忽略大小寫
+            sorted_rectangles = sorted(rectangles, key=get_name)
+        elif self.sort_mode == "temp_desc":
+            # 按溫度降序排序（大到小）
+            def get_temperature(rect):
+                if 'max_temp' in rect:
+                    return rect['max_temp']
+                elif 'temp' in rect:
+                    return rect['temp']
+                else:
+                    return 0.0
+            sorted_rectangles = sorted(rectangles, key=get_temperature, reverse=True)
+        else:
+            sorted_rectangles = rectangles
+
+        # 更新EditorRect中的矩形框順序
         self.editor_rect.rectangles = sorted_rectangles
-        
+
         # 重新更新列表
         self.update_rect_list()
+
+    def update_sort_indicators(self):
+        """更新排序指示符號"""
+        if not hasattr(self, 'name_header_btn') or not hasattr(self, 'temp_header_btn'):
+            return
+
+        # 更新名稱欄位標頭
+        if self.sort_mode == "name_asc":
+            self.name_header_btn.config(text="名稱 ▼", fg=UIStyle.PRIMARY_BLUE, font=("Arial", 10, "bold"))
+            self.temp_header_btn.config(text="溫度   ", fg=UIStyle.BLACK, font=("Arial", 10))
+        elif self.sort_mode == "temp_desc":
+            self.name_header_btn.config(text="名稱", fg=UIStyle.BLACK, font=("Arial", 10))
+            self.temp_header_btn.config(text="溫度 ▼ ", fg=UIStyle.PRIMARY_BLUE, font=("Arial", 10, "bold"))
+        else:
+            self.name_header_btn.config(text="名稱", fg=UIStyle.BLACK, font=("Arial", 10))
+            self.temp_header_btn.config(text="溫度", fg=UIStyle.BLACK, font=("Arial", 10))
+
+    def sort_by_temperature(self):
+        """按温度降序排序列表（保留此方法以兼容舊代碼）"""
+        self.sort_mode = "temp_desc"
+        self.apply_sort()
+        self.update_sort_indicators()
         
         # 恢复选中状态
         if current_selected:
