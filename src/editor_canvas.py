@@ -640,6 +640,107 @@ class EditorCanvas:
         # 更新排序指示符號
         self.update_sort_indicators()
 
+        # 根據篩選結果更新 Canvas 上的顯示
+        self.update_canvas_visibility()
+
+    def update_canvas_visibility(self):
+        """根據篩選結果更新 Canvas 上的顯示"""
+        if not hasattr(self, 'canvas') or not self.canvas:
+            return
+
+        # 檢查是否有篩選條件
+        has_filter = False
+        if hasattr(self, 'filter_name_entry') and hasattr(self, 'filter_desc_entry') and hasattr(self, 'filter_temp_entry'):
+            name_filter = self.filter_name_entry.get().strip()
+            desc_filter = self.filter_desc_entry.get().strip()
+            temp_filter = self.filter_temp_entry.get().strip()
+            has_filter = bool(name_filter or desc_filter or temp_filter)
+
+        # 獲取所有矩形框
+        all_rects = []
+        if hasattr(self, 'editor_rect') and self.editor_rect:
+            all_rects = self.editor_rect.rectangles
+        elif hasattr(self, 'mark_rect') and self.mark_rect:
+            all_rects = self.mark_rect
+
+        if not all_rects:
+            return
+
+        # 如果沒有篩選條件，顯示所有項目
+        if not has_filter:
+            for rect in all_rects:
+                rect_id = rect.get('rectId')
+                name_id = rect.get('nameId')
+                temp_text_id = rect.get('tempTextId')
+                triangle_id = rect.get('triangleId')
+
+                if rect_id:
+                    try:
+                        self.canvas.itemconfig(rect_id, state='normal')
+                    except:
+                        pass
+                if name_id:
+                    try:
+                        self.canvas.itemconfig(name_id, state='normal')
+                    except:
+                        pass
+                if temp_text_id:
+                    try:
+                        self.canvas.itemconfig(temp_text_id, state='normal')
+                    except:
+                        pass
+                if triangle_id:
+                    try:
+                        self.canvas.itemconfig(triangle_id, state='normal')
+                    except:
+                        pass
+            return
+
+        # 獲取符合篩選條件的矩形框 ID 集合
+        filtered_rect_ids = set()
+        if hasattr(self, 'filtered_rectangles') and self.filtered_rectangles:
+            for rect in self.filtered_rectangles:
+                rect_id = rect.get('rectId')
+                if rect_id:
+                    filtered_rect_ids.add(rect_id)
+
+        # 遍歷所有矩形框，根據是否在篩選結果中決定顯示或隱藏
+        for rect in all_rects:
+            rect_id = rect.get('rectId')
+            name_id = rect.get('nameId')
+            temp_text_id = rect.get('tempTextId')
+            triangle_id = rect.get('triangleId')
+
+            # 決定是顯示還是隱藏
+            if rect_id in filtered_rect_ids:
+                # 顯示符合條件的項目
+                state = 'normal'
+            else:
+                # 隱藏不符合條件的項目
+                state = 'hidden'
+
+            # 更新 Canvas 上的顯示狀態
+            if rect_id:
+                try:
+                    self.canvas.itemconfig(rect_id, state=state)
+                except:
+                    pass
+            if name_id:
+                try:
+                    self.canvas.itemconfig(name_id, state=state)
+                except:
+                    pass
+            if temp_text_id:
+                try:
+                    self.canvas.itemconfig(temp_text_id, state=state)
+                except:
+                    pass
+            if triangle_id:
+                try:
+                    self.canvas.itemconfig(triangle_id, state=state)
+                except:
+                    pass
+
     def create_list_item(self, rect, index):
         """创建单个列表项"""
         # 创建列表项框架
