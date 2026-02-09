@@ -32,6 +32,7 @@ UI 元件對應命名：
 """
 
 import tkinter as tk
+from tkinter import ttk
 from PIL import Image, ImageTk, ImageGrab
 
 # 匯入 UIStyle 以保持樣式統一
@@ -125,6 +126,11 @@ class EditorCanvas:
         # 篩選相關變量
         self.all_rectangles = []  # 保存所有矩形框（未經篩選）
         self.filtered_rectangles = []  # 保存篩選後的矩形框
+
+        # 欄位寬度配置（統一管理，修改此處即可同步更新所有相關欄位）
+        self.COLUMN_WIDTH_NAME = 10   # 名稱欄位寬度
+        self.COLUMN_WIDTH_DESC = 12   # 描述欄位寬度
+        self.COLUMN_WIDTH_TEMP = 8    # 溫度欄位寬度
 
         # 先设置dialog属性
         self.dialog = dialog
@@ -331,175 +337,153 @@ class EditorCanvas:
         filter_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
         filter_frame.grid(row=2, column=0, sticky="ew", pady=(0, 5))
 
-        # 名稱篩選輸入框（使用 PlaceholderEntry）
+        # 統一的篩選輸入框寬度
+        FILTER_INPUT_WIDTH = 35
+
+        # === 第一列：篩選保留標籤 + 名稱篩選輸入框 + 驚嘆號 ===
+        # "篩選保留" 標籤
+        filter_label = tk.Label(
+            filter_frame,
+            text="篩選保留",
+            font=("Arial", 9, "bold"),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.DARK_BLUE
+        )
+        filter_label.grid(row=0, column=0, sticky="w", padx=(5, 5), pady=3)
+
+        # 名稱篩選輸入框
         self.filter_name_entry = PlaceholderEntry(
             filter_frame,
-            placeholder='輸入"C"',
+            placeholder='名稱：輸入"C","HA"',
             placeholder_color="gray",
             font=("Arial", 9),
-            width=10,
+            width=FILTER_INPUT_WIDTH,
             bg=UIStyle.WHITE,
             relief="solid",
             bd=1
         )
-        self.filter_name_entry.pack(side=tk.LEFT, padx=4, pady=3)
+        self.filter_name_entry.grid(row=0, column=1, sticky="w", padx=(0, 2), pady=3)
         self.filter_name_entry.bind('<KeyRelease>', self.on_filter_changed)
 
-        # 描述篩選輸入框（使用 PlaceholderEntry）
+        # 名稱篩選資訊圖示（帶 tooltip）
+        name_info_label = tk.Label(
+            filter_frame,
+            text="ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
+        )
+        name_info_label.grid(row=0, column=2, sticky="w", padx=(0, 5), pady=3)
+        Tooltip(name_info_label,
+                "名稱篩選說明：\n"
+                "• 單一值：輸入 C 篩選包含 C 的項目\n"
+                "• 多值（OR）：輸入 \"C\",\"HA\" 篩選包含 C 或 HA 的項目\n"
+                "• 格式支援：\"C\",\"HA\" 或 C,HA")
+
+        # === 第二列：描述篩選輸入框 + 驚嘆號 ===
+        # 描述篩選輸入框
         self.filter_desc_entry = PlaceholderEntry(
             filter_frame,
-            placeholder='輸入"EC"',
+            placeholder='描述：輸入"EC","CAP"',
             placeholder_color="gray",
             font=("Arial", 9),
-            width=12,
+            width=FILTER_INPUT_WIDTH,
             bg=UIStyle.WHITE,
             relief="solid",
             bd=1
         )
-        self.filter_desc_entry.pack(side=tk.LEFT, padx=4, pady=3)
+        self.filter_desc_entry.grid(row=1, column=1, sticky="w", padx=(0, 2), pady=3)
         self.filter_desc_entry.bind('<KeyRelease>', self.on_filter_changed)
 
-        # 溫度篩選輸入框（使用 PlaceholderEntry）
+        # 描述篩選資訊圖示（帶 tooltip）
+        desc_info_label = tk.Label(
+            filter_frame,
+            text="ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
+        )
+        desc_info_label.grid(row=1, column=2, sticky="w", padx=(0, 5), pady=3)
+        Tooltip(desc_info_label,
+                "描述篩選說明：\n"
+                "• 單一值：輸入 EC 篩選包含 EC 的項目\n"
+                "• 多值（OR）：輸入 \"EC\",\"CAP\" 篩選包含 EC 或 CAP 的項目\n"
+                "• 格式支援：\"EC\",\"CAP\" 或 EC,CAP")
+
+        # === 第三列：溫度篩選輸入框 + 驚嘆號 ===
+        # 溫度篩選輸入框
         self.filter_temp_entry = PlaceholderEntry(
             filter_frame,
-            placeholder='<75',
+            placeholder='溫度：>60, <75, =60',
             placeholder_color="gray",
             font=("Arial", 9),
-            width=8,
+            width=FILTER_INPUT_WIDTH,
             bg=UIStyle.WHITE,
             relief="solid",
             bd=1
         )
-        self.filter_temp_entry.pack(side=tk.RIGHT, padx=4, pady=3)
+        self.filter_temp_entry.grid(row=2, column=1, sticky="w", padx=(0, 2), pady=3)
         self.filter_temp_entry.bind('<KeyRelease>', self.on_filter_changed)
 
-        # 欄位標頭（名稱和溫度，可點擊排序）
-        header_frame = tk.Frame(left_panel, bg=UIStyle.LIGHT_GRAY, relief="solid", bd=1)
-        header_frame.grid(row=3, column=0, sticky="ew", pady=(0, 5))
-
-        # 名称欄位標頭（可點擊）- 使用 pack 佈局與列表項對齊
-        self.name_header_btn = tk.Button(
-            header_frame,
-            text="名稱 ▼",
-            font=("Arial", 10, "bold"),
-            bg=UIStyle.LIGHT_GRAY,
+        # 溫度篩選資訊圖示（帶 tooltip）
+        temp_info_label = tk.Label(
+            filter_frame,
+            text="ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
             fg=UIStyle.PRIMARY_BLUE,
-            relief="flat",
-            bd=0,
-            anchor="w",
-            width=10,
-            command=self.toggle_sort_by_name
+            cursor="hand2"
         )
-        self.name_header_btn.pack(side=tk.LEFT, padx=4, pady=3)
+        temp_info_label.grid(row=2, column=2, sticky="w", padx=(0, 5), pady=3)
+        Tooltip(temp_info_label,
+                "溫度篩選說明：\n"
+                "• >60   : 大於 60°C\n"
+                "• <75   : 小於 75°C\n"
+                "• >=60.5: 大於等於 60.5°C\n"
+                "• <=70  : 小於等於 70°C\n"
+                "• =60   : 等於 60°C")
 
-        # 描述欄位標頭（可點擊）- 使用 pack 佈局與列表項對齊
-        self.desc_header_btn = tk.Button(
-            header_frame,
-            text="描述",
-            font=("Arial", 10),
-            bg=UIStyle.LIGHT_GRAY,
-            fg=UIStyle.BLACK,
-            relief="flat",
-            bd=0,
-            anchor="w",
-            width=12,
-            command=self.toggle_sort_by_desc
+        # 创建 Treeview 表格框架
+        tree_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
+        tree_frame.grid(row=3, column=0, sticky="nsew")
+
+        # 創建 Treeview（表格）
+        self.tree = ttk.Treeview(
+            tree_frame,
+            columns=('name', 'desc', 'temp'),
+            show='tree headings',  # 顯示表頭
+            selectmode='extended'  # 支持多選
         )
-        self.desc_header_btn.pack(side=tk.LEFT, padx=4, pady=3)
 
-        # 溫度欄位標頭（可點擊）- 使用 pack 佈局與列表項對齊
-        self.temp_header_btn = tk.Button(
-            header_frame,
-            text="溫度",
-            font=("Arial", 10),
-            bg=UIStyle.LIGHT_GRAY,
-            fg=UIStyle.BLACK,
-            relief="flat",
-            bd=0,
-            anchor="w",
-            width=8,
-            command=self.toggle_sort_by_temp
-        )
-        self.temp_header_btn.pack(side=tk.RIGHT, padx=4, pady=3)
+        # 配置欄位
+        self.tree.column('#0', width=0, stretch=tk.NO)  # 隱藏第一欄（tree column）
+        self.tree.column('name', width=self.COLUMN_WIDTH_NAME * 8, anchor='w')  # 名稱欄位
+        self.tree.column('desc', width=self.COLUMN_WIDTH_DESC * 8, anchor='w')  # 描述欄位
+        self.tree.column('temp', width=self.COLUMN_WIDTH_TEMP * 8, anchor='center')  # 溫度欄位
 
-        # 创建滚动框架
-        scroll_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
-        scroll_frame.grid(row=4, column=0, sticky="nsew")
+        # 配置表頭
+        self.tree.heading('name', text='名稱 ▼', command=self.toggle_sort_by_name)
+        self.tree.heading('desc', text='描述', command=self.toggle_sort_by_desc)
+        self.tree.heading('temp', text='溫度', command=self.toggle_sort_by_temp)
 
-        # 创建Canvas和滚动条 - 使用明显的颜色标记滚动条
-        self.list_canvas = tk.Canvas(scroll_frame, bg='white', highlightthickness=0)
-        scrollbar = tk.Scrollbar(scroll_frame, orient="vertical", command=self.list_canvas.yview, 
-                                width=20, bg='#ff6b6b', troughcolor='#f0f0f0', 
-                                activebackground='#ff4757', highlightbackground='#ff6b6b')
-        self.scrollable_frame = tk.Frame(self.list_canvas, bg='white')
+        # 創建滾動條
+        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
 
-        # 配置滚动区域 - 优化性能，减少频繁更新
-        def configure_scroll_region(event=None):
-            # 延迟更新滚动区域，避免频繁刷新
-            if hasattr(self, '_scroll_update_after'):
-                self.list_canvas.after_cancel(self._scroll_update_after)
-            
-            def update_scroll_region():
-                try:
-                    bbox = self.list_canvas.bbox("all")
-                    if bbox:
-                        self.list_canvas.configure(scrollregion=bbox)
-                        print(f"滚动区域已更新: {bbox}")
-                    else:
-                        # 如果bbox为空，设置一个默认区域
-                        self.list_canvas.configure(scrollregion=(0, 0, 0, 100))
-                except Exception as e:
-                    print(f"更新滚动区域错误: {e}")
-            
-            self._scroll_update_after = self.list_canvas.after(50, update_scroll_region)
-
-        self.scrollable_frame.bind("<Configure>", configure_scroll_region)
-
-        self._list_window_id = self.list_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        self.list_canvas.configure(yscrollcommand=scrollbar.set)
-
-        # 使用grid布局确保滚动条可见
-        self.list_canvas.grid(row=0, column=0, sticky="nsew")
+        # 佈局
+        self.tree.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
-        
-        # 配置grid权重
-        scroll_frame.grid_rowconfigure(0, weight=1)
-        scroll_frame.grid_columnconfigure(0, weight=1)
-        scroll_frame.grid_columnconfigure(1, weight=0)
-        
-        # 确保内部窗口宽度自适应
-        def on_canvas_configure(e):
-            # 自适应内部窗口宽度，同时刷新scrollregion，确保滚动条可拖动
-            self.list_canvas.itemconfig(self._list_window_id, width=e.width)
-            self.list_canvas.configure(scrollregion=self.list_canvas.bbox("all"))
-        self.list_canvas.bind("<Configure>", on_canvas_configure)
 
-        # 绑定鼠标滚轮事件 - 使用更直接的方法
-        # 保存控件引用供后续使用
-        self._scroll_widgets = [left_panel, scroll_frame, self.list_canvas, self.scrollable_frame]
-        
-        # 绑定滚轮事件 - 使用更可靠的方法
-        def bind_mousewheel(widget):
-            # Windows系统滚轮事件
-            widget.bind("<MouseWheel>", self._on_mousewheel)
-            # Linux系统滚轮事件  
-            widget.bind("<Button-4>", self._on_mousewheel)
-            widget.bind("<Button-5>", self._on_mousewheel)
-            # 只对主要控件设置焦点，避免频繁切换
-            if widget in [self.list_canvas, self.scrollable_frame]:
-                def on_enter(e):
-                    widget.focus_set()
-                widget.bind("<Enter>", on_enter)
-        
-        # 绑定到所有相关控件
-        for widget in self._scroll_widgets:
-            bind_mousewheel(widget)
-        
-        # 额外绑定到整个对话框作为备选
-        self._bind_to_dialog_later = True
-        
-        # 绑定点击空白区域清除选择
-        self.list_canvas.bind("<Button-1>", self.on_canvas_click)
+        # 配置 grid 權重
+        tree_frame.grid_rowconfigure(0, weight=1)
+        tree_frame.grid_columnconfigure(0, weight=1)
+        tree_frame.grid_columnconfigure(1, weight=0)
+
+        # 綁定點擊事件
+        self.tree.bind('<<TreeviewSelect>>', self.on_tree_select)
+        self.tree.bind('<Button-1>', self.on_tree_click)
 
         # 移除名称推荐下拉框
 
@@ -580,11 +564,10 @@ class EditorCanvas:
             self.update_delete_button_state()
 
     def update_rect_list(self):
-        """更新矩形框列表"""
-        # 清除现有列表項
-        for widget in self.scrollable_frame.winfo_children():
-            widget.destroy()
-        self.rect_list_items.clear()
+        """更新矩形框列表（使用 Treeview）"""
+        # 清除現有項目
+        for item in self.tree.get_children():
+            self.tree.delete(item)
 
         # 檢查是否有篩選條件
         has_filter = False
@@ -605,49 +588,66 @@ class EditorCanvas:
         elif hasattr(self, 'mark_rect') and self.mark_rect:
             # 如果editor_rect还没有初始化，使用mark_rect数据
             rectangles = self.mark_rect
-        
+
+        # 添加項目到 Treeview
         for i, rect in enumerate(rectangles):
-            self.create_list_item(rect, i)
-        
-        # 优化滚动区域更新 - 减少白屏问题
-        def delayed_scroll_update():
-            try:
-                self.scrollable_frame.update_idletasks()
-                bbox = self.list_canvas.bbox("all")
-                if bbox:
-                    self.list_canvas.configure(scrollregion=bbox)
-                    print(f"列表更新完成，滚动区域: {bbox}")
-                else:
-                    # 强制计算bbox
-                    self.list_canvas.update()
-                    bbox = self.list_canvas.bbox("all")
-                    if bbox:
-                        self.list_canvas.configure(scrollregion=bbox)
-            except Exception as e:
-                print(f"延迟滚动更新错误: {e}")
-        
-        # 延迟更新，避免白屏
-        self.list_canvas.after(10, delayed_scroll_update)
-        
-        # 确保所有矩形都是灰色边框（未选中状态）
-        self.list_canvas.after(20, self.set_all_rects_unselected)
-        
-        # 更新标题数量
+            rect_name = rect.get('name', f'AR{i+1}')
+            description = rect.get('description', '')
+            max_temp = rect.get('max_temp', 0)
+            temp_text = f"{max_temp:.1f}°C"
+            rect_id = rect.get('rectId', i)
+
+            # 插入項目，使用 rect_id 作為 iid（項目ID）
+            self.tree.insert('', 'end', iid=str(rect_id),
+                           values=(rect_name, description, temp_text),
+                           tags=(str(rect_id),))
+
+        # 確保所有矩形都是灰色邊框（未選中狀態）
+        if hasattr(self, 'set_all_rects_unselected'):
+            self.set_all_rects_unselected()
+
+        # 更新標題數量
         try:
             self.title_label.config(text=f"元器件列表({len(rectangles)})")
         except Exception:
             pass
-        
-        # 应用当前的搜索过滤
-        if hasattr(self, 'search_entry'):
-            search_text = self.search_entry.get().strip().lower()
-            self.filter_rect_list(search_text)
 
         # 更新排序指示符號
         self.update_sort_indicators()
 
         # 根據篩選結果更新 Canvas 上的顯示
         self.update_canvas_visibility()
+
+    def on_tree_select(self, event):
+        """Treeview 選擇事件處理"""
+        selection = self.tree.selection()
+        if not selection:
+            return
+
+        # 獲取選中的項目ID（即 rect_id）
+        selected_ids = [int(iid) for iid in selection]
+
+        # 更新選中狀態
+        self.selected_rect_ids = set(selected_ids)
+
+        if len(selected_ids) == 1:
+            # 單選
+            self.selected_rect_id = selected_ids[0]
+            self.highlight_rect_in_canvas(self.selected_rect_id)
+        elif len(selected_ids) > 1:
+            # 多選
+            self.selected_rect_id = None
+            self.highlight_multiple_rects_in_canvas(selected_ids)
+
+        # 更新按鈕狀態
+        if hasattr(self, 'update_delete_button_state'):
+            self.update_delete_button_state()
+
+    def on_tree_click(self, event):
+        """Treeview 點擊事件處理（支持 Ctrl/Shift 鍵）"""
+        # 這個方法可以用來處理特殊的點擊行為
+        # Treeview 原生支持 Ctrl+點擊（跳選）和 Shift+點擊（範圍選擇）
+        pass
 
     def update_canvas_visibility(self):
         """根據篩選結果更新 Canvas 上的顯示"""
@@ -750,27 +750,54 @@ class EditorCanvas:
     def create_list_item(self, rect, index):
         """创建单个列表项"""
         # 创建列表项框架
-        item_frame = tk.Frame(self.scrollable_frame, bg=UIStyle.WHITE, relief=tk.RAISED, bd=1)
+        item_frame = tk.Frame(self.scrollable_frame, bg=UIStyle.WHITE, relief=tk.SOLID, bd=1)
         item_frame.pack(fill=tk.X, padx=2, pady=1)
-        
+
         # 获取矩形框数据
         rect_name = rect.get('name', f'AR{index+1}')
         max_temp = rect.get('max_temp', 0)
         rect_id = rect.get('rectId', index)
         description = rect.get('description', '')  # 獲取描述資訊
 
-        # 不可编辑的名称标签
-        name_label = tk.Label(item_frame, text=rect_name, width=10, font=UIStyle.SMALL_FONT, bg=UIStyle.WHITE, anchor='w')
-        name_label.pack(side=tk.LEFT, padx=4, pady=3)
+        # 名称标签（帶框線，使用統一的欄位寬度）
+        name_label = tk.Label(
+            item_frame,
+            text=rect_name,
+            width=self.COLUMN_WIDTH_NAME,
+            font=UIStyle.SMALL_FONT,
+            bg=UIStyle.WHITE,
+            anchor='w',
+            relief=tk.SOLID,
+            bd=1
+        )
+        name_label.pack(side=tk.LEFT, padx=0, pady=0)
 
-        # 创建描述标签（在名称和温度之间）
-        desc_label = tk.Label(item_frame, text=description, width=12, font=UIStyle.SMALL_FONT, bg=UIStyle.WHITE, anchor='w')
-        desc_label.pack(side=tk.LEFT, padx=4, pady=3)
+        # 描述标签（帶框線，使用統一的欄位寬度）
+        desc_label = tk.Label(
+            item_frame,
+            text=description,
+            width=self.COLUMN_WIDTH_DESC,
+            font=UIStyle.SMALL_FONT,
+            bg=UIStyle.WHITE,
+            anchor='w',
+            relief=tk.SOLID,
+            bd=1
+        )
+        desc_label.pack(side=tk.LEFT, padx=0, pady=0)
 
-        # 创建温度标签
+        # 温度标签（帶框線，使用統一的欄位寬度）
         temp_text = f"{max_temp:.1f}°C"
-        temp_label = tk.Label(item_frame, text=temp_text, font=UIStyle.SMALL_FONT, bg=UIStyle.WHITE)
-        temp_label.pack(side=tk.RIGHT, padx=4, pady=3)
+        temp_label = tk.Label(
+            item_frame,
+            text=temp_text,
+            width=self.COLUMN_WIDTH_TEMP,
+            font=UIStyle.SMALL_FONT,
+            bg=UIStyle.WHITE,
+            anchor='center',
+            relief=tk.SOLID,
+            bd=1
+        )
+        temp_label.pack(side=tk.LEFT, padx=0, pady=0)
         
         # 绑定点击事件
         def on_item_click(event, rect_id=rect_id, index=index):
@@ -1683,19 +1710,18 @@ class EditorCanvas:
                 print(f"⚠️⚠️⚠️ self.editor_rect: {self.editor_rect}")
     
     def remove_list_item_by_id(self, rect_id):
-        """根据矩形框ID删除对应的列表项"""
-        for item in self.rect_list_items:
-            if item.get('rect_id') == rect_id:
-                # 删除列表项的UI元素
-                if 'frame' in item:
-                    item['frame'].destroy()
-                # 从列表中移除
-                self.rect_list_items.remove(item)
-                break
-        
-        # 重新配置滚动区域 - 使用延迟更新避免性能问题
-        if hasattr(self, 'list_canvas') and self.list_canvas:
-            self.list_canvas.after(10, self._update_scroll_region)
+        """根据矩形框ID删除对应的列表项（Treeview版本）"""
+        if not hasattr(self, 'tree'):
+            return
+
+        # 在 Treeview 中刪除對應項目（iid 就是 rect_id 的字符串形式）
+        try:
+            iid = str(rect_id)
+            if self.tree.exists(iid):
+                self.tree.delete(iid)
+                print(f"✓ 已從 Treeview 刪除項目: {iid}")
+        except Exception as e:
+            print(f"⚠️ 刪除 Treeview 項目時出錯: {e}")
     
     def _update_scroll_region(self):
         """更新滚动区域"""
@@ -1840,27 +1866,27 @@ class EditorCanvas:
         self.update_rect_list()
 
     def update_sort_indicators(self):
-        """更新排序指示符號"""
-        if not hasattr(self, 'name_header_btn') or not hasattr(self, 'temp_header_btn') or not hasattr(self, 'desc_header_btn'):
+        """更新排序指示符號（Treeview 表頭）"""
+        if not hasattr(self, 'tree'):
             return
 
-        # 更新名稱欄位標頭
+        # 更新 Treeview 表頭
         if self.sort_mode == "name_asc":
-            self.name_header_btn.config(text="名稱 ▼", fg=UIStyle.PRIMARY_BLUE, font=("Arial", 10, "bold"))
-            self.desc_header_btn.config(text="描述", fg=UIStyle.BLACK, font=("Arial", 10))
-            self.temp_header_btn.config(text="溫度   ", fg=UIStyle.BLACK, font=("Arial", 10))
+            self.tree.heading('name', text='名稱 ▼')
+            self.tree.heading('desc', text='描述')
+            self.tree.heading('temp', text='溫度')
         elif self.sort_mode == "desc_asc":
-            self.name_header_btn.config(text="名稱", fg=UIStyle.BLACK, font=("Arial", 10))
-            self.desc_header_btn.config(text="描述 ▼", fg=UIStyle.PRIMARY_BLUE, font=("Arial", 10, "bold"))
-            self.temp_header_btn.config(text="溫度   ", fg=UIStyle.BLACK, font=("Arial", 10))
+            self.tree.heading('name', text='名稱')
+            self.tree.heading('desc', text='描述 ▼')
+            self.tree.heading('temp', text='溫度')
         elif self.sort_mode == "temp_desc":
-            self.name_header_btn.config(text="名稱", fg=UIStyle.BLACK, font=("Arial", 10))
-            self.desc_header_btn.config(text="描述", fg=UIStyle.BLACK, font=("Arial", 10))
-            self.temp_header_btn.config(text="溫度 ▼ ", fg=UIStyle.PRIMARY_BLUE, font=("Arial", 10, "bold"))
+            self.tree.heading('name', text='名稱')
+            self.tree.heading('desc', text='描述')
+            self.tree.heading('temp', text='溫度 ▼')
         else:
-            self.name_header_btn.config(text="名稱", fg=UIStyle.BLACK, font=("Arial", 10))
-            self.desc_header_btn.config(text="描述", fg=UIStyle.BLACK, font=("Arial", 10))
-            self.temp_header_btn.config(text="溫度", fg=UIStyle.BLACK, font=("Arial", 10))
+            self.tree.heading('name', text='名稱')
+            self.tree.heading('desc', text='描述')
+            self.tree.heading('temp', text='溫度')
 
     # def sort_by_temperature(self):
     #     """按温度降序排序列表（保留此方法以兼容舊代碼）"""
@@ -1999,16 +2025,20 @@ class EditorCanvas:
         # 根據篩選條件過濾列表
         filtered = []
         for rect in all_rects:
-            # 檢查名稱篩選
+            # 檢查名稱篩選（支持多值 OR 匹配）
             if name_filter:
                 rect_name = rect.get('name', '').upper()
-                if name_filter not in rect_name:
+                name_values = self._parse_multi_values(name_filter)
+                # 檢查是否有任一值匹配（OR 邏輯）
+                if not any(value in rect_name for value in name_values):
                     continue  # 不符合名稱條件，跳過
 
-            # 檢查描述篩選
+            # 檢查描述篩選（支持多值 OR 匹配）
             if desc_filter:
                 rect_desc = rect.get('description', '').upper()
-                if desc_filter not in rect_desc:
+                desc_values = self._parse_multi_values(desc_filter)
+                # 檢查是否有任一值匹配（OR 邏輯）
+                if not any(value in rect_desc for value in desc_values):
                     continue  # 不符合描述條件，跳過
 
             # 檢查溫度篩選
@@ -2021,6 +2051,42 @@ class EditorCanvas:
             filtered.append(rect)
 
         self.filtered_rectangles = filtered
+
+    def _parse_multi_values(self, input_str):
+        """
+        解析多值篩選條件（支持逗號分隔）。
+
+        支持的格式：
+        - "C","HA"  : 引號包圍的多個值
+        - C,HA      : 未引號的多個值
+        - C         : 單一值
+
+        Args:
+            input_str (str): 輸入字符串
+
+        Returns:
+            list: 解析後的值列表（已轉大寫）
+        """
+        import re
+
+        if not input_str:
+            return []
+
+        # 移除前後空白
+        input_str = input_str.strip()
+
+        # 嘗試匹配引號包圍的多值格式："C","HA"
+        quoted_pattern = r'"([^"]+)"'
+        quoted_matches = re.findall(quoted_pattern, input_str)
+
+        if quoted_matches:
+            # 找到引號格式，使用引號內的值
+            return [v.strip().upper() for v in quoted_matches if v.strip()]
+
+        # 否則按逗號分割（支持 C,HA 格式）
+        values = [v.strip().upper() for v in input_str.split(',') if v.strip()]
+
+        return values if values else [input_str.upper()]
 
     def _check_temperature_condition(self, temp_value, condition_str):
         """
