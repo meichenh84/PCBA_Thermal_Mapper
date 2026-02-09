@@ -236,11 +236,15 @@ class EditorCanvas:
         # 然后创建editor_rect，传递温度文件路径和回调函数
         # 传递self而不是self.parent，这样editor_rect可以访问到dialog
         self.editor_rect = RectEditor(self, self.canvas, self.mark_rect, self.temp_file_path, self.on_rect_change)
-        
+
+        # 設置縮放功能的背景圖像和回調
+        self.editor_rect.set_background_image(self.bg_image)
+        self.editor_rect.on_zoom_change_callback = self.on_zoom_change
+
         # 初始化Layout查询器（用于智能识别元器件名称）
         self.layout_query = None
         self.initialize_layout_query()
-        
+
         # 延迟设置显示缩放比例和更新列表，确保canvas完全初始化
         self.dialog.after(100, self.delayed_initialization)
 
@@ -250,6 +254,9 @@ class EditorCanvas:
         self.update_bg_image()
         # 然后设置显示缩放比例
         self.update_editor_display_scale()
+        # 計算縮放的 fit 比例
+        if hasattr(self, 'editor_rect') and self.editor_rect:
+            self.editor_rect.calculate_fit_scale()
         # 同步多选模式状态到 editor_rect
         if hasattr(self, 'editor_rect') and self.editor_rect:
             self.editor_rect.multi_select_enabled = self.multi_select_enabled
@@ -1457,8 +1464,20 @@ class EditorCanvas:
             # 创建背景图像项
             self.bg_image_id = self.canvas.create_image(0, 0, anchor=tk.NW, image=_bg_image)
         
-        # 更新editor_rect的显示缩放比例
-        self.update_editor_display_scale()
+        # 檢查是否啟用了放大模式
+        if hasattr(self, 'magnifier_enabled') and self.magnifier_enabled and hasattr(self, 'editor_rect') and self.editor_rect:
+            # 放大模式：重新計算 fit_scale 並重新繪製
+            self.editor_rect.calculate_fit_scale()
+            # 如果當前縮放小於新的 min_zoom，調整縮放
+            if self.editor_rect.zoom_scale < self.editor_rect.min_zoom:
+                self.editor_rect.zoom_scale = self.editor_rect.min_zoom
+                self.editor_rect.canvas_offset_x = 0
+                self.editor_rect.canvas_offset_y = 0
+            # 觸發重新繪製
+            self.on_zoom_change()
+        else:
+            # 非放大模式：使用原有邏輯
+            self.update_editor_display_scale()
 
         self.last_window_width = frame_width
     
@@ -1724,12 +1743,87 @@ class EditorCanvas:
 
     def toggle_magnifier_mode(self):
         """切換放大模式"""
+        old_enabled = self.magnifier_enabled if hasattr(self, 'magnifier_enabled') else False
         self.magnifier_enabled = self.magnifier_var.get()
 
         status = "啟用" if self.magnifier_enabled else "關閉"
         print(f"✓ 放大模式已{status}")
 
-        # TODO: 實作放大鏡功能
+        # 設置 RectEditor 的放大模式
+        if hasattr(self, 'editor_rect') and self.editor_rect:
+            self.editor_rect.set_magnifier_mode(self.magnifier_enabled)
+
+        # 如果從放大模式切換回非放大模式，恢復正常繪製
+        if old_enabled and not self.magnifier_enabled:
+            # 調用 update_bg_image() 恢復非縮放模式的繪製
+            self.update_bg_image()
+
+    def on_zoom_change(self):
+        """縮放變化時的回調，重新繪製 Canvas"""
+        if not hasattr(self, 'editor_rect') or not self.editor_rect:
+            return
+
+        # 獲取縮放變換參數
+        transform = self.editor_rect.get_zoom_transform()
+        zoom_scale = transform['zoom_scale']
+        offset_x = transform['offset_x']
+        offset_y = transform['offset_y']
+
+        # 清空 Canvas
+        self.canvas.delete("all")
+
+        # 縮放並繪製背景圖像
+        scaled_w = int(self.bg_image.width * zoom_scale)
+        scaled_h = int(self.bg_image.height * zoom_scale)
+        scaled_img = self.bg_image.resize((scaled_w, scaled_h), Image.LANCZOS)
+        self.tk_bg_image = ImageTk.PhotoImage(scaled_img)
+
+        self.canvas.create_image(
+            offset_x, offset_y,
+            anchor="nw",
+            image=self.tk_bg_image
+        )
+
+        # 重新繪製所有矩形/圓形框（使用 draw_canvas_item）
+        from draw_rect import draw_canvas_item
+        for rect in self.editor_rect.rectangles:
+            # 應用縮放變換到座標
+            transformed_rect = rect.copy()
+            transformed_rect["x1"] = rect["x1"] * zoom_scale + offset_x
+            transformed_rect["y1"] = rect["y1"] * zoom_scale + offset_y
+            transformed_rect["x2"] = rect["x2"] * zoom_scale + offset_x
+            transformed_rect["y2"] = rect["y2"] * zoom_scale + offset_y
+            transformed_rect["cx"] = rect.get("cx", (rect["x1"] + rect["x2"]) / 2) * zoom_scale + offset_x
+            transformed_rect["cy"] = rect.get("cy", (rect["y1"] + rect["y2"]) / 2) * zoom_scale + offset_y
+
+            # 使用 draw_canvas_item 繪製（它會處理形狀類型）
+            rectId, triangleId, tempTextId, nameId = draw_canvas_item(
+                self.canvas,
+                transformed_rect,
+                1.0,  # display_scale = 1.0，因為我們已經手動縮放了
+                (0, 0),  # offset = (0, 0)
+                0  # name_font_scale = 0（使用預設）
+            )
+
+            # 更新原始 rect 的 Canvas ID
+            rect["rectId"] = rectId
+            rect["triangleId"] = triangleId
+            rect["tempTextId"] = tempTextId
+            rect["nameId"] = nameId
+
+        # 清除錨點和選擇狀態（因為 Canvas ID 已改變）
+        if hasattr(self.editor_rect, 'delete_anchors'):
+            self.editor_rect.delete_anchors()
+        if hasattr(self.editor_rect, 'reset_drag_data'):
+            self.editor_rect.reset_drag_data()
+        # 清除多選狀態
+        if hasattr(self.editor_rect, 'selected_rect_ids'):
+            self.editor_rect.selected_rect_ids.clear()
+        # 清除單選狀態
+        self.selected_rect_id = None
+        # 更新按鈕狀態
+        if hasattr(self, 'update_delete_button_state'):
+            self.update_delete_button_state()
 
     def on_convert_shape(self, target_shape):
         """轉換選中的形狀

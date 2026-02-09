@@ -118,6 +118,20 @@ class RectEditor:
         # 弹窗管理
         self.current_dialog = None  # 当前显示的弹窗
 
+        # 縮放和拖動相關屬性
+        self.magnifier_mode_enabled = False  # 放大模式是否啟用（由 EditorCanvas 控制）
+        self.zoom_scale = 1.0                # 當前縮放比例
+        self.min_zoom = 1.0                  # 最小縮放比例（fit to window）
+        self.max_zoom = 5.0                  # 最大縮放比例
+        self.canvas_offset_x = 0             # Canvas 圖像偏移 X
+        self.canvas_offset_y = 0             # Canvas 圖像偏移 Y
+        self.is_panning = False              # 是否正在拖動視圖
+        self.pan_start_x = 0                 # 拖動起始點 X
+        self.pan_start_y = 0                 # 拖動起始點 Y
+        self.original_bg_image = None        # 原始背景圖像
+        self.scaled_bg_image = None          # 縮放後的背景圖像
+        self.bg_image_id = None              # 背景圖像的 Canvas ID
+
         # Bind events for canvas
         self.canvas.bind("<ButtonPress-1>", self.on_click)
         self.canvas.bind("<Motion>", self.on_mouse_move)
@@ -125,6 +139,17 @@ class RectEditor:
         self.canvas.bind("<ButtonRelease-1>", self.on_release)
         # 移除右键删除功能，改用Delete键和删除按钮
         self.canvas.bind("<Double-Button-1>", self.on_double_click) # 绑定双击事件
+
+        # 綁定滾輪縮放事件
+        self.canvas.bind("<MouseWheel>", self.on_mouse_wheel)  # Windows/macOS
+        self.canvas.bind("<Button-4>", lambda e: self.on_mouse_wheel_linux(e, 1))  # Linux 向上
+        self.canvas.bind("<Button-5>", lambda e: self.on_mouse_wheel_linux(e, -1))  # Linux 向下
+
+        # 綁定右鍵拖動事件
+        self.canvas.bind("<Button-3>", self.on_right_click_start)
+        self.canvas.bind("<B3-Motion>", self.on_right_click_drag)
+        self.canvas.bind("<ButtonRelease-3>", self.on_right_click_end)
+
         self.canvas.after(100, self.init_marks)
 
     # 不再需要缩放坐标，直接使用原图像坐标
@@ -439,8 +464,18 @@ class RectEditor:
                 self.current_dialog = dialog
 
     def create_rectangle(self, newRect):
+        # 🔥 根據當前模式選擇正確的縮放比例和偏移量
+        if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+            # 縮放模式：使用 zoom_scale 和 offset
+            scale = self.zoom_scale
+            offset = (self.canvas_offset_x, self.canvas_offset_y)
+        else:
+            # 非縮放模式：使用 display_scale
+            scale = self.display_scale
+            offset = (0, 0)
+
         rectId, triangleId, tempTextId, nameId = draw_canvas_item(
-            self.canvas, newRect, self.display_scale, (0, 0), 0
+            self.canvas, newRect, scale, offset, 0
         )
         newRect["rectId"] = rectId
         newRect["triangleId"] = triangleId
@@ -530,9 +565,19 @@ class RectEditor:
                 except:
                     pass
 
+        # 🔥 根據當前模式選擇正確的縮放比例和偏移量
+        if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+            # 縮放模式：使用 zoom_scale 和 offset
+            scale = self.zoom_scale
+            offset = (self.canvas_offset_x, self.canvas_offset_y)
+        else:
+            # 非縮放模式：使用 display_scale
+            scale = self.display_scale
+            offset = (0, 0)
+
         # 呼叫 draw_canvas_item 重新繪製
         rectId, triangleId, tempTextId, nameId = draw_canvas_item(
-            self.canvas, rect, self.display_scale, (0, 0), 0
+            self.canvas, rect, scale, offset, 0
         )
 
         # 更新 ID
@@ -605,17 +650,25 @@ class RectEditor:
 
     def update_rectangle_coordinate(self, rectId):
         if self.canvas.coords(rectId):
-            # 获取canvas显示坐标
-            display_x1, display_y1, display_x2, display_y2 = self.canvas.coords(rectId)
-            
-            # 转换回原图像坐标（与update_temp_rect保持一致）
-            if self.display_scale > 0:
-                x1 = display_x1 / self.display_scale
-                y1 = display_y1 / self.display_scale
-                x2 = display_x2 / self.display_scale
-                y2 = display_y2 / self.display_scale
+            # 获取canvas显示坐标（螢幕座標）
+            screen_x1, screen_y1, screen_x2, screen_y2 = self.canvas.coords(rectId)
+
+            # 檢查是否啟用了縮放模式
+            if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+                # 縮放模式：使用 zoom_scale 和 offset 轉換回圖像座標
+                x1 = (screen_x1 - self.canvas_offset_x) / self.zoom_scale
+                y1 = (screen_y1 - self.canvas_offset_y) / self.zoom_scale
+                x2 = (screen_x2 - self.canvas_offset_x) / self.zoom_scale
+                y2 = (screen_y2 - self.canvas_offset_y) / self.zoom_scale
             else:
-                x1, y1, x2, y2 = display_x1, display_y1, display_x2, display_y2
+                # 非縮放模式：使用 display_scale 轉換
+                if self.display_scale > 0:
+                    x1 = screen_x1 / self.display_scale
+                    y1 = screen_y1 / self.display_scale
+                    x2 = screen_x2 / self.display_scale
+                    y2 = screen_y2 / self.display_scale
+                else:
+                    x1, y1, x2, y2 = screen_x1, screen_y1, screen_x2, screen_y2
             
             for rect in self.rectangles:
                 if rect["rectId"] == rectId:
@@ -646,27 +699,38 @@ class RectEditor:
                     
                     # 🔥 关键修复：同时更新canvas显示
                     nameId = rect.get("nameId")
-                    tempTextId = rect.get("tempTextId") 
+                    tempTextId = rect.get("tempTextId")
                     triangleId = rect.get("triangleId")
-                    
+
                     if nameId and tempTextId and triangleId:
-                        # 将原图像坐标转换为显示坐标
-                        display_cx = cx * self.display_scale if self.display_scale > 0 else cx
-                        display_cy = cy * self.display_scale if self.display_scale > 0 else cy
-                        display_x1 = x1 * self.display_scale if self.display_scale > 0 else x1
-                        display_y1 = y1 * self.display_scale if self.display_scale > 0 else y1
-                        display_x2 = x2 * self.display_scale if self.display_scale > 0 else x2
+                        # 檢查是否啟用了縮放模式，選擇正確的座標轉換方式
+                        if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+                            # 縮放模式：使用 zoom_scale 和 offset
+                            display_cx = cx * self.zoom_scale + self.canvas_offset_x
+                            display_cy = cy * self.zoom_scale + self.canvas_offset_y
+                            display_x1 = x1 * self.zoom_scale + self.canvas_offset_x
+                            display_y1 = y1 * self.zoom_scale + self.canvas_offset_y
+                            display_x2 = x2 * self.zoom_scale + self.canvas_offset_x
+                            display_scale = self.zoom_scale
+                        else:
+                            # 非縮放模式：使用 display_scale
+                            display_cx = cx * self.display_scale if self.display_scale > 0 else cx
+                            display_cy = cy * self.display_scale if self.display_scale > 0 else cy
+                            display_x1 = x1 * self.display_scale if self.display_scale > 0 else x1
+                            display_y1 = y1 * self.display_scale if self.display_scale > 0 else y1
+                            display_x2 = x2 * self.display_scale if self.display_scale > 0 else x2
+                            display_scale = self.display_scale if self.display_scale > 0 else 1.0
 
                         # 更新名称标签位置（置中于矩形框上方）
                         name_center_x = (display_x1 + display_x2) / 2
-                        self.canvas.coords(nameId, name_center_x, display_y1 - 15 * self.display_scale)
+                        self.canvas.coords(nameId, name_center_x, display_y1 - 15 * display_scale)
 
                         # 更新温度文本位置（置中于矩形框内）
-                        self.canvas.coords(tempTextId, display_cx, display_cy - 16 * self.display_scale)
+                        self.canvas.coords(tempTextId, display_cx, display_cy - 16 * display_scale)
                         self.canvas.itemconfig(tempTextId, text=max_temp)
-                        
+
                         # 更新三角形
-                        size = max(7, int(8 * self.display_scale)) if self.display_scale > 0 else 8
+                        size = max(7, int(8 * display_scale))
                         point1 = (display_cx, display_cy - size // 2)
                         point2 = (display_cx - size // 2, display_cy + size // 2)
                         point3 = (display_cx + size // 2, display_cy + size // 2)
@@ -1041,33 +1105,54 @@ class RectEditor:
                 self.modify_origin_set.add(rectId)
 
     def update_temp_rect(self, x1, y1, x2, y2, nameId, tempTextId, triangleId):
-        # x1, y1, x2, y2 是canvas显示坐标，需要转换为原图像坐标来查询温度
-        if self.display_scale > 0:
-            orig_x1 = x1 / self.display_scale
-            orig_y1 = y1 / self.display_scale
-            orig_x2 = x2 / self.display_scale
-            orig_y2 = y2 / self.display_scale
+        # x1, y1, x2, y2 是canvas显示坐标（螢幕座標），需要转换为原图像坐标来查询温度
+
+        # 檢查是否啟用了縮放模式
+        if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+            # 縮放模式：使用 zoom_scale 和 offset 轉換
+            orig_x1 = (x1 - self.canvas_offset_x) / self.zoom_scale
+            orig_y1 = (y1 - self.canvas_offset_y) / self.zoom_scale
+            orig_x2 = (x2 - self.canvas_offset_x) / self.zoom_scale
+            orig_y2 = (y2 - self.canvas_offset_y) / self.zoom_scale
+
+            # 計算顯示比例（用於字體和圖示大小）
+            display_scale = self.zoom_scale
         else:
-            orig_x1, orig_y1, orig_x2, orig_y2 = x1, y1, x2, y2
-        
+            # 非縮放模式：使用 display_scale 轉換
+            if self.display_scale > 0:
+                orig_x1 = x1 / self.display_scale
+                orig_y1 = y1 / self.display_scale
+                orig_x2 = x2 / self.display_scale
+                orig_y2 = y2 / self.display_scale
+            else:
+                orig_x1, orig_y1, orig_x2, orig_y2 = x1, y1, x2, y2
+
+            display_scale = self.display_scale if self.display_scale > 0 else 1.0
+
         # 更新名称标签位置（置中于矩形框上方）
         name_center_x = (x1 + x2) / 2
-        self.canvas.coords(nameId, name_center_x, y1 - 15 * self.display_scale)
+        self.canvas.coords(nameId, name_center_x, y1 - 15 * display_scale)
 
         # 使用原图像坐标查询温度和最高温度位置
         max_temp = self.tempALoader.get_max_temp(int(orig_x1), int(orig_y1), int(orig_x2), int(orig_y2), 1.0)
         orig_cx, orig_cy = self.tempALoader.get_max_temp_coords(int(orig_x1), int(orig_y1), int(orig_x2), int(orig_y2), 1.0)
 
         # 将原图像坐标转换为显示坐标来显示温度文本和三角形
-        display_cx = orig_cx * self.display_scale
-        display_cy = orig_cy * self.display_scale
+        if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+            # 縮放模式：使用 zoom_scale 和 offset 轉換
+            display_cx = orig_cx * self.zoom_scale + self.canvas_offset_x
+            display_cy = orig_cy * self.zoom_scale + self.canvas_offset_y
+        else:
+            # 非縮放模式
+            display_cx = orig_cx * display_scale
+            display_cy = orig_cy * display_scale
 
         # 更新温度文本位置（置中于矩形框内）
-        self.canvas.coords(tempTextId, display_cx, display_cy - 16 * self.display_scale)
+        self.canvas.coords(tempTextId, display_cx, display_cy - 16 * display_scale)
         self.canvas.itemconfig(tempTextId, text=max_temp)
 
         # 计算新的三角形三个顶点（使用显示坐标）
-        size = max(7, int(8 * self.display_scale))
+        size = max(7, int(8 * display_scale))
         point1 = (display_cx, display_cy - size // 2)  # 顶点1 (尖角)
         point2 = (display_cx - size // 2, display_cy + size // 2)  # 顶点2 (左下角)
         point3 = (display_cx + size // 2, display_cy + size // 2)  # 顶点3 (右下角)
@@ -1309,7 +1394,194 @@ class RectEditor:
         
         return merged_rect_id
 
-           
+    # ========== 縮放和拖動功能 ==========
+
+    def set_magnifier_mode(self, enabled):
+        """設定放大模式是否啟用"""
+        was_enabled = self.magnifier_mode_enabled
+        self.magnifier_mode_enabled = enabled
+
+        if not enabled and was_enabled:
+            # 關閉放大模式時，重置縮放參數但不觸發重新繪製
+            self.zoom_scale = self.min_zoom
+            self.canvas_offset_x = 0
+            self.canvas_offset_y = 0
+            # 不調用 on_zoom_change_callback，讓 EditorCanvas 處理模式切換
+
+    def set_background_image(self, pil_image):
+        """設定背景圖像（用於縮放）"""
+        self.original_bg_image = pil_image
+        # 計算 fit 比例
+        self.calculate_fit_scale()
+
+    def calculate_fit_scale(self):
+        """計算能完整顯示圖像的最小縮放比例"""
+        if not self.original_bg_image:
+            return
+
+        canvas_w = self.canvas.winfo_width()
+        canvas_h = self.canvas.winfo_height()
+        img_w = self.original_bg_image.width
+        img_h = self.original_bg_image.height
+
+        if canvas_w > 0 and canvas_h > 0:
+            fit_scale = min(canvas_w / img_w, canvas_h / img_h)
+            # 最小縮放不能小於 1.0（原始大小）
+            self.min_zoom = max(1.0, fit_scale)
+            # 確保初始縮放不小於 min_zoom
+            if self.zoom_scale < self.min_zoom:
+                self.zoom_scale = self.min_zoom
+
+    def reset_zoom(self):
+        """重置縮放到 fit 顯示"""
+        self.zoom_scale = self.min_zoom
+        self.canvas_offset_x = 0
+        self.canvas_offset_y = 0
+        # 通知重新繪製
+        if hasattr(self, 'on_zoom_change_callback') and self.on_zoom_change_callback:
+            self.on_zoom_change_callback()
+
+    def on_mouse_wheel(self, event):
+        """處理滾輪縮放（Windows/macOS）"""
+        if not self.magnifier_mode_enabled:
+            return
+
+        # 計算縮放增量
+        delta = event.delta / 120  # Windows 標準增量
+        zoom_factor = 1.1 ** delta  # 每次 10% 變化
+
+        self._apply_zoom(event.x, event.y, zoom_factor)
+
+        # 阻止事件傳播，避免影響其他邏輯
+        return "break"
+
+    def on_mouse_wheel_linux(self, event, direction):
+        """處理滾輪縮放（Linux）"""
+        if not self.magnifier_mode_enabled:
+            return
+
+        zoom_factor = 1.1 if direction > 0 else 1.0 / 1.1
+        self._apply_zoom(event.x, event.y, zoom_factor)
+
+        # 阻止事件傳播，避免影響其他邏輯
+        return "break"
+
+    def _apply_zoom(self, mouse_x, mouse_y, zoom_factor):
+        """應用縮放變換"""
+        # 計算新縮放比例，限制在 min_zoom 和 max_zoom 之間
+        new_zoom = self.zoom_scale * zoom_factor
+        new_zoom = max(self.min_zoom, min(self.max_zoom, new_zoom))
+
+        if abs(new_zoom - self.zoom_scale) < 0.001:
+            return  # 縮放比例沒有變化
+
+        # 更新縮放比例
+        old_zoom = self.zoom_scale
+        self.zoom_scale = new_zoom
+
+        # 🎯 如果縮放到最小（min_zoom），重置位置為 default
+        if abs(self.zoom_scale - self.min_zoom) < 0.001:
+            self.canvas_offset_x = 0
+            self.canvas_offset_y = 0
+        else:
+            # 否則以游標位置為中心縮放
+            # 計算游標下的圖像座標（縮放前）
+            img_x = (mouse_x - self.canvas_offset_x) / old_zoom
+            img_y = (mouse_y - self.canvas_offset_y) / old_zoom
+
+            # 調整偏移量，保持游標下的圖像點不動
+            self.canvas_offset_x = mouse_x - img_x * self.zoom_scale
+            self.canvas_offset_y = mouse_y - img_y * self.zoom_scale
+
+        # 通知重新繪製
+        if hasattr(self, 'on_zoom_change_callback') and self.on_zoom_change_callback:
+            self.on_zoom_change_callback()
+
+    def on_right_click_start(self, event):
+        """開始右鍵拖動"""
+        # 只在放大模式且已放大（超過 min_zoom）時允許拖動
+        if not self.magnifier_mode_enabled or abs(self.zoom_scale - self.min_zoom) < 0.01:
+            return
+
+        self.is_panning = True
+        self.pan_start_x = event.x
+        self.pan_start_y = event.y
+        self.canvas.config(cursor="fleur")  # 改變游標樣式為移動
+
+    def on_right_click_drag(self, event):
+        """處理右鍵拖動"""
+        if not self.is_panning:
+            return
+
+        # 計算位移
+        dx = event.x - self.pan_start_x
+        dy = event.y - self.pan_start_y
+
+        # 更新偏移
+        self.canvas_offset_x += dx
+        self.canvas_offset_y += dy
+
+        # 限制拖動範圍（可選）
+        self.constrain_pan_boundaries()
+
+        # 更新起始點
+        self.pan_start_x = event.x
+        self.pan_start_y = event.y
+
+        # 通知重新繪製
+        if hasattr(self, 'on_zoom_change_callback') and self.on_zoom_change_callback:
+            self.on_zoom_change_callback()
+
+    def on_right_click_end(self, event):
+        """結束右鍵拖動"""
+        if self.is_panning:
+            self.is_panning = False
+            self.canvas.config(cursor="")  # 恢復游標
+
+    def constrain_pan_boundaries(self):
+        """限制拖動範圍，避免圖像完全拖出視野"""
+        if not self.original_bg_image:
+            return
+
+        canvas_w = self.canvas.winfo_width()
+        canvas_h = self.canvas.winfo_height()
+
+        img_w = self.original_bg_image.width * self.zoom_scale
+        img_h = self.original_bg_image.height * self.zoom_scale
+
+        # 至少保留 100px 可見區域
+        margin = 100
+
+        max_offset_x = canvas_w - margin
+        min_offset_x = -img_w + margin
+
+        max_offset_y = canvas_h - margin
+        min_offset_y = -img_h + margin
+
+        self.canvas_offset_x = max(min_offset_x, min(max_offset_x, self.canvas_offset_x))
+        self.canvas_offset_y = max(min_offset_y, min(max_offset_y, self.canvas_offset_y))
+
+    def get_zoom_transform(self):
+        """獲取當前縮放變換參數（供外部繪製使用）"""
+        return {
+            'zoom_scale': self.zoom_scale,
+            'offset_x': self.canvas_offset_x,
+            'offset_y': self.canvas_offset_y
+        }
+
+    def screen_to_image_coords(self, screen_x, screen_y):
+        """將螢幕座標轉換為圖像座標"""
+        img_x = (screen_x - self.canvas_offset_x) / self.zoom_scale
+        img_y = (screen_y - self.canvas_offset_y) / self.zoom_scale
+        return img_x, img_y
+
+    def image_to_screen_coords(self, img_x, img_y):
+        """將圖像座標轉換為螢幕座標"""
+        screen_x = img_x * self.zoom_scale + self.canvas_offset_x
+        screen_y = img_y * self.zoom_scale + self.canvas_offset_y
+        return screen_x, screen_y
+
+
 # 自定义事件类
 class CustomEvent:
     def __init__(self, x, y, custom_data):
