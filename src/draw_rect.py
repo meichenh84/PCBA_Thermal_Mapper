@@ -167,14 +167,15 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
     # 座標被錯誤地裁剪，造成框線範圍變動的問題
 
     # 🔥 字體縮放：如果有傳入 font_scale 則使用，否則從 imageScale 計算
-    # 在放大模式下，應傳入 font_scale=1.0 保持字體大小不變
+    # 在放大模式下，會傳入 font_scale=1.0 保持字體大小不變
+    # 在正常模式下（font_scale=None），固定使用 imageScale 但確保一致性
     if font_scale is None:
-        font_scale = max(0.7, imageScale)
+        # 🔥 修正：在正常縮放模式下（imageScale < 1.0），固定使用 imageScale
+        # 避免使用 max(0.7, imageScale) 導致不一致
+        font_scale = imageScale
 
-    # 🔥 三角形大小：與字體一樣，在放大模式下應保持不變
-    # 使用 font_scale 來控制三角形大小（而不是 imageScale）
-    triangle_scale = font_scale if font_scale is not None else imageScale
-    size = max(7, int(size * triangle_scale))
+    # 🔥 三角形大小：與字體一樣，使用 font_scale 控制
+    size = max(7, int(size * font_scale))
 
     # 从配置中读取颜色
     config = GlobalConfig()

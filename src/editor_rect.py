@@ -170,12 +170,19 @@ class RectEditor:
     
     def redraw_all_rectangles(self):
         """重新绘制所有矩形框 - 直接缩放现有矩形，不删除重建"""
+        from config import GlobalConfig
+        config = GlobalConfig()
+        name_font_size = config.get("heat_name_font_size", 12)
+        temp_font_size = config.get("heat_temp_font_size", 10)
+        name_font_size_scaled = max(1, int(name_font_size * self.display_scale))
+        temp_font_size_scaled = max(1, int(temp_font_size * self.display_scale))
+
         for rect in self.rectangles:
             rectId = rect.get('rectId')
             nameId = rect.get('nameId')
             triangleId = rect.get('triangleId')
             tempTextId = rect.get('tempTextId')
-            
+
             if rectId:
                 # 计算缩放后的坐标（保持精度）
                 left = rect.get("x1", 0) * self.display_scale
@@ -184,19 +191,21 @@ class RectEditor:
                 bottom = rect.get("y2", 0) * self.display_scale
                 cx = rect.get("cx", 0) * self.display_scale
                 cy = rect.get("cy", 0) * self.display_scale
-                
+
                 # 直接更新现有矩形的坐标
                 self.canvas.coords(rectId, left, top, right, bottom)
-                
-                # 更新名称标签位置（置中于矩形框上方）
+
+                # 更新名称标签位置和字體大小
                 if nameId:
                     name_center_x = (left + right) / 2
                     self.canvas.coords(nameId, name_center_x, top - 15 * self.display_scale)
+                    self.canvas.itemconfig(nameId, font=("Arial", name_font_size_scaled, "bold"))
 
-                # 更新温度文本位置（置中于矩形框内）
+                # 更新温度文本位置和字體大小
                 if tempTextId:
                     self.canvas.coords(tempTextId, cx, cy - 16 * self.display_scale)
-                
+                    self.canvas.itemconfig(tempTextId, font=("Arial", temp_font_size_scaled))
+
                 # 更新三角形位置
                 if triangleId:
                     size = max(7, int(8 * self.display_scale))
@@ -204,7 +213,10 @@ class RectEditor:
                     point2 = (cx - size // 2, cy + size // 2)
                     point3 = (cx + size // 2, cy + size // 2)
                     self.canvas.coords(triangleId, point1[0], point1[1], point2[0], point2[1], point3[0], point3[1])
-        
+
+            # 更新保存的字體縮放比例
+            rect["_font_scale"] = self.display_scale
+
         print(f"✓ 已缩放所有矩形框，显示比例: {self.display_scale:.3f}")
 
     # 画三角形
@@ -485,6 +497,13 @@ class RectEditor:
         newRect["triangleId"] = triangleId
         newRect["tempTextId"] = tempTextId
         newRect["nameId"] = nameId
+
+        # 🔥 保存創建時的字體縮放比例，用於後續重繪時保持一致
+        if font_scale_override is not None:
+            newRect["_font_scale"] = font_scale_override
+        else:
+            newRect["_font_scale"] = scale
+
         self.rectangles.append(newRect)
         return newRect
 
@@ -580,8 +599,9 @@ class RectEditor:
             # 非縮放模式：使用 display_scale
             scale = self.display_scale
             offset = (0, 0)
-            # 非放大模式，字體正常縮放
-            font_scale_override = None
+            # 🔥 重繪時使用保存的原始字體縮放比例，確保轉換前後字體大小一致
+            # 如果沒有保存的 _font_scale，則使用當前的 display_scale
+            font_scale_override = rect.get("_font_scale", None)
 
         # 呼叫 draw_canvas_item 重新繪製
         rectId, triangleId, tempTextId, nameId = draw_canvas_item(

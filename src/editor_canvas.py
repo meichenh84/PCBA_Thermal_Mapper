@@ -351,7 +351,7 @@ class EditorCanvas:
         # 統一的篩選輸入框寬度
         FILTER_INPUT_WIDTH = 35
 
-        # === 第一列：篩選保留標籤 + 名稱篩選輸入框 + 驚嘆號 ===
+        # === 第一列：篩選保留標籤 + 名稱篩選輸入框 + 驚嘆號 + 刪除其他按鈕 ===
         # "篩選保留" 標籤
         filter_label = tk.Label(
             filter_frame,
@@ -391,6 +391,22 @@ class EditorCanvas:
                 "• 單一值：輸入 C 篩選包含 C 的項目\n"
                 "• 多值（OR）：輸入 \"C\",\"HA\" 篩選包含 C 或 HA 的項目\n"
                 "• 格式支援：\"C\",\"HA\" 或 C,HA")
+
+        # "刪除其他" 按鈕（在名稱篩選 ⓘ 圖示後方）
+        self.delete_others_btn = tk.Button(
+            filter_frame,
+            text="刪除其他",
+            font=("Arial", 8),
+            bg=UIStyle.DANGER_RED,
+            fg=UIStyle.WHITE,
+            relief="raised",
+            bd=1,
+            padx=4,
+            pady=0,
+            command=self.on_delete_others,
+            state='disabled'
+        )
+        self.delete_others_btn.grid(row=0, column=3, sticky="w", padx=(2, 5), pady=3)
 
         # === 第二列：描述篩選輸入框 + 驚嘆號 ===
         # 描述篩選輸入框
@@ -607,12 +623,20 @@ class EditorCanvas:
             max_temp = rect.get('max_temp', 0)
             temp_text = f"{max_temp:.1f}°C"
 
-            # 🔥 使用列表索引 i 作為 iid（項目ID），因為它是穩定的識別符
-            # rectId（Canvas 繪圖物件 ID）每次重繪都會改變，不適合作為 iid
-            # 插入項目，使用列表索引作為 iid
-            self.tree.insert('', 'end', iid=str(i),
+            # 🔥 使用原始列表中的索引作為 iid，確保在篩選模式下索引仍然正確
+            # 需要找到這個 rect 在完整列表中的實際索引
+            original_index = i  # 預設使用當前索引
+            if has_filter and hasattr(self, 'editor_rect') and self.editor_rect:
+                # 在篩選模式下，找到此 rect 在完整列表中的索引
+                for idx, full_rect in enumerate(self.editor_rect.rectangles):
+                    if full_rect is rect:  # 使用物件相同性檢查
+                        original_index = idx
+                        break
+
+            # 插入項目，使用原始列表索引作為 iid
+            self.tree.insert('', 'end', iid=str(original_index),
                            values=(rect_name, description, temp_text),
-                           tags=(str(i),))
+                           tags=(str(original_index),))
 
         # 確保所有矩形都是灰色邊框（未選中狀態）
         if hasattr(self, 'set_all_rects_unselected'):
@@ -1849,12 +1873,15 @@ class EditorCanvas:
             transformed_rect["cy"] = rect.get("cy", (rect["y1"] + rect["y2"]) / 2) * zoom_scale + offset_y
 
             # 使用 draw_canvas_item 繪製（它會處理形狀類型）
+            # font_scale 使用基礎顯示縮放比例，使文字大小不隨放大倍率變化
+            base_scale = self.current_display_scale if hasattr(self, 'current_display_scale') else 1.0
             rectId, triangleId, tempTextId, nameId = draw_canvas_item(
                 self.canvas,
                 transformed_rect,
-                1.0,  # display_scale = 1.0，因為我們已經手動縮放了
+                1.0,  # imageScale = 1.0，因為座標已手動縮放
                 (0, 0),  # offset = (0, 0)
-                0  # name_font_scale = 0（使用預設）
+                0,  # imageIndex
+                font_scale=base_scale  # 字體保持基礎縮放比例，不隨放大而變大
             )
 
             # 更新原始 rect 的 Canvas ID
@@ -2559,6 +2586,7 @@ class EditorCanvas:
         # 如果所有篩選條件都為空，返回完整列表
         if not name_filter and not desc_filter and not temp_filter:
             self.filtered_rectangles = all_rects
+            self._update_delete_others_btn_state(has_filter=False)
             return
 
         # 根據篩選條件過濾列表
@@ -2590,6 +2618,66 @@ class EditorCanvas:
             filtered.append(rect)
 
         self.filtered_rectangles = filtered
+        self._update_delete_others_btn_state(has_filter=True, filtered_count=len(filtered), total_count=len(all_rects))
+
+    def _update_delete_others_btn_state(self, has_filter=False, filtered_count=0, total_count=0):
+        """更新「刪除其他」按鈕狀態：有篩選條件且篩選結果少於全部時才啟用"""
+        if not hasattr(self, 'delete_others_btn'):
+            return
+        if has_filter and filtered_count < total_count:
+            self.delete_others_btn.config(state='normal', bg=UIStyle.DANGER_RED, fg=UIStyle.WHITE)
+        else:
+            self.delete_others_btn.config(state='disabled', bg=UIStyle.GRAY, fg=UIStyle.DARK_GRAY)
+
+    def on_delete_others(self):
+        """刪除篩選結果以外的所有元器件（不在目前列表中的資料都移除）"""
+        from tkinter import messagebox
+
+        if not hasattr(self, 'editor_rect') or not self.editor_rect:
+            return
+
+        all_rects = self.editor_rect.rectangles
+        filtered = self.filtered_rectangles if hasattr(self, 'filtered_rectangles') else all_rects
+
+        # 找出要刪除的項目（不在篩選結果中的）
+        filtered_ids = set(r.get('rectId') for r in filtered if r.get('rectId'))
+        to_delete_ids = [r.get('rectId') for r in all_rects if r.get('rectId') and r.get('rectId') not in filtered_ids]
+
+        if not to_delete_ids:
+            return
+
+        # 確認對話框
+        result = messagebox.askyesno(
+            "確認刪除",
+            f"篩選保留 {len(filtered_ids)} 筆，將刪除其餘 {len(to_delete_ids)} 筆元器件。\n\n確定要刪除嗎？",
+            parent=self.dialog
+        )
+        if not result:
+            return
+
+        # 批量刪除
+        self.editor_rect.delete_rectangles_by_ids(to_delete_ids)
+
+        # 從 Treeview 移除
+        for rect_id in to_delete_ids:
+            self.remove_list_item_by_id(rect_id)
+
+        # 清空選中狀態
+        self.selected_rect_id = None
+        self.selected_rect_ids.clear()
+        self.update_delete_button_state()
+
+        # 清空篩選條件並刷新列表
+        self.filter_name_entry.delete(0, tk.END)
+        self.filter_desc_entry.delete(0, tk.END)
+        self.filter_temp_entry.delete(0, tk.END)
+        self.apply_filters()
+        self.update_rect_list()
+
+        # 更新標題數量
+        self.update_title_count()
+
+        print(f"✓ 刪除其他：已刪除 {len(to_delete_ids)} 筆，保留 {len(filtered_ids)} 筆")
 
     def _parse_multi_values(self, input_str):
         """
