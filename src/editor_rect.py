@@ -469,13 +469,17 @@ class RectEditor:
             # 縮放模式：使用 zoom_scale 和 offset
             scale = self.zoom_scale
             offset = (self.canvas_offset_x, self.canvas_offset_y)
+            # 🔥 放大模式下，字體大小保持不變（不隨著縮放而放大）
+            font_scale_override = 1.0
         else:
             # 非縮放模式：使用 display_scale
             scale = self.display_scale
             offset = (0, 0)
+            # 非放大模式，字體正常縮放
+            font_scale_override = None
 
         rectId, triangleId, tempTextId, nameId = draw_canvas_item(
-            self.canvas, newRect, scale, offset, 0
+            self.canvas, newRect, scale, offset, 0, font_scale=font_scale_override
         )
         newRect["rectId"] = rectId
         newRect["triangleId"] = triangleId
@@ -570,14 +574,18 @@ class RectEditor:
             # 縮放模式：使用 zoom_scale 和 offset
             scale = self.zoom_scale
             offset = (self.canvas_offset_x, self.canvas_offset_y)
+            # 🔥 放大模式下，字體大小保持不變（不隨著縮放而放大）
+            font_scale_override = 1.0
         else:
             # 非縮放模式：使用 display_scale
             scale = self.display_scale
             offset = (0, 0)
+            # 非放大模式，字體正常縮放
+            font_scale_override = None
 
         # 呼叫 draw_canvas_item 重新繪製
         rectId, triangleId, tempTextId, nameId = draw_canvas_item(
-            self.canvas, rect, scale, offset, 0
+            self.canvas, rect, scale, offset, 0, font_scale=font_scale_override
         )
 
         # 更新 ID

@@ -606,12 +606,13 @@ class EditorCanvas:
             description = rect.get('description', '')
             max_temp = rect.get('max_temp', 0)
             temp_text = f"{max_temp:.1f}°C"
-            rect_id = rect.get('rectId', i)
 
-            # 插入項目，使用 rect_id 作為 iid（項目ID）
-            self.tree.insert('', 'end', iid=str(rect_id),
+            # 🔥 使用列表索引 i 作為 iid（項目ID），因為它是穩定的識別符
+            # rectId（Canvas 繪圖物件 ID）每次重繪都會改變，不適合作為 iid
+            # 插入項目，使用列表索引作為 iid
+            self.tree.insert('', 'end', iid=str(i),
                            values=(rect_name, description, temp_text),
-                           tags=(str(rect_id),))
+                           tags=(str(i),))
 
         # 確保所有矩形都是灰色邊框（未選中狀態）
         if hasattr(self, 'set_all_rects_unselected'):
@@ -635,20 +636,30 @@ class EditorCanvas:
         if not selection:
             return
 
-        # 獲取選中的項目ID（即 rect_id）
-        selected_ids = [int(iid) for iid in selection]
+        # 🔥 獲取選中的項目ID（現在是列表索引）
+        selected_indices = [int(iid) for iid in selection]
+
+        # 🔥 將列表索引轉換為 Canvas rectId
+        selected_rect_ids = []
+        if hasattr(self, 'editor_rect') and self.editor_rect:
+            for index in selected_indices:
+                if 0 <= index < len(self.editor_rect.rectangles):
+                    rect = self.editor_rect.rectangles[index]
+                    rect_id = rect.get('rectId')
+                    if rect_id:
+                        selected_rect_ids.append(rect_id)
 
         # 更新選中狀態
-        self.selected_rect_ids = set(selected_ids)
+        self.selected_rect_ids = set(selected_rect_ids)
 
-        if len(selected_ids) == 1:
+        if len(selected_rect_ids) == 1:
             # 單選
-            self.selected_rect_id = selected_ids[0]
+            self.selected_rect_id = selected_rect_ids[0]
             self.highlight_rect_in_canvas(self.selected_rect_id)
-        elif len(selected_ids) > 1:
+        elif len(selected_rect_ids) > 1:
             # 多選
             self.selected_rect_id = None
-            self.highlight_multiple_rects_in_canvas(selected_ids)
+            self.highlight_multiple_rects_in_canvas(selected_rect_ids)
 
         # 更新按鈕狀態
         if hasattr(self, 'update_delete_button_state'):
@@ -758,8 +769,11 @@ class EditorCanvas:
                 except:
                     pass
 
+    # 🗑️ 已廢棄：此方法使用舊的 rect_list_items API 和自定義 Frame/Label，已被 Treeview 版本取代
+    # 新版本直接在 update_rect_list() 中使用 tree.insert() 創建項目
     def create_list_item(self, rect, index):
-        """创建单个列表项"""
+        """创建单个列表项（已廢棄，僅保留以防舊代碼引用）"""
+        return  # 直接返回，不執行任何操作
         # 创建列表项框架
         item_frame = tk.Frame(self.scrollable_frame, bg=UIStyle.WHITE, relief=tk.SOLID, bd=1)
         item_frame.pack(fill=tk.X, padx=2, pady=1)
@@ -861,175 +875,181 @@ class EditorCanvas:
         }
         self.rect_list_items.append(list_item)
 
-    def select_rect_item(self, rect_id, item_frame):
-        """选中列表项并高亮对应的矩形框"""
-        print(f"🔍🔍🔍 select_rect_item被调用: rect_id={rect_id}")
-        # 清除之前的选择（列表与canvas）
-        self.clear_all_selections()
-        
-        # 设置新的选择
-        self.selected_rect_id = rect_id
-        print(f"🔍🔍🔍 设置selected_rect_id = {self.selected_rect_id}")
-        
-        # 从配置中读取选中颜色
-        from config import GlobalConfig
-        config = GlobalConfig()
-        selected_color = config.get("heat_selected_color", "#4A90E2")
-        
-        # 高亮当前选中的列表项
-        item_frame.config(bg=selected_color)
-        
-        # 更新删除按钮状态
-        self.update_delete_button_state()
-        
-        # 确保对话框可以接收键盘事件
-        self.dialog.focus_set()
-        for child in item_frame.winfo_children():
-            if isinstance(child, (tk.Label, tk.Entry)):
-                child.config(bg=selected_color, fg='white')
-            elif isinstance(child, tk.Button):
-                child.config(bg=selected_color, fg='white', activebackground=selected_color, activeforeground='white')
-        
-        # 确保焦点回到对话框，以便接收Delete键事件
-        self.dialog.after(10, lambda: self.dialog.focus_set())
-        
-        # 高亮canvas中的矩形框，其他清空
-        self.highlight_rect_in_canvas(rect_id)
-        # 确保选中项滚动到可见区域
-        # 不自动滚动到顶部，保持当前滚动位置，避免跳动
+    # 🗑️ 已廢棄：此方法使用舊的 rect_list_items API，已被 Treeview 版本取代
+    # def select_rect_item(self, rect_id, item_frame):
+    #     """选中列表项并高亮对应的矩形框"""
+    #     print(f"🔍🔍🔍 select_rect_item被调用: rect_id={rect_id}")
+    #     # 清除之前的选择（列表与canvas）
+    #     self.clear_all_selections()
+    #
+    #     # 设置新的选择
+    #     self.selected_rect_id = rect_id
+    #     print(f"🔍🔍🔍 设置selected_rect_id = {self.selected_rect_id}")
+    #
+    #     # 从配置中读取选中颜色
+    #     from config import GlobalConfig
+    #     config = GlobalConfig()
+    #     selected_color = config.get("heat_selected_color", "#4A90E2")
+    #
+    #     # 高亮当前选中的列表项
+    #     item_frame.config(bg=selected_color)
+    #
+    #     # 更新删除按钮状态
+    #     self.update_delete_button_state()
+    #
+    #     # 确保对话框可以接收键盘事件
+    #     self.dialog.focus_set()
+    #     for child in item_frame.winfo_children():
+    #         if isinstance(child, (tk.Label, tk.Entry)):
+    #             child.config(bg=selected_color, fg='white')
+    #         elif isinstance(child, tk.Button):
+    #             child.config(bg=selected_color, fg='white', activebackground=selected_color, activeforeground='white')
+    #
+    #     # 确保焦点回到对话框，以便接收Delete键事件
+    #     self.dialog.after(10, lambda: self.dialog.focus_set())
+    #
+    #     # 高亮canvas中的矩形框，其他清空
+    #     self.highlight_rect_in_canvas(rect_id)
+    #     # 确保选中项滚动到可见区域
+    #     # 不自动滚动到顶部，保持当前滚动位置，避免跳动
+    pass  # 佔位符，防止語法錯誤
 
-    def select_range(self, start_index, end_index):
-        """Shift + 點擊：選擇範圍內的所有項目（包含頭尾）"""
-        print(f"📋 範圍選擇: 從索引 {start_index} 到 {end_index}")
+    # 🗑️ 已廢棄：此方法使用舊的 rect_list_items API，已被 Treeview 版本取代
+    # def select_range(self, start_index, end_index):
+    #     """Shift + 點擊：選擇範圍內的所有項目（包含頭尾）"""
+    #     print(f"📋 範圍選擇: 從索引 {start_index} 到 {end_index}")
+    #
+    #     # 確保索引順序正確（小 -> 大）
+    #     if start_index > end_index:
+    #         start_index, end_index = end_index, start_index
+    #
+    #     # 清除之前的選擇
+    #     self.clear_all_selections()
+    #
+    #     # 選擇範圍內的所有項目
+    #     selected_rect_ids = []
+    #     for i in range(start_index, end_index + 1):
+    #         if i < len(self.rect_list_items):
+    #             list_item = self.rect_list_items[i]
+    #             rect_id = list_item['rect_id']
+    #             selected_rect_ids.append(rect_id)
+    #
+    #     # 高亮所有選中的項目
+    #     self.select_multiple_rect_items(selected_rect_ids)
+    #
+    #     # 更新最後選中的索引
+    #     self.last_selected_index = end_index
+    pass  # 佔位符
 
-        # 確保索引順序正確（小 -> 大）
-        if start_index > end_index:
-            start_index, end_index = end_index, start_index
+    # 🗑️ 已廢棄：此方法使用舊的 rect_list_items API，已被 Treeview 版本取代
+    # def toggle_select_item(self, rect_id, index):
+    #     """Ctrl + 點擊：跳選（toggle 該項目的選中狀態）"""
+    #     print(f"🔘 跳選: rect_id={rect_id}, index={index}")
+    #
+    #     # 從配置中讀取選中顏色
+    #     from config import GlobalConfig
+    #     config = GlobalConfig()
+    #     selected_color = config.get("heat_selected_color", "#4A90E2")
+    #
+    #     # 檢查該項目是否已選中
+    #     if rect_id in self.selected_rect_ids:
+    #         # 已選中 -> 取消選中
+    #         self.selected_rect_ids.remove(rect_id)
+    #         print(f"  ➖ 取消選中 {rect_id}")
+    #     else:
+    #         # 未選中 -> 添加選中
+    #         self.selected_rect_ids.add(rect_id)
+    #         print(f"  ➕ 添加選中 {rect_id}")
+    #
+    #     # 更新最後選中的索引
+    #     self.last_selected_index = index
+    #
+    #     # 更新列表項的視覺效果
+    #     for list_item in self.rect_list_items:
+    #         frame = list_item['frame']
+    #         item_rect_id = list_item['rect_id']
+    #
+    #         if item_rect_id in self.selected_rect_ids:
+    #             # 選中狀態：藍色背景
+    #             frame.config(bg=selected_color)
+    #             for child in frame.winfo_children():
+    #                 if isinstance(child, (tk.Label, tk.Entry)):
+    #                     child.config(bg=selected_color, fg='white')
+    #                 elif isinstance(child, tk.Button):
+    #                     child.config(bg=selected_color, fg='white', activebackground=selected_color, activeforeground='white')
+    #         else:
+    #             # 未選中狀態：白色背景
+    #             frame.config(bg='white')
+    #             for child in frame.winfo_children():
+    #                 if isinstance(child, (tk.Label, tk.Entry)):
+    #                     child.config(bg='white', fg='black')
+    #                 elif isinstance(child, tk.Button):
+    #                     child.config(bg='#f0f0f0', fg='black', activebackground='#e0e0e0', activeforeground='black')
+    #
+    #     # 更新 canvas 上的高亮效果
+    #     if len(self.selected_rect_ids) > 0:
+    #         self.highlight_multiple_rects_in_canvas(list(self.selected_rect_ids))
+    #     else:
+    #         # 如果沒有選中任何項目，清除所有高亮
+    #         self.set_all_rects_unselected()
+    #         if hasattr(self, 'editor_rect') and self.editor_rect:
+    #             self.editor_rect.delete_anchors()
+    #
+    #     # 更新刪除按鈕狀態
+    #     self.update_delete_button_state()
+    #
+    #     # 確保焦點回到對話框
+    #     self.dialog.focus_set()
+    pass  # 佔位符
 
-        # 清除之前的選擇
-        self.clear_all_selections()
-
-        # 選擇範圍內的所有項目
-        selected_rect_ids = []
-        for i in range(start_index, end_index + 1):
-            if i < len(self.rect_list_items):
-                list_item = self.rect_list_items[i]
-                rect_id = list_item['rect_id']
-                selected_rect_ids.append(rect_id)
-
-        # 高亮所有選中的項目
-        self.select_multiple_rect_items(selected_rect_ids)
-
-        # 更新最後選中的索引
-        self.last_selected_index = end_index
-
-    def toggle_select_item(self, rect_id, index):
-        """Ctrl + 點擊：跳選（toggle 該項目的選中狀態）"""
-        print(f"🔘 跳選: rect_id={rect_id}, index={index}")
-
-        # 從配置中讀取選中顏色
-        from config import GlobalConfig
-        config = GlobalConfig()
-        selected_color = config.get("heat_selected_color", "#4A90E2")
-
-        # 檢查該項目是否已選中
-        if rect_id in self.selected_rect_ids:
-            # 已選中 -> 取消選中
-            self.selected_rect_ids.remove(rect_id)
-            print(f"  ➖ 取消選中 {rect_id}")
-        else:
-            # 未選中 -> 添加選中
-            self.selected_rect_ids.add(rect_id)
-            print(f"  ➕ 添加選中 {rect_id}")
-
-        # 更新最後選中的索引
-        self.last_selected_index = index
-
-        # 更新列表項的視覺效果
-        for list_item in self.rect_list_items:
-            frame = list_item['frame']
-            item_rect_id = list_item['rect_id']
-
-            if item_rect_id in self.selected_rect_ids:
-                # 選中狀態：藍色背景
-                frame.config(bg=selected_color)
-                for child in frame.winfo_children():
-                    if isinstance(child, (tk.Label, tk.Entry)):
-                        child.config(bg=selected_color, fg='white')
-                    elif isinstance(child, tk.Button):
-                        child.config(bg=selected_color, fg='white', activebackground=selected_color, activeforeground='white')
-            else:
-                # 未選中狀態：白色背景
-                frame.config(bg='white')
-                for child in frame.winfo_children():
-                    if isinstance(child, (tk.Label, tk.Entry)):
-                        child.config(bg='white', fg='black')
-                    elif isinstance(child, tk.Button):
-                        child.config(bg='#f0f0f0', fg='black', activebackground='#e0e0e0', activeforeground='black')
-
-        # 更新 canvas 上的高亮效果
-        if len(self.selected_rect_ids) > 0:
-            self.highlight_multiple_rects_in_canvas(list(self.selected_rect_ids))
-        else:
-            # 如果沒有選中任何項目，清除所有高亮
-            self.set_all_rects_unselected()
-            if hasattr(self, 'editor_rect') and self.editor_rect:
-                self.editor_rect.delete_anchors()
-
-        # 更新刪除按鈕狀態
-        self.update_delete_button_state()
-
-        # 確保焦點回到對話框
-        self.dialog.focus_set()
-
-    def select_multiple_rect_items(self, rect_ids):
-        """選中多個列表項並高亮對應的矩形框"""
-        print(f"🔍 多選模式：選中 {len(rect_ids)} 個項目")
-
-        # 清除之前的選擇
-        self.clear_list_selections()
-
-        # 更新選中的 ID 集合
-        self.selected_rect_ids = set(rect_ids)
-
-        # 從配置中讀取選中顏色
-        from config import GlobalConfig
-        config = GlobalConfig()
-        selected_color = config.get("heat_selected_color", "#4A90E2")
-
-        # 高亮所有選中的列表項
-        for list_item in self.rect_list_items:
-            if list_item['rect_id'] in rect_ids:
-                frame = list_item['frame']
-                frame.config(bg=selected_color)
-
-                for child in frame.winfo_children():
-                    if isinstance(child, (tk.Label, tk.Entry)):
-                        child.config(bg=selected_color, fg='white')
-                    elif isinstance(child, tk.Button):
-                        child.config(bg=selected_color, fg='white', activebackground=selected_color, activeforeground='white')
-
-        # 高亮 canvas 中的所有矩形框
-        self.highlight_multiple_rects_in_canvas(rect_ids)
-
-        # 更新刪除按鈕狀態
-        self.update_delete_button_state()
-
-        # 確保焦點回到對話框
-        self.dialog.focus_set()
+    # 🗑️ 已廢棄：此方法使用舊的 rect_list_items API，已被 handle_multi_select (Treeview版本) 取代
+    # def select_multiple_rect_items(self, rect_ids):
+    #     """選中多個列表項並高亮對應的矩形框"""
+    #     print(f"🔍 多選模式：選中 {len(rect_ids)} 個項目")
+    #
+    #     # 清除之前的選擇
+    #     self.clear_list_selections()
+    #
+    #     # 更新選中的 ID 集合
+    #     self.selected_rect_ids = set(rect_ids)
+    #
+    #     # 從配置中讀取選中顏色
+    #     from config import GlobalConfig
+    #     config = GlobalConfig()
+    #     selected_color = config.get("heat_selected_color", "#4A90E2")
+    #
+    #     # 高亮所有選中的列表項
+    #     for list_item in self.rect_list_items:
+    #         if list_item['rect_id'] in rect_ids:
+    #             frame = list_item['frame']
+    #             frame.config(bg=selected_color)
+    #
+    #             for child in frame.winfo_children():
+    #                 if isinstance(child, (tk.Label, tk.Entry)):
+    #                     child.config(bg=selected_color, fg='white')
+    #                 elif isinstance(child, tk.Button):
+    #                     child.config(bg=selected_color, fg='white', activebackground=selected_color, activeforeground='white')
+    #
+    #     # 高亮 canvas 中的所有矩形框
+    #     self.highlight_multiple_rects_in_canvas(rect_ids)
+    #
+    #     # 更新刪除按鈕狀態
+    #     self.update_delete_button_state()
+    #
+    #     # 確保焦點回到對話框
+    #     self.dialog.focus_set()
+    pass  # 佔位符
 
     def clear_list_selections(self):
-        """只清除列表项的选中状态"""
-        for list_item in self.rect_list_items:
-            frame = list_item['frame']
-            frame.config(bg='white')
-            for child in frame.winfo_children():
-                if isinstance(child, (tk.Label, tk.Entry)):
-                    child.config(bg='white', fg='black')
-                elif isinstance(child, tk.Button):
-                    child.config(bg='#f0f0f0', fg='black', activebackground='#e0e0e0', activeforeground='black')
-        
-        # 清除选中状态并更新删除按钮（支持单选和多选）
+        """只清除列表项的選中狀態（使用 Treeview）"""
+        # 🔥 修復：使用 Treeview API 清除選取
+        if hasattr(self, 'tree') and self.tree:
+            try:
+                self.tree.selection_remove(self.tree.selection())
+            except Exception as e:
+                print(f"✗ 清除 Treeview 選取時出錯: {e}")
+
+        # 清除選中狀態並更新刪除按鈕（支持單選和多選）
         self.selected_rect_id = None
         self.selected_rect_ids.clear()
         self.update_delete_button_state()
@@ -1168,30 +1188,33 @@ class EditorCanvas:
         print(f"✓ 已高亮 {len(rect_ids)} 個矩形框")
 
     def update_selected_item(self, rect_id):
-        """只更新选中的列表项，不刷新整个列表"""
-        if hasattr(self, 'editor_rect') and self.editor_rect:
-            # 找到对应的矩形数据
-            target_rect = None
-            for rect in self.editor_rect.rectangles:
-                if rect.get('rectId') == rect_id:
-                    target_rect = rect
-                    break
-            
-            if target_rect:
-                # 找到对应的列表项并更新
-                for list_item in self.rect_list_items:
-                    if list_item['rect_id'] == rect_id:
-                        # 更新名称
-                        new_name = target_rect.get('name', 'Unknown')
-                        list_item['name_label'].config(text=new_name)
-                        
-                        # 更新温度显示
-                        new_temp = target_rect.get('max_temp', 0)
-                        temp_text = f"{new_temp:.1f}°C"
-                        list_item['temp_label'].config(text=temp_text)
-                        
-                        print(f"✓ 已更新列表项 {rect_id}: 名称={new_name}, 温度={temp_text}")
-                        break
+        """只更新选中的列表项，不刷新整个列表（使用 Treeview API）"""
+        if not hasattr(self, 'tree') or not self.tree:
+            return
+
+        if not hasattr(self, 'editor_rect') or not self.editor_rect:
+            return
+
+        # 🔥 將 Canvas rectId 轉換為列表索引並獲取矩形數據
+        list_index = None
+        target_rect = None
+        for i, rect in enumerate(self.editor_rect.rectangles):
+            if rect.get('rectId') == rect_id:
+                list_index = i
+                target_rect = rect
+                break
+
+        if list_index is not None and target_rect:
+            item_id = str(list_index)
+            if self.tree.exists(item_id):
+                # 更新名稱和溫度
+                new_name = target_rect.get('name', 'Unknown')
+                description = target_rect.get('description', '')
+                new_temp = target_rect.get('max_temp', 0)
+                temp_text = f"{new_temp:.1f}°C"
+
+                self.tree.item(item_id, values=(new_name, description, temp_text))
+                print(f"✓ 已更新列表項 index={list_index}: 名稱={new_name}, 溫度={temp_text}")
 
     def update_rect_name(self, rect_id, new_name):
         """更新矩形框名称"""
@@ -1233,49 +1256,62 @@ class EditorCanvas:
         self.update_rect_name(rect_id, name)
 
     def update_rect_temp_display(self, rect_id):
-        """更新特定矩形框的温度显示"""
-        # 查找对应的列表项
-        for list_item in self.rect_list_items:
-            if list_item['rect_id'] == rect_id:
-                # 获取最新的温度数据
-                if hasattr(self, 'editor_rect') and self.editor_rect:
-                    for rect in self.editor_rect.rectangles:
-                        if rect.get('rectId') == rect_id:
-                            new_temp = rect.get('max_temp', 0)
-                            # 更新温度标签显示
-                            temp_text = f"{new_temp:.1f}°C"
-                            list_item['temp_label'].config(text=temp_text)
-                            break
+        """更新特定矩形框的温度显示（使用 Treeview API）"""
+        # 🔥 修復：使用 Treeview API 更新溫度顯示
+        if not hasattr(self, 'tree') or not self.tree:
+            return
+
+        if not hasattr(self, 'editor_rect') or not self.editor_rect:
+            return
+
+        # 🔥 將 Canvas rectId 轉換為列表索引
+        list_index = None
+        new_temp = None
+        for i, rect in enumerate(self.editor_rect.rectangles):
+            if rect.get('rectId') == rect_id:
+                list_index = i
+                new_temp = rect.get('max_temp', 0)
                 break
 
+        if list_index is not None and new_temp is not None:
+            item_id = str(list_index)
+            if self.tree.exists(item_id):
+                # 獲取當前的項目值
+                current_values = self.tree.item(item_id, 'values')
+                if current_values and len(current_values) >= 3:
+                    # 更新溫度顯示（保持名稱和描述不變）
+                    name = current_values[0]
+                    description = current_values[1]
+                    temp_text = f"{new_temp:.1f}°C"
+                    self.tree.item(item_id, values=(name, description, temp_text))
+                    print(f"✓ 已更新列表溫度顯示，index={list_index}, temp={temp_text}")
+            else:
+                print(f"⚠️ Treeview 中找不到 index={list_index} 的項目")
+
     def scroll_to_item(self, rect_id):
-        """滚动列表使指定的item可见"""
+        """滚动列表使指定的item可见（使用 Treeview API）"""
+        if not hasattr(self, 'tree') or not self.tree:
+            return
+
+        if not hasattr(self, 'editor_rect') or not self.editor_rect:
+            return
+
         try:
-            # 找到对应的列表项
-            target_item = None
-            item_index = -1
-            for i, list_item in enumerate(self.rect_list_items):
-                if list_item['rect_id'] == rect_id:
-                    target_item = list_item
-                    item_index = i
+            # 🔥 將 Canvas rectId 轉換為列表索引
+            list_index = None
+            for i, rect in enumerate(self.editor_rect.rectangles):
+                if rect.get('rectId') == rect_id:
+                    list_index = i
                     break
-            
-            if target_item and item_index >= 0:
-                total_items = len(self.rect_list_items)
-                if total_items > 0:
-                    # 对于新增的项（通常在最底部），直接滚动到底部
-                    if item_index >= total_items - 3:  # 最后3项，直接滚动到底部
-                        self.list_canvas.yview_moveto(1.0)
-                        print(f"✓ 新增项在底部，直接滚动到底部: {item_index}/{total_items}")
-                    else:
-                        # 计算相对位置 (0.0 到 1.0)
-                        relative_pos = item_index / max(1, total_items - 1)
-                        # 滚动到该位置，稍微向上偏移以确保可见
-                        scroll_pos = max(0.0, relative_pos - 0.1)
-                        self.list_canvas.yview_moveto(scroll_pos)
-                        print(f"✓ 已滚动到item {rect_id}，位置: {item_index}/{total_items}, 滚动位置: {scroll_pos:.2f}")
+
+            if list_index is not None:
+                item_id = str(list_index)
+                if self.tree.exists(item_id):
+                    # 使用 Treeview 的 see() 方法滾動到項目
+                    self.tree.see(item_id)
+                    print(f"✓ 已滾動到 item index={list_index}")
         except Exception as e:
-            print(f"滚动到item错误: {e}")
+            print(f"✗ 滾動到 item 錯誤: {e}")
 
     def on_rect_change(self, rect_id=None, change_type=None):
         """矩形框变化时的回调函数"""
@@ -1284,36 +1320,47 @@ class EditorCanvas:
             self.update_rect_temp_display(rect_id)
         elif change_type == "select":
             # Canvas选中某个矩形 -> 列表也高亮对应项，并滚动到可见位置
-            # 只清除列表选中状态，不清除canvas锚点
-            self.clear_list_selections()
             self.selected_rect_id = rect_id
-            
+
             # 更新删除按钮状态
             self.update_delete_button_state()
-            
+
             # 确保对话框可以接收键盘事件
             self.dialog.focus_set()
-            
-            # 从配置中读取选中颜色
-            from config import GlobalConfig
-            config = GlobalConfig()
-            selected_color = config.get("heat_selected_color", "#4A90E2")
-            
-            # 高亮对应的列表项
-            for list_item in self.rect_list_items:
-                if list_item['rect_id'] == rect_id:
-                    list_item['frame'].config(bg=selected_color)
-                    for child in list_item['frame'].winfo_children():
-                        if isinstance(child, (tk.Label, tk.Entry)):
-                            child.config(bg=selected_color, fg='white')
-                    # 自动滚动到选中的item
-                    self.scroll_to_item(rect_id)
-                    break
-            
+
+            # 🔥 修復：使用 Treeview API 選取項目
+            if hasattr(self, 'tree') and self.tree and hasattr(self, 'editor_rect'):
+                try:
+                    # 清除之前的選取
+                    self.tree.selection_remove(self.tree.selection())
+
+                    # 🔥 將 Canvas rectId 轉換為列表索引
+                    # rect_id 是 Canvas 繪圖物件的 ID，需要找到對應的矩形在列表中的索引
+                    list_index = None
+                    for i, rect in enumerate(self.editor_rect.rectangles):
+                        if rect.get('rectId') == rect_id:
+                            list_index = i
+                            break
+
+                    if list_index is not None:
+                        item_id = str(list_index)
+                        if self.tree.exists(item_id):
+                            self.tree.selection_set(item_id)
+                            self.tree.see(item_id)  # 滾動到可見位置
+                            print(f"✓ 列表已選取元器件，rect_id={rect_id}, list_index={list_index}")
+                        else:
+                            print(f"⚠️ 列表中找不到 index={list_index} 的項目")
+                    else:
+                        print(f"⚠️ 無法在 rectangles 列表中找到 rectId={rect_id}")
+                except Exception as e:
+                    print(f"✗ 選取列表項目時出錯: {e}")
+
             # 设置canvas选中状态（避免重复清除操作）
             self.set_canvas_selection_only(rect_id)
             # 更新删除按钮状态
             self.update_delete_button_state()
+            # 更新形狀轉換按鈕狀態
+            self.update_shape_buttons_state()
         elif change_type == "clear_select":
             self.clear_all_selections()
             # 更新删除按钮状态
@@ -1343,45 +1390,51 @@ class EditorCanvas:
             self.update_rect_list()
 
     def handle_multi_select(self, rect_ids):
-        """处理多选事件"""
+        """處理多選事件（使用 Treeview）"""
         if not rect_ids:
             return
-        
-        # 清除之前的选择
+
+        # 清除之前的選擇
         self.clear_list_selections()
-        
-        # 设置多选状态
+
+        # 設置多選狀態
         self.selected_rect_ids = set(rect_ids)
-        self.selected_rect_id = None  # 多选时清空单选ID
-        
-        # 从配置中读取选中颜色
+        self.selected_rect_id = None  # 多選時清空單選ID
+
+        # 從配置中讀取選中顏色
         from config import GlobalConfig
         config = GlobalConfig()
         selected_color = config.get("heat_selected_color", "#4A90E2")
-        
-        # 高亮所有选中的列表项
-        for list_item in self.rect_list_items:
-            if list_item['rect_id'] in self.selected_rect_ids:
-                list_item['frame'].config(bg=selected_color)
-                for child in list_item['frame'].winfo_children():
-                    if isinstance(child, (tk.Label, tk.Entry)):
-                        child.config(bg=selected_color, fg='white')
-                    elif isinstance(child, tk.Button):
-                        child.config(bg=selected_color, fg='white', activebackground=selected_color, activeforeground='white')
-        
+
+        # 🔥 修復：使用 Treeview API 高亮所有選中的列表項
+        # rect_ids 是 Canvas rectId 列表，需要轉換為列表索引
+        if hasattr(self, 'tree') and self.tree and hasattr(self, 'editor_rect'):
+            try:
+                for rect_id in self.selected_rect_ids:
+                    # 🔥 將 rectId 轉換為列表索引
+                    for i, rect in enumerate(self.editor_rect.rectangles):
+                        if rect.get('rectId') == rect_id:
+                            item_id = str(i)
+                            if self.tree.exists(item_id):
+                                self.tree.selection_add(item_id)
+                            break
+                print(f"✓ Treeview 已選取 {len(self.selected_rect_ids)} 個項目")
+            except Exception as e:
+                print(f"✗ Treeview 多選時出錯: {e}")
+
         # 高亮canvas中的矩形框
         if hasattr(self, 'editor_rect') and self.editor_rect:
             self.set_all_rects_unselected()
             for rect_id in self.selected_rect_ids:
                 self.canvas.itemconfig(rect_id, outline=selected_color, width=2)
-        
-        # 更新删除按钮状态
+
+        # 更新刪除按鈕狀態
         self.update_delete_button_state()
-        
-        # 确保对话框可以接收键盘事件
+
+        # 確保對話框可以接收鍵盤事件
         self.dialog.focus_set()
-        
-        print(f"✓ 多选高亮了 {len(self.selected_rect_ids)} 个矩形框")
+
+        print(f"✓ 多選高亮了 {len(self.selected_rect_ids)} 個矩形框")
     
     def handle_multi_delete(self, rect_ids):
         """处理批量删除事件"""
@@ -1845,6 +1898,15 @@ class EditorCanvas:
             messagebox.showwarning("提示", "請先選擇要轉換的元器件")
             return
 
+        # 🔥 在轉換前記錄列表索引（而不是 rectId）
+        # 因為轉換過程會重新繪製，rectId 會改變，但列表索引不變
+        selected_indices = []
+        for rect_id in selected_ids:
+            for i, rect in enumerate(self.editor_rect.rectangles):
+                if rect.get('rectId') == rect_id:
+                    selected_indices.append(i)
+                    break
+
         # 執行批次轉換
         converted_count = self.editor_rect.convert_shapes_batch(
             selected_ids, target_shape
@@ -1853,9 +1915,25 @@ class EditorCanvas:
         # 更新列表顯示
         self.update_rect_list()
 
-        # 觸發變更回調
-        if self.editor_rect.on_rect_change_callback:
-            self.editor_rect.on_rect_change_callback()
+        # 🔥 修復：恢復選取狀態（使用轉換前記錄的列表索引）
+        if hasattr(self, 'tree') and self.tree and selected_indices:
+            try:
+                # 如果是多選
+                if len(selected_indices) > 1:
+                    for index in selected_indices:
+                        item_id = str(index)
+                        if self.tree.exists(item_id):
+                            self.tree.selection_add(item_id)
+                    print(f"✓ 形狀轉換後恢復多選高亮，共 {len(selected_indices)} 個項目")
+                # 如果是單選
+                elif len(selected_indices) == 1:
+                    item_id = str(selected_indices[0])
+                    if self.tree.exists(item_id):
+                        self.tree.selection_set(item_id)
+                        self.tree.see(item_id)
+                    print(f"✓ 形狀轉換後恢復單選高亮，index={selected_indices[0]}")
+            except Exception as e:
+                print(f"✗ 恢復選取狀態時出錯: {e}")
 
         # 靜默完成，不顯示對話框（形狀改變即可）
 
@@ -2046,22 +2124,22 @@ class EditorCanvas:
             self.selected_rect_ids.clear()
             self.selected_rect_id = merged_rect_id
             
-            # 从配置中读取选中颜色
-            from config import GlobalConfig
-            config = GlobalConfig()
-            selected_color = config.get("heat_selected_color", "#4A90E2")
-            
-            # 高亮列表中的新矩形框
-            for list_item in self.rect_list_items:
-                if list_item['rect_id'] == merged_rect_id:
-                    list_item['frame'].config(bg=selected_color)
-                    for child in list_item['frame'].winfo_children():
-                        if isinstance(child, (tk.Label, tk.Entry)):
-                            child.config(bg=selected_color, fg='white')
-                    # 滚动到该项
-                    self.scroll_to_item(merged_rect_id)
+            # 🔥 使用 Treeview API 高亮列表中的新矩形框
+            # 將 Canvas rectId 轉換為列表索引
+            list_index = None
+            for i, rect in enumerate(self.editor_rect.rectangles):
+                if rect.get('rectId') == merged_rect_id:
+                    list_index = i
                     break
-            
+
+            if list_index is not None and hasattr(self, 'tree') and self.tree:
+                item_id = str(list_index)
+                if self.tree.exists(item_id):
+                    # 選取並滾動到該項目
+                    self.tree.selection_set(item_id)
+                    self.tree.see(item_id)
+                    print(f"✓ 合併後已選取列表項 index={list_index}")
+
             # 高亮canvas中的矩形框并创建锚点
             self.highlight_rect_in_canvas(merged_rect_id)
             
@@ -2620,43 +2698,24 @@ class EditorCanvas:
             self.filter_rect_list("")
     
     def filter_rect_list(self, search_text):
-        """根据搜索文本过滤矩形框列表"""
-        if not hasattr(self, 'rect_list_items'):
-            return
-            
-        # 获取所有矩形框数据
-        rectangles = []
-        if hasattr(self, 'editor_rect') and self.editor_rect:
-            rectangles = self.editor_rect.rectangles
-        
-        # 如果没有搜索文本，显示所有项目
-        if not search_text:
-            for list_item in self.rect_list_items:
-                list_item['frame'].pack(fill=tk.X, padx=2, pady=1)
+        """根据搜索文本过滤矩形框列表（使用 Treeview API）"""
+        # 🔥 修復：使用新的 Treeview 篩選邏輯
+        # 將舊的單一搜索框的文本設置到新的名稱篩選框中
+        if hasattr(self, 'filter_name_entry'):
+            # 保存當前的其他篩選條件
+            current_desc = self.filter_desc_entry.get() if hasattr(self, 'filter_desc_entry') else ""
+            current_temp = self.filter_temp_entry.get() if hasattr(self, 'filter_temp_entry') else ""
+
+            # 設置名稱篩選
+            self.filter_name_entry.delete(0, tk.END)
+            if search_text:
+                self.filter_name_entry.insert(0, search_text)
+
+            # 調用新的篩選邏輯
+            self.apply_filter()
         else:
-            # 根据搜索文本过滤
-            for list_item in self.rect_list_items:
-                rect_id = list_item['rect_id']
-                # 查找对应的矩形框数据
-                target_rect = None
-                for rect in rectangles:
-                    if rect.get('rectId') == rect_id:
-                        target_rect = rect
-                        break
-                
-                if target_rect:
-                    rect_name = target_rect.get('name', '').lower()
-                    # 如果名称包含搜索文本，显示该项目
-                    if search_text in rect_name:
-                        list_item['frame'].pack(fill=tk.X, padx=2, pady=1)
-                    else:
-                        list_item['frame'].pack_forget()  # 隐藏不匹配的项目
-                else:
-                    list_item['frame'].pack_forget()  # 隐藏找不到数据的项目
-        
-        # 更新滚动区域
-        self.list_canvas.update_idletasks()
-        self.list_canvas.configure(scrollregion=self.list_canvas.bbox("all"))
+            # 如果新篩選系統不存在，直接刷新列表
+            self.update_rect_list()
     
     def initialize_layout_query(self):
         """初始化Layout查询器，用于智能识别元器件名称"""

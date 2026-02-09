@@ -116,7 +116,7 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
     print("draw_triangle_and_text------->>> ", point1, point2, point3, cx, cy)
 
 
-def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, size=8):
+def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, size=8, font_scale=None):
     """在 tkinter Canvas 上繪製元器件的矩形框、名稱標籤、三角形標記和溫度文字。
 
     Args:
@@ -126,6 +126,7 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
         offset (tuple): 偏移量 (offset_x, offset_y)（預設 (0, 0)）
         imageIndex (int): 影像索引（0=熱力圖，1=Layout 圖）
         size (int): 三角形標記邊長（預設 8）
+        font_scale (float): 字體縮放比例（預設 None，則自動從 imageScale 計算）
 
     Returns:
         tuple: (rectId, nameId, tempTextId, triangleId) Canvas 繪圖物件 ID
@@ -157,27 +158,23 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
     bottom = int(bottom * imageScale) + off_y
     cx = int(cx * imageScale) + off_x
     cy = int(cy * imageScale) + off_y
-    
-    # 对于Layout图，使用实际图像区域进行边界检查
-    if imageIndex != 0:
-        # 计算实际图像显示区域
-        # 图像在Canvas中是居中显示的，所以需要计算实际的图像边界
-        image_width = canvas_width - 2 * off_x  # 实际图像宽度
-        image_height = canvas_height - 2 * off_y  # 实际图像高度
-        
-        # 使用实际图像区域进行边界检查
-        left = max(off_x, left)
-        top = max(off_y, top)
-        right = min(right, off_x + image_width)
-        bottom = min(bottom, off_y + image_height)
-        cx = max(off_x, min(cx, off_x + image_width - 1))
-        cy = max(off_y, min(cy, off_y + image_height - 1))
-    else:
-        # 热力图使用原有的边界检查
-        right = min(right, canvas_width)
-        bottom = min(bottom, canvas_height)
-    font_scale = max(0.7, imageScale)
-    size = max(7, int(size * imageScale))
+
+    # 🔥 移除邊界檢查，允許矩形超出可視範圍
+    # Canvas 會自動裁剪超出範圍的繪製，不需要手動修改座標
+    # 這在縮放模式下特別重要，因為矩形可能部分超出可視範圍
+    #
+    # 註：之前的邊界檢查會導致在縮放模式下，當矩形部分超出邊界時
+    # 座標被錯誤地裁剪，造成框線範圍變動的問題
+
+    # 🔥 字體縮放：如果有傳入 font_scale 則使用，否則從 imageScale 計算
+    # 在放大模式下，應傳入 font_scale=1.0 保持字體大小不變
+    if font_scale is None:
+        font_scale = max(0.7, imageScale)
+
+    # 🔥 三角形大小：與字體一樣，在放大模式下應保持不變
+    # 使用 font_scale 來控制三角形大小（而不是 imageScale）
+    triangle_scale = font_scale if font_scale is not None else imageScale
+    size = max(7, int(size * triangle_scale))
 
     # 从配置中读取颜色
     config = GlobalConfig()
