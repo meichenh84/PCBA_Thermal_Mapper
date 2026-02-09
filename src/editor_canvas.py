@@ -771,109 +771,108 @@ class EditorCanvas:
 
     # 🗑️ 已廢棄：此方法使用舊的 rect_list_items API 和自定義 Frame/Label，已被 Treeview 版本取代
     # 新版本直接在 update_rect_list() 中使用 tree.insert() 創建項目
-    def create_list_item(self, rect, index):
-        """创建单个列表项（已廢棄，僅保留以防舊代碼引用）"""
-        return  # 直接返回，不執行任何操作
-        # 创建列表项框架
-        item_frame = tk.Frame(self.scrollable_frame, bg=UIStyle.WHITE, relief=tk.SOLID, bd=1)
-        item_frame.pack(fill=tk.X, padx=2, pady=1)
-
-        # 获取矩形框数据
-        rect_name = rect.get('name', f'AR{index+1}')
-        max_temp = rect.get('max_temp', 0)
-        rect_id = rect.get('rectId', index)
-        description = rect.get('description', '')  # 獲取描述資訊
-
-        # 名称标签（帶框線，使用統一的欄位寬度）
-        name_label = tk.Label(
-            item_frame,
-            text=rect_name,
-            width=self.COLUMN_WIDTH_NAME,
-            font=UIStyle.SMALL_FONT,
-            bg=UIStyle.WHITE,
-            anchor='w',
-            relief=tk.SOLID,
-            bd=1
-        )
-        name_label.pack(side=tk.LEFT, padx=0, pady=0)
-
-        # 描述标签（帶框線，使用統一的欄位寬度）
-        desc_label = tk.Label(
-            item_frame,
-            text=description,
-            width=self.COLUMN_WIDTH_DESC,
-            font=UIStyle.SMALL_FONT,
-            bg=UIStyle.WHITE,
-            anchor='w',
-            relief=tk.SOLID,
-            bd=1
-        )
-        desc_label.pack(side=tk.LEFT, padx=0, pady=0)
-
-        # 温度标签（帶框線，使用統一的欄位寬度）
-        temp_text = f"{max_temp:.1f}°C"
-        temp_label = tk.Label(
-            item_frame,
-            text=temp_text,
-            width=self.COLUMN_WIDTH_TEMP,
-            font=UIStyle.SMALL_FONT,
-            bg=UIStyle.WHITE,
-            anchor='center',
-            relief=tk.SOLID,
-            bd=1
-        )
-        temp_label.pack(side=tk.LEFT, padx=0, pady=0)
-        
-        # 绑定点击事件
-        def on_item_click(event, rect_id=rect_id, index=index):
-            # 阻止事件冒泡，避免点击触发滚动等副作用
-            try:
-                event.widget.focus_set()
-            except Exception:
-                pass
-
-            # 檢測是否按住修飾鍵
-            # state & 0x0001 表示 Shift 鍵被按下
-            # state & 0x0004 表示 Ctrl 鍵被按下
-            shift_pressed = (event.state & 0x0001) != 0
-            ctrl_pressed = (event.state & 0x0004) != 0
-
-            if shift_pressed and self.last_selected_index is not None:
-                # Shift + 點擊：範圍選擇
-                self.select_range(self.last_selected_index, index)
-            elif ctrl_pressed:
-                # Ctrl + 點擊：跳選（toggle 選中狀態）
-                self.toggle_select_item(rect_id, index)
-            else:
-                # 一般點擊：單選
-                self.select_rect_item(rect_id, item_frame)
-                self.last_selected_index = index
-        
-        # 绑定双击事件
-        def on_item_double_click(event, rect_id=rect_id):
-            self.open_edit_area_dialog(rect_id)
-        
-        # 绑定事件
-        item_frame.bind("<Button-1>", on_item_click)
-        item_frame.bind("<Double-Button-1>", on_item_double_click)
-        name_label.bind("<Button-1>", on_item_click)
-        name_label.bind("<Double-Button-1>", on_item_double_click)
-        desc_label.bind("<Button-1>", on_item_click)
-        desc_label.bind("<Double-Button-1>", on_item_double_click)
-        temp_label.bind("<Button-1>", on_item_click)
-        temp_label.bind("<Double-Button-1>", on_item_double_click)
-
-        # 移除下拉按钮
-
-        # 存储列表项信息
-        list_item = {
-            'frame': item_frame,
-            'name_label': name_label,
-            'desc_label': desc_label,
-            'temp_label': temp_label,
-            'rect_id': rect_id
-        }
-        self.rect_list_items.append(list_item)
+    # def create_list_item(self, rect, index):
+    #     """创建单个列表项（已廢棄）"""
+    #     # 创建列表项框架
+    #     item_frame = tk.Frame(self.scrollable_frame, bg=UIStyle.WHITE, relief=tk.SOLID, bd=1)
+    #     item_frame.pack(fill=tk.X, padx=2, pady=1)
+    #
+    #     # 获取矩形框数据
+    #     rect_name = rect.get('name', f'AR{index+1}')
+    #     max_temp = rect.get('max_temp', 0)
+    #     rect_id = rect.get('rectId', index)
+    #     description = rect.get('description', '')  # 獲取描述資訊
+    #
+    #     # 名称标签（帶框線，使用統一的欄位寬度）
+    #     name_label = tk.Label(
+    #         item_frame,
+    #         text=rect_name,
+    #         width=self.COLUMN_WIDTH_NAME,
+    #         font=UIStyle.SMALL_FONT,
+    #         bg=UIStyle.WHITE,
+    #         anchor='w',
+    #         relief=tk.SOLID,
+    #         bd=1
+    #     )
+    #     name_label.pack(side=tk.LEFT, padx=0, pady=0)
+    #
+    #     # 描述标签（帶框線，使用統一的欄位寬度）
+    #     desc_label = tk.Label(
+    #         item_frame,
+    #         text=description,
+    #         width=self.COLUMN_WIDTH_DESC,
+    #         font=UIStyle.SMALL_FONT,
+    #         bg=UIStyle.WHITE,
+    #         anchor='w',
+    #         relief=tk.SOLID,
+    #         bd=1
+    #     )
+    #     desc_label.pack(side=tk.LEFT, padx=0, pady=0)
+    #
+    #     # 温度标签（帶框線，使用統一的欄位寬度）
+    #     temp_text = f"{max_temp:.1f}°C"
+    #     temp_label = tk.Label(
+    #         item_frame,
+    #         text=temp_text,
+    #         width=self.COLUMN_WIDTH_TEMP,
+    #         font=UIStyle.SMALL_FONT,
+    #         bg=UIStyle.WHITE,
+    #         anchor='center',
+    #         relief=tk.SOLID,
+    #         bd=1
+    #     )
+    #     temp_label.pack(side=tk.LEFT, padx=0, pady=0)
+    #
+    #     # 绑定点击事件
+    #     def on_item_click(event, rect_id=rect_id, index=index):
+    #         # 阻止事件冒泡，避免点击触发滚动等副作用
+    #         try:
+    #             event.widget.focus_set()
+    #         except Exception:
+    #             pass
+    #
+    #         # 檢測是否按住修飾鍵
+    #         # state & 0x0001 表示 Shift 鍵被按下
+    #         # state & 0x0004 表示 Ctrl 鍵被按下
+    #         shift_pressed = (event.state & 0x0001) != 0
+    #         ctrl_pressed = (event.state & 0x0004) != 0
+    #
+    #         if shift_pressed and self.last_selected_index is not None:
+    #             # Shift + 點擊：範圍選擇
+    #             self.select_range(self.last_selected_index, index)
+    #         elif ctrl_pressed:
+    #             # Ctrl + 點擊：跳選（toggle 選中狀態）
+    #             self.toggle_select_item(rect_id, index)
+    #         else:
+    #             # 一般點擊：單選
+    #             self.select_rect_item(rect_id, item_frame)
+    #             self.last_selected_index = index
+    #
+    #     # 绑定双击事件
+    #     def on_item_double_click(event, rect_id=rect_id):
+    #         self.open_edit_area_dialog(rect_id)
+    #
+    #     # 绑定事件
+    #     item_frame.bind("<Button-1>", on_item_click)
+    #     item_frame.bind("<Double-Button-1>", on_item_double_click)
+    #     name_label.bind("<Button-1>", on_item_click)
+    #     name_label.bind("<Double-Button-1>", on_item_double_click)
+    #     desc_label.bind("<Button-1>", on_item_click)
+    #     desc_label.bind("<Double-Button-1>", on_item_double_click)
+    #     temp_label.bind("<Button-1>", on_item_click)
+    #     temp_label.bind("<Double-Button-1>", on_item_double_click)
+    #
+    #     # 移除下拉按钮
+    #
+    #     # 存储列表项信息
+    #     list_item = {
+    #         'frame': item_frame,
+    #         'name_label': name_label,
+    #         'desc_label': desc_label,
+    #         'temp_label': temp_label,
+    #         'rect_id': rect_id
+    #     }
+    #     self.rect_list_items.append(list_item)
 
     # 🗑️ 已廢棄：此方法使用舊的 rect_list_items API，已被 Treeview 版本取代
     # def select_rect_item(self, rect_id, item_frame):
