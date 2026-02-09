@@ -2021,9 +2021,17 @@ class EditorCanvas:
             if not hasattr(self.editor_rect, 'display_scale'):
                 return
 
-            # 計算圖像座標（考慮縮放）
-            img_x = int(canvas_x / self.editor_rect.display_scale)
-            img_y = int(canvas_y / self.editor_rect.display_scale)
+            # 計算圖像座標（考慮縮放和放大模式）
+            if (hasattr(self.editor_rect, 'magnifier_mode_enabled') and
+                    self.editor_rect.magnifier_mode_enabled and
+                    abs(self.editor_rect.zoom_scale - 1.0) > 0.001):
+                # 放大模式：canvas 座標需先減去偏移，再除以 zoom_scale
+                img_x = int((canvas_x - self.editor_rect.canvas_offset_x) / self.editor_rect.zoom_scale)
+                img_y = int((canvas_y - self.editor_rect.canvas_offset_y) / self.editor_rect.zoom_scale)
+            else:
+                # 正常模式：canvas 座標除以 display_scale
+                img_x = int(canvas_x / self.editor_rect.display_scale)
+                img_y = int(canvas_y / self.editor_rect.display_scale)
 
             # 檢查座標是否在圖像範圍內
             if hasattr(self.editor_rect, 'original_img') and self.editor_rect.original_img:
