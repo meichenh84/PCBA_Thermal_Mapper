@@ -128,9 +128,9 @@ class EditorCanvas:
         self.filtered_rectangles = []  # 保存篩選後的矩形框
 
         # 欄位寬度配置（統一管理，修改此處即可同步更新所有相關欄位）
-        self.COLUMN_WIDTH_NAME = 10   # 名稱欄位寬度
-        self.COLUMN_WIDTH_DESC = 12   # 描述欄位寬度
-        self.COLUMN_WIDTH_TEMP = 8    # 溫度欄位寬度
+        self.COLUMN_WIDTH_NAME = 3   # 名稱欄位寬度
+        self.COLUMN_WIDTH_DESC = 28   # 描述欄位寬度
+        self.COLUMN_WIDTH_TEMP = 3    # 溫度欄位寬度
 
         # 先设置dialog属性
         self.dialog = dialog
@@ -256,7 +256,7 @@ class EditorCanvas:
     def create_rect_list_panel(self, parent):
         """创建左侧矩形框列表面板"""
         # 创建左侧面板框架
-        left_panel = tk.Frame(parent, width=400, bg=UIStyle.VERY_LIGHT_BLUE)
+        left_panel = tk.Frame(parent, width=500, bg=UIStyle.VERY_LIGHT_BLUE)
         left_panel.grid(row=0, column=0, sticky="ns", padx=5, pady=5)
         left_panel.grid_propagate(False)  # 保持固定宽度
         
@@ -264,8 +264,7 @@ class EditorCanvas:
         left_panel.grid_rowconfigure(0, weight=0)  # 标题行，固定高度
         left_panel.grid_rowconfigure(1, weight=0)  # 搜索框行，固定高度
         left_panel.grid_rowconfigure(2, weight=0)  # 篩選條件行，固定高度
-        left_panel.grid_rowconfigure(3, weight=0)  # 标题欄位行，固定高度
-        left_panel.grid_rowconfigure(4, weight=1)  # 滚动区域，自适应高度
+        left_panel.grid_rowconfigure(3, weight=1)  # Treeview表格區域，自適應高度
         left_panel.grid_columnconfigure(0, weight=1)  # 单列，占满宽度
 
         # 标题行
@@ -354,7 +353,7 @@ class EditorCanvas:
         # 名稱篩選輸入框
         self.filter_name_entry = PlaceholderEntry(
             filter_frame,
-            placeholder='名稱：輸入"C","HA"',
+            placeholder='名稱：輸入 C,HA',
             placeholder_color="gray",
             font=("Arial", 9),
             width=FILTER_INPUT_WIDTH,
@@ -385,7 +384,7 @@ class EditorCanvas:
         # 描述篩選輸入框
         self.filter_desc_entry = PlaceholderEntry(
             filter_frame,
-            placeholder='描述：輸入"EC","CAP"',
+            placeholder='描述：輸入 EC,CAP',
             placeholder_color="gray",
             font=("Arial", 9),
             width=FILTER_INPUT_WIDTH,
@@ -416,7 +415,7 @@ class EditorCanvas:
         # 溫度篩選輸入框
         self.filter_temp_entry = PlaceholderEntry(
             filter_frame,
-            placeholder='溫度：>60, <75, =60',
+            placeholder='溫度：輸入 >60, <75, =60',
             placeholder_color="gray",
             font=("Arial", 9),
             width=FILTER_INPUT_WIDTH,
@@ -459,9 +458,9 @@ class EditorCanvas:
 
         # 配置欄位
         self.tree.column('#0', width=0, stretch=tk.NO)  # 隱藏第一欄（tree column）
-        self.tree.column('name', width=self.COLUMN_WIDTH_NAME * 8, anchor='w')  # 名稱欄位
-        self.tree.column('desc', width=self.COLUMN_WIDTH_DESC * 8, anchor='w')  # 描述欄位
-        self.tree.column('temp', width=self.COLUMN_WIDTH_TEMP * 8, anchor='center')  # 溫度欄位
+        self.tree.column('name', width=int(self.COLUMN_WIDTH_NAME * 8), anchor='w')  # 名稱欄位
+        self.tree.column('desc', width=int(self.COLUMN_WIDTH_DESC * 8), anchor='w')  # 描述欄位
+        self.tree.column('temp', width=int(self.COLUMN_WIDTH_TEMP * 8), anchor='center')  # 溫度欄位
 
         # 配置表頭
         self.tree.heading('name', text='名稱 ▼', command=self.toggle_sort_by_name)
@@ -1773,9 +1772,14 @@ class EditorCanvas:
         print(f"✓ 已更新矩形框 {rect_id} 的信息")
     
     def update_title_count(self):
-        """更新标题中的数量显示"""
+        """更新標題數量顯示（Treeview版本）"""
+        # 從 Treeview 獲取當前項目數量
+        count = 0
+        if hasattr(self, 'tree'):
+            count = len(self.tree.get_children())
+
+        # 更新標題標籤
         if hasattr(self, 'title_label'):
-            count = len(self.rect_list_items)
             self.title_label.config(text=f"元器件列表({count})")
     
     def toggle_sort_by_name(self):
