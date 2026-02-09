@@ -198,8 +198,12 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
     
     shadowColor = "#000000"  # 黑色
 
-    # 绘制矩形框
-    rectId = canvas.create_rectangle(left, top, right, bottom, outline=rectColor, width=2)
+    # 绘制形状（矩形或圆形）
+    shape = item.get("shape", "rectangle")  # 預設為矩形
+    if shape == "circle":
+        rectId = canvas.create_oval(left, top, right, bottom, outline=rectColor, width=2)
+    else:
+        rectId = canvas.create_rectangle(left, top, right, bottom, outline=rectColor, width=2)
 
     # 计算三角形的三个顶点
     point1 = (cx, cy - size // 2)  # 顶点1 (尖角)

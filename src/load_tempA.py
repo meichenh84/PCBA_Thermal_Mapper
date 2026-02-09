@@ -173,6 +173,96 @@ class TempLoader:
             return (max_coords[1] + _x1)*scale, (max_coords[0] + _y1)*scale
         return 0, 0
 
+    def get_max_temp_in_circle(self, cx, cy, radius, scale=1):
+        """
+        查詢指定圓形區域內的最高溫度值（僅考慮圓形內部的點）。
+
+        Args:
+            cx (float): 圓心的 X 座標（縮放後）。
+            cy (float): 圓心的 Y 座標（縮放後）。
+            radius (float): 圓形半徑（縮放後）。
+            scale (float): 座標縮放比例，預設為 1。
+
+        Returns:
+            float: 圓形區域內的最高溫度值。若區域為空或無效，則回傳 0。
+        """
+        maxH, maxW = self._tempA.shape
+
+        # 計算圓形的外接矩形範圍
+        x1 = max(0, int((cx - radius) / scale))
+        y1 = max(0, int((cy - radius) / scale))
+        x2 = min(maxW, int((cx + radius) / scale))
+        y2 = min(maxH, int((cy + radius) / scale))
+
+        # 圓心在溫度矩陣中的座標
+        center_x = cx / scale
+        center_y = cy / scale
+        radius_in_matrix = radius / scale
+
+        max_temp = -float('inf')
+        found = False
+
+        # 遍歷外接矩形內的所有點
+        for y in range(y1, y2):
+            for x in range(x1, x2):
+                # 計算點到圓心的距離
+                distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+                # 只考慮圓形內部的點
+                if distance <= radius_in_matrix:
+                    temp = self._tempA[y, x]
+                    if temp > max_temp:
+                        max_temp = temp
+                        found = True
+
+        return max_temp if found else 0
+
+    def get_max_temp_coords_in_circle(self, cx, cy, radius, scale=1):
+        """
+        查詢指定圓形區域內最高溫度點的座標（僅考慮圓形內部的點）。
+
+        Args:
+            cx (float): 圓心的 X 座標（縮放後）。
+            cy (float): 圓心的 Y 座標（縮放後）。
+            radius (float): 圓形半徑（縮放後）。
+            scale (float): 座標縮放比例，預設為 1。
+
+        Returns:
+            tuple: (x, y) 最高溫度點在縮放座標系中的座標。若區域為空或無效，則回傳 (0, 0)。
+        """
+        maxH, maxW = self._tempA.shape
+
+        # 計算圓形的外接矩形範圍
+        x1 = max(0, int((cx - radius) / scale))
+        y1 = max(0, int((cy - radius) / scale))
+        x2 = min(maxW, int((cx + radius) / scale))
+        y2 = min(maxH, int((cy + radius) / scale))
+
+        # 圓心在溫度矩陣中的座標
+        center_x = cx / scale
+        center_y = cy / scale
+        radius_in_matrix = radius / scale
+
+        max_temp = -float('inf')
+        max_x, max_y = 0, 0
+        found = False
+
+        # 遍歷外接矩形內的所有點
+        for y in range(y1, y2):
+            for x in range(x1, x2):
+                # 計算點到圓心的距離
+                distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+                # 只考慮圓形內部的點
+                if distance <= radius_in_matrix:
+                    temp = self._tempA[y, x]
+                    if temp > max_temp:
+                        max_temp = temp
+                        max_x = x
+                        max_y = y
+                        found = True
+
+        # 返回縮放座標系中的座標
+        return (max_x * scale, max_y * scale) if found else (0, 0)
+
 
 # ============================================================================
 # 外部程式碼使用範例

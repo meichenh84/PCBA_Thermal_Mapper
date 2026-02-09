@@ -132,6 +132,9 @@ class RectEditor:
     def init_marks(self):
         if len(self.mark_rect) > 0:
             for item in self.mark_rect:
+                # 確保舊資料相容性：沒有 shape 欄位的預設為矩形
+                if "shape" not in item:
+                    item["shape"] = "rectangle"
                 self.create_rectangle(item)
 
     def update_display_scale(self, display_scale):
@@ -446,6 +449,137 @@ class RectEditor:
         self.rectangles.append(newRect)
         return newRect
 
+    def convert_to_circle(self, rect):
+        """將矩形轉換為圓形
+
+        Args:
+            rect (dict): 矩形資料字典
+        """
+        # 計算矩形的幾何中心（邊界框中心）
+        geometric_cx = (rect["x1"] + rect["x2"]) / 2
+        geometric_cy = (rect["y1"] + rect["y2"]) / 2
+
+        # 計算外接圓半徑（使用矩形的較長邊）
+        width = rect["x2"] - rect["x1"]
+        height = rect["y2"] - rect["y1"]
+        radius = max(width, height) / 2
+
+        # 更新邊界（圓形用正方形邊界框，以幾何中心為圓心）
+        rect["x1"] = geometric_cx - radius
+        rect["y1"] = geometric_cy - radius
+        rect["x2"] = geometric_cx + radius
+        rect["y2"] = geometric_cy + radius
+
+        # 設定形狀類型
+        rect["shape"] = "circle"
+
+        # 重新計算圓形範圍內的最高溫度點位置（僅考慮圓形內部的點）
+        cx, cy = self.tempALoader.get_max_temp_coords_in_circle(
+            geometric_cx, geometric_cy, radius, 1.0)
+        max_temp = self.tempALoader.get_max_temp_in_circle(
+            geometric_cx, geometric_cy, radius, 1.0)
+
+        rect["cx"] = cx
+        rect["cy"] = cy
+        rect["max_temp"] = max_temp
+
+        # 刪除舊的 Canvas 物件，重新繪製
+        self._redraw_single_rect(rect)
+
+    def convert_to_rectangle(self, rect):
+        """將圓形轉換為矩形（保持外接框大小）
+
+        Args:
+            rect (dict): 矩形資料字典
+        """
+        # 保持當前邊界不變（策略 A）
+        rect["shape"] = "rectangle"
+
+        # 重新計算範圍內的最高溫度點位置（邊界框相同，但形狀改變可能影響識別）
+        cx, cy = self.tempALoader.get_max_temp_coords(
+            int(rect["x1"]), int(rect["y1"]),
+            int(rect["x2"]), int(rect["y2"]), 1.0)
+        max_temp = self.tempALoader.get_max_temp(
+            int(rect["x1"]), int(rect["y1"]),
+            int(rect["x2"]), int(rect["y2"]), 1.0)
+
+        rect["cx"] = cx
+        rect["cy"] = cy
+        rect["max_temp"] = max_temp
+
+        # 刪除舊的 Canvas 物件，重新繪製
+        self._redraw_single_rect(rect)
+
+    def _redraw_single_rect(self, rect):
+        """重繪單個矩形/圓形
+
+        Args:
+            rect (dict): 矩形資料字典
+        """
+        # 刪除舊的 Canvas 物件
+        old_ids = [
+            rect.get("rectId"),
+            rect.get("nameId"),
+            rect.get("triangleId"),
+            rect.get("tempTextId")
+        ]
+        for canvas_id in old_ids:
+            if canvas_id:
+                try:
+                    self.canvas.delete(canvas_id)
+                except:
+                    pass
+
+        # 呼叫 draw_canvas_item 重新繪製
+        rectId, triangleId, tempTextId, nameId = draw_canvas_item(
+            self.canvas, rect, self.display_scale, (0, 0), 0
+        )
+
+        # 更新 ID
+        rect["rectId"] = rectId
+        rect["triangleId"] = triangleId
+        rect["tempTextId"] = tempTextId
+        rect["nameId"] = nameId
+
+    def convert_shapes_batch(self, rect_ids, target_shape):
+        """批次轉換形狀
+
+        Args:
+            rect_ids (list): 要轉換的矩形 ID 列表
+            target_shape (str): "rectangle" 或 "circle"
+
+        Returns:
+            int: 成功轉換的數量
+        """
+        converted_count = 0
+
+        for rect_id in rect_ids:
+            # 找到對應的矩形資料
+            rect = None
+            for r in self.rectangles:
+                if r.get("rectId") == rect_id:
+                    rect = r
+                    break
+
+            if not rect:
+                continue
+
+            current_shape = rect.get("shape", "rectangle")
+
+            # 跳過已經是目標形狀的
+            if current_shape == target_shape:
+                continue
+
+            # 執行轉換
+            if target_shape == "circle":
+                self.convert_to_circle(rect)
+            else:
+                self.convert_to_rectangle(rect)
+
+            converted_count += 1
+
+        return converted_count
+
     def close_current_dialog(self):
         """关闭当前显示的弹窗"""
         if self.current_dialog is not None:
@@ -490,10 +624,21 @@ class RectEditor:
                     rect["y1"] = y1
                     rect["x2"] = x2
                     rect["y2"] = y2
-                    # 查询温度数据
-                    cx, cy = self.tempALoader.get_max_temp_coords(int(x1), int(y1), int(x2), int(y2), 1.0)
-                    max_temp = self.tempALoader.get_max_temp(int(x1), int(y1), int(x2), int(y2), 1.0)
-                    
+
+                    # 根據形狀類型查詢溫度數據
+                    shape = rect.get("shape", "rectangle")
+                    if shape == "circle":
+                        # 圓形：只考慮圓形內部的點
+                        center_x = (x1 + x2) / 2
+                        center_y = (y1 + y2) / 2
+                        radius = (x2 - x1) / 2
+                        cx, cy = self.tempALoader.get_max_temp_coords_in_circle(center_x, center_y, radius, 1.0)
+                        max_temp = self.tempALoader.get_max_temp_in_circle(center_x, center_y, radius, 1.0)
+                    else:
+                        # 矩形：使用矩形區域查詢
+                        cx, cy = self.tempALoader.get_max_temp_coords(int(x1), int(y1), int(x2), int(y2), 1.0)
+                        max_temp = self.tempALoader.get_max_temp(int(x1), int(y1), int(x2), int(y2), 1.0)
+
                     # 更新数据
                     rect["cx"] = cx
                     rect["cy"] = cy
@@ -761,23 +906,58 @@ class RectEditor:
         rectId = self.drag_data["rectId"]
         x1, y1, x2, y2 = self.canvas.coords(rectId)
         anchor = self.drag_data["anchor"]
-        if anchor == 0:  # top-left corner
-            self.canvas.coords(rectId, min(event.x, x2 - self.min_width), min(event.y, y2 - self.min_width), x2, y2)
-        elif anchor == 1:  # top-right corner
-            self.canvas.coords(rectId, x1, min(event.y, y2 - self.min_width), max(event.x, x1 + self.min_width), y2)
-        elif anchor == 2:  # bottom-left corner
-            self.canvas.coords(rectId, min(event.x, x2 - self.min_width), y1, x2, max(event.y, y1 + self.min_width))
-        elif anchor == 3:  # bottom-right corner
-            self.canvas.coords(rectId, x1, y1,  max(event.x, x1 + self.min_width),  max(event.y, y1 + self.min_width))
-        elif anchor == 6:  # top-center edge (vertical stretch)
-            self.canvas.coords(rectId, x1, min(event.y, y2 - self.min_width), x2, y2)
-        elif anchor == 5:  # right-center edge (horizontal stretch)
-            self.canvas.coords(rectId, x1, y1, max(event.x, x1 + self.min_width), y2)
-        elif anchor == 7:  # bottom-center edge (vertical stretch)
-            self.canvas.coords(rectId, x1, y1, x2, max(event.y, y1 + self.min_width))
-        elif anchor == 4:  # left-center edge (horizontal stretch)
-            self.canvas.coords(rectId, min(event.x, x2 - self.min_width), y1, x2, y2)
-        
+
+        # 檢查是否為圓形
+        rect_data = None
+        for r in self.rectangles:
+            if r.get("rectId") == rectId:
+                rect_data = r
+                break
+
+        is_circle = rect_data and rect_data.get("shape") == "circle"
+
+        if is_circle:
+            # 圓形調整：保持正方形邊界，維持圓形
+            cx = (x1 + x2) / 2
+            cy = (y1 + y2) / 2
+
+            # 根據錨點計算新半徑
+            if anchor in [0, 1, 2, 3]:  # 角落錨點
+                # 使用滑鼠到中心的距離作為新半徑
+                new_radius = max(abs(event.x - cx), abs(event.y - cy))
+            elif anchor in [4, 5]:  # 左右邊錨點
+                new_radius = abs(event.x - cx)
+            elif anchor in [6, 7]:  # 上下邊錨點
+                new_radius = abs(event.y - cy)
+            else:
+                new_radius = (x2 - x1) / 2
+
+            # 確保最小尺寸
+            new_radius = max(new_radius, self.min_width / 2)
+
+            # 更新為正方形邊界
+            self.canvas.coords(rectId,
+                cx - new_radius, cy - new_radius,
+                cx + new_radius, cy + new_radius)
+        else:
+            # 矩形調整：原有邏輯
+            if anchor == 0:  # top-left corner
+                self.canvas.coords(rectId, min(event.x, x2 - self.min_width), min(event.y, y2 - self.min_width), x2, y2)
+            elif anchor == 1:  # top-right corner
+                self.canvas.coords(rectId, x1, min(event.y, y2 - self.min_width), max(event.x, x1 + self.min_width), y2)
+            elif anchor == 2:  # bottom-left corner
+                self.canvas.coords(rectId, min(event.x, x2 - self.min_width), y1, x2, max(event.y, y1 + self.min_width))
+            elif anchor == 3:  # bottom-right corner
+                self.canvas.coords(rectId, x1, y1,  max(event.x, x1 + self.min_width),  max(event.y, y1 + self.min_width))
+            elif anchor == 6:  # top-center edge (vertical stretch)
+                self.canvas.coords(rectId, x1, min(event.y, y2 - self.min_width), x2, y2)
+            elif anchor == 5:  # right-center edge (horizontal stretch)
+                self.canvas.coords(rectId, x1, y1, max(event.x, x1 + self.min_width), y2)
+            elif anchor == 7:  # bottom-center edge (vertical stretch)
+                self.canvas.coords(rectId, x1, y1, x2, max(event.y, y1 + self.min_width))
+            elif anchor == 4:  # left-center edge (horizontal stretch)
+                self.canvas.coords(rectId, min(event.x, x2 - self.min_width), y1, x2, y2)
+
         # Update the anchors after resize
         self.update_anchors()
 

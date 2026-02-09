@@ -1572,6 +1572,75 @@ class EditorCanvas:
         )
         self.magnifier_checkbox.pack(anchor='w')
 
+        # ========== 形狀轉換按鈕區域 ==========
+        # 形狀轉換標籤容器
+        shape_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        shape_label_frame.grid(row=3, column=0, pady=(5, 2), padx=10, sticky="w")
+
+        # 形狀轉換標籤
+        shape_label = tk.Label(
+            shape_label_frame,
+            text="形狀轉換",
+            font=("Arial", 9),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.DARK_GRAY
+        )
+        shape_label.pack(side=tk.LEFT)
+
+        # 圓圈 i 圖示
+        shape_info_label = tk.Label(
+            shape_label_frame,
+            text=" ⓘ",
+            font=("Arial", 10),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
+        )
+        shape_info_label.pack(side=tk.LEFT, padx=(2, 0))
+
+        # 添加 tooltip 說明（Tooltip 已在文件頂部導入）
+        Tooltip(
+            shape_info_label,
+            "形狀轉換功能：\n"
+            "• 矩形 ↔ 圓形 互相轉換\n"
+            "• 轉換後會重新查找圈選形狀範圍內的最高溫度\n"
+            "• 圓形只計算圓形內部的溫度點（排除四角）\n"
+            "• 支援多選批次轉換",
+            delay=200
+        )
+
+        # 轉為矩形按鈕
+        self.convert_to_rect_button = tk.Button(
+            button_container,
+            text="🔲 轉為矩形",
+            font=UIStyle.BUTTON_FONT,
+            width=10,
+            height=2,
+            bg=UIStyle.SUCCESS_GREEN,
+            fg=UIStyle.WHITE,
+            relief=UIStyle.BUTTON_RELIEF,
+            bd=UIStyle.BUTTON_BORDER_WIDTH,
+            command=lambda: self.on_convert_shape("rectangle"),
+            state=tk.DISABLED  # 初始禁用
+        )
+        self.convert_to_rect_button.grid(row=4, column=0, pady=3, padx=10, sticky="ew")
+
+        # 轉為圓形按鈕
+        self.convert_to_circle_button = tk.Button(
+            button_container,
+            text="⭕ 轉為圓形",
+            font=UIStyle.BUTTON_FONT,
+            width=10,
+            height=2,
+            bg=UIStyle.WARNING_ORANGE,
+            fg=UIStyle.WHITE,
+            relief=UIStyle.BUTTON_RELIEF,
+            bd=UIStyle.BUTTON_BORDER_WIDTH,
+            command=lambda: self.on_convert_shape("circle"),
+            state=tk.DISABLED  # 初始禁用
+        )
+        self.convert_to_circle_button.grid(row=5, column=0, pady=3, padx=10, sticky="ew")
+
         # 合并按钮 - 固定高度30px
         self.merge_button = tk.Button(
             button_container,
@@ -1585,7 +1654,7 @@ class EditorCanvas:
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=self.on_merge_rects
         )
-        self.merge_button.grid(row=3, column=0, pady=8, padx=10, sticky="ew")
+        self.merge_button.grid(row=6, column=0, pady=8, padx=10, sticky="ew")
 
         # 删除按钮 - 固定高度30px
         self.delete_button = tk.Button(
@@ -1600,7 +1669,7 @@ class EditorCanvas:
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=self.on_delete_rect
         )
-        self.delete_button.grid(row=4, column=0, pady=8, padx=10, sticky="ew")
+        self.delete_button.grid(row=7, column=0, pady=8, padx=10, sticky="ew")
         
         # 初始化按钮状态
         self.update_delete_button_state()
@@ -1661,6 +1730,54 @@ class EditorCanvas:
         print(f"✓ 放大模式已{status}")
 
         # TODO: 實作放大鏡功能
+
+    def on_convert_shape(self, target_shape):
+        """轉換選中的形狀
+
+        Args:
+            target_shape (str): "rectangle" 或 "circle"
+        """
+        from tkinter import messagebox
+
+        if not hasattr(self, 'editor_rect') or not self.editor_rect:
+            return
+
+        # 獲取選中的項目
+        selected_ids = list(self.selected_rect_ids) if self.selected_rect_ids else []
+        if self.selected_rect_id and self.selected_rect_id not in selected_ids:
+            selected_ids.append(self.selected_rect_id)
+
+        if not selected_ids:
+            messagebox.showwarning("提示", "請先選擇要轉換的元器件")
+            return
+
+        # 執行批次轉換
+        converted_count = self.editor_rect.convert_shapes_batch(
+            selected_ids, target_shape
+        )
+
+        # 更新列表顯示
+        self.update_rect_list()
+
+        # 觸發變更回調
+        if self.editor_rect.on_rect_change_callback:
+            self.editor_rect.on_rect_change_callback()
+
+        # 靜默完成，不顯示對話框（形狀改變即可）
+
+    def update_shape_buttons_state(self):
+        """更新形狀轉換按鈕的啟用/禁用狀態"""
+        has_selection = (
+            (self.selected_rect_id is not None) or
+            (len(self.selected_rect_ids) > 0)
+        )
+
+        state = tk.NORMAL if has_selection else tk.DISABLED
+
+        if hasattr(self, 'convert_to_rect_button'):
+            self.convert_to_rect_button.config(state=state)
+        if hasattr(self, 'convert_to_circle_button'):
+            self.convert_to_circle_button.config(state=state)
 
     def on_canvas_motion_show_temp(self, event):
         """滑鼠移動時顯示即時溫度"""
@@ -2228,9 +2345,10 @@ class EditorCanvas:
             else:
                 # 无选中的矩形框，按钮灰色不可用
                 self.delete_button.config(state='disabled', bg=UIStyle.GRAY, fg=UIStyle.DARK_GRAY)
-        
-        # 同时更新合并按钮状态
+
+        # 同时更新合并按钮和形狀轉換按鈕狀態
         self.update_merge_button_state()
+        self.update_shape_buttons_state()
     
     def update_merge_button_state(self):
         """更新合并按钮的状态（选中>1个矩形框时可用）"""
