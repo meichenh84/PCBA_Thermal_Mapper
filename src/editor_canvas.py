@@ -120,6 +120,11 @@ class EditorCanvas:
         self.multi_select_enabled = False  # 多选模式启用标志（默认关闭）
         self.last_selected_index = None  # 記錄最後一次選中的項目索引（用於 Shift + 點擊範圍選擇）
 
+        # 功能開關變量
+        self.realtime_temp_enabled = False  # 即時溫度顯示模式（默認關閉）
+        self.magnifier_enabled = False  # 放大模式（默認關閉）
+        self.temp_label_id = None  # 即時溫度標籤ID
+
         # 排序相关变量
         self.sort_mode = "name_asc"  # 排序模式: "name_asc"=名称升序(默认), "temp_desc"=温度降序, "desc_asc"=描述升序
 
@@ -1508,7 +1513,65 @@ class EditorCanvas:
             command=self.toggle_multi_select_mode
         )
         self.multi_select_checkbox.pack(anchor='w')
-        
+
+        # 即時溫度模式開關
+        realtime_temp_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        realtime_temp_frame.grid(row=1, column=0, pady=(0, 8), padx=10, sticky="ew")
+
+        self.realtime_temp_var = tk.BooleanVar(value=False)  # 默認關閉
+        self.realtime_temp_checkbox = tk.Checkbutton(
+            realtime_temp_frame,
+            text="即時溫度",
+            variable=self.realtime_temp_var,
+            font=UIStyle.BUTTON_FONT,
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.BLACK,
+            activebackground=UIStyle.VERY_LIGHT_BLUE,
+            activeforeground=UIStyle.BLACK,
+            selectcolor=UIStyle.WHITE,
+            command=self.toggle_realtime_temp_mode
+        )
+        self.realtime_temp_checkbox.pack(side='left', anchor='w')
+
+        # 即時溫度說明圖示
+        realtime_temp_info_label = tk.Label(
+            realtime_temp_frame,
+            text="ⓘ",
+            font=("Arial", 12, "bold"),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.DARK_BLUE,
+            cursor="hand2"
+        )
+        realtime_temp_info_label.pack(side='left', padx=(2, 0))
+        Tooltip(
+            realtime_temp_info_label,
+            "即時溫度功能說明：\n"
+            "勾選後，將滑鼠移動到熱力圖上\n"
+            "即可在游標旁邊顯示該位置的溫度值\n"
+            "（黃色背景 + 紅色文字）\n\n"
+            "溫度標籤會自動跟隨游標移動\n"
+            "移出熱力圖範圍後會自動隱藏"
+        )
+
+        # 放大模式開關
+        magnifier_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        magnifier_frame.grid(row=2, column=0, pady=(0, 8), padx=10, sticky="ew")
+
+        self.magnifier_var = tk.BooleanVar(value=False)  # 默認關閉
+        self.magnifier_checkbox = tk.Checkbutton(
+            magnifier_frame,
+            text="放大模式",
+            variable=self.magnifier_var,
+            font=UIStyle.BUTTON_FONT,
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.BLACK,
+            activebackground=UIStyle.VERY_LIGHT_BLUE,
+            activeforeground=UIStyle.BLACK,
+            selectcolor=UIStyle.WHITE,
+            command=self.toggle_magnifier_mode
+        )
+        self.magnifier_checkbox.pack(anchor='w')
+
         # 合并按钮 - 固定高度30px
         self.merge_button = tk.Button(
             button_container,
@@ -1522,8 +1585,8 @@ class EditorCanvas:
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=self.on_merge_rects
         )
-        self.merge_button.grid(row=1, column=0, pady=8, padx=10, sticky="ew")
-        
+        self.merge_button.grid(row=3, column=0, pady=8, padx=10, sticky="ew")
+
         # 删除按钮 - 固定高度30px
         self.delete_button = tk.Button(
             button_container,
@@ -1537,7 +1600,7 @@ class EditorCanvas:
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=self.on_delete_rect
         )
-        self.delete_button.grid(row=2, column=0, pady=8, padx=10, sticky="ew")
+        self.delete_button.grid(row=4, column=0, pady=8, padx=10, sticky="ew")
         
         # 初始化按钮状态
         self.update_delete_button_state()
@@ -1564,7 +1627,190 @@ class EditorCanvas:
         
         status = "启用" if self.multi_select_enabled else "禁用"
         print(f"✓ 多选模式已{status}")
-    
+
+    def toggle_realtime_temp_mode(self):
+        """切換即時溫度顯示模式"""
+        self.realtime_temp_enabled = self.realtime_temp_var.get()
+
+        if self.realtime_temp_enabled:
+            # 啟用即時溫度顯示 - 綁定滑鼠移動事件到整個對話框
+            if hasattr(self, 'dialog') and self.dialog:
+                self.dialog.bind('<Motion>', self.on_canvas_motion_show_temp, add='+')
+        else:
+            # 關閉即時溫度顯示 - 解除綁定
+            if hasattr(self, 'dialog') and self.dialog:
+                try:
+                    self.dialog.unbind('<Motion>')
+                except:
+                    pass
+            # 清除溫度標籤
+            if hasattr(self, 'canvas') and hasattr(self, 'temp_label_id') and self.temp_label_id:
+                self.canvas.delete(self.temp_label_id)
+                self.canvas.delete('temp_label_bg')
+                self.temp_label_id = None
+
+    def update_status_label(self, text):
+        """更新狀態標籤（已移除UI，此方法保留以避免錯誤）"""
+        pass  # 不再顯示調試信息
+
+    def toggle_magnifier_mode(self):
+        """切換放大模式"""
+        self.magnifier_enabled = self.magnifier_var.get()
+
+        status = "啟用" if self.magnifier_enabled else "關閉"
+        print(f"✓ 放大模式已{status}")
+
+        # TODO: 實作放大鏡功能
+
+    def on_canvas_motion_show_temp(self, event):
+        """滑鼠移動時顯示即時溫度"""
+        if not hasattr(self, 'realtime_temp_enabled') or not self.realtime_temp_enabled:
+            return
+
+        try:
+            # 檢查滑鼠是否在 canvas 上
+            if not hasattr(self, 'canvas') or not self.canvas:
+                return
+
+            # 將對話框座標轉換為 canvas 座標
+            try:
+                canvas_x_root = self.canvas.winfo_rootx()
+                canvas_y_root = self.canvas.winfo_rooty()
+                event_x_root = event.x_root
+                event_y_root = event.y_root
+
+                # 計算相對於 canvas 的座標
+                canvas_x = event_x_root - canvas_x_root
+                canvas_y = event_y_root - canvas_y_root
+
+                canvas_width = self.canvas.winfo_width()
+                canvas_height = self.canvas.winfo_height()
+
+                # 檢查是否在 canvas 範圍內
+                if canvas_x < 0 or canvas_y < 0 or canvas_x > canvas_width or canvas_y > canvas_height:
+                    # 滑鼠不在 canvas 上，隱藏溫度標籤
+                    if hasattr(self, 'temp_label_id') and self.temp_label_id:
+                        self.canvas.delete(self.temp_label_id)
+                        self.canvas.delete('temp_label_bg')
+                        self.temp_label_id = None
+                    return
+
+            except Exception:
+                return
+
+            # 轉換為圖像座標
+            if not hasattr(self, 'editor_rect') or not self.editor_rect:
+                return
+
+            # 獲取縮放比例
+            if not hasattr(self.editor_rect, 'display_scale'):
+                return
+
+            # 計算圖像座標（考慮縮放）
+            img_x = int(canvas_x / self.editor_rect.display_scale)
+            img_y = int(canvas_y / self.editor_rect.display_scale)
+
+            # 檢查座標是否在圖像範圍內
+            if hasattr(self.editor_rect, 'original_img') and self.editor_rect.original_img:
+                img_width, img_height = self.editor_rect.original_img.size
+                if img_x < 0 or img_x >= img_width or img_y < 0 or img_y >= img_height:
+                    # 超出圖像範圍，隱藏溫度標籤
+                    if hasattr(self, 'temp_label_id') and self.temp_label_id:
+                        self.canvas.delete(self.temp_label_id)
+                        self.canvas.delete('temp_label_bg')
+                        self.temp_label_id = None
+                    return
+
+            # 獲取該位置的溫度
+            temperature = self.get_temperature_at_position(img_x, img_y)
+
+            if temperature is not None:
+                # 顯示溫度標籤
+                self.show_temp_label(canvas_x, canvas_y, temperature)
+            else:
+                # 無法獲取溫度，隱藏標籤
+                if hasattr(self, 'temp_label_id') and self.temp_label_id:
+                    self.canvas.delete(self.temp_label_id)
+                    self.canvas.delete('temp_label_bg')
+                    self.temp_label_id = None
+        except Exception:
+            # 靜默處理錯誤，避免干擾使用者操作
+            pass
+
+    def on_canvas_leave_hide_temp(self, event):
+        """滑鼠離開 Canvas 時隱藏溫度標籤"""
+        if hasattr(self, 'temp_label_id') and self.temp_label_id:
+            self.canvas.delete(self.temp_label_id)
+            self.canvas.delete('temp_label_bg')
+            self.temp_label_id = None
+
+    def get_temperature_at_position(self, x, y):
+        """獲取指定位置的溫度值"""
+        try:
+            # 從 parent 的 tempALoader 獲取溫度數據
+            if hasattr(self, 'parent') and hasattr(self.parent, 'tempALoader') and self.parent.tempALoader:
+                temp_data = self.parent.tempALoader.get_tempA()
+                if temp_data is not None:
+                    # temp_data 是一個 numpy 數組 [y, x]
+                    if 0 <= y < temp_data.shape[0] and 0 <= x < temp_data.shape[1]:
+                        temperature = float(temp_data[y, x])
+                        return temperature
+        except Exception:
+            pass
+
+        return None
+
+    def show_temp_label(self, canvas_x, canvas_y, temperature):
+        """在游標附近顯示溫度標籤"""
+        try:
+            # 清除舊的標籤和背景
+            if hasattr(self, 'temp_label_id') and self.temp_label_id:
+                self.canvas.delete(self.temp_label_id)
+            self.canvas.delete('temp_label_bg')  # 清除所有舊的背景
+
+            # 創建新的溫度標籤
+            temp_text = f"{temperature:.1f}°C"
+            offset_x = 15  # 標籤相對游標的 X 偏移
+            offset_y = -25  # 標籤相對游標的 Y 偏移
+
+            # 先創建白色背景框（估算大小）
+            text_width = len(temp_text) * 8  # 估算文字寬度
+            text_height = 18
+            padding = 5
+
+            # 計算標籤位置
+            label_x = canvas_x + offset_x
+            label_y = canvas_y + offset_y
+
+            # 創建背景框
+            bg_rect = self.canvas.create_rectangle(
+                label_x - padding,
+                label_y - padding,
+                label_x + text_width + padding,
+                label_y + text_height + padding,
+                fill="yellow",  # 改用黃色背景更明顯
+                outline="red",
+                width=3,  # 加粗邊框
+                tags="temp_label_bg"
+            )
+
+            # 創建文字標籤
+            self.temp_label_id = self.canvas.create_text(
+                label_x + text_width // 2,
+                label_y + text_height // 2,
+                text=temp_text,
+                font=("Arial", 12, "bold"),  # 加大字體
+                fill="red",
+                tags="temp_label"
+            )
+
+            # 確保標籤在最上層
+            self.canvas.tag_raise('temp_label_bg')
+            self.canvas.tag_raise('temp_label')
+
+        except Exception:
+            pass
+
     def on_merge_rects(self):
         """合并多个矩形框"""
         print(f"🔗 on_merge_rects被调用，选中了 {len(self.selected_rect_ids)} 个矩形框")
