@@ -117,12 +117,12 @@ class EditorCanvas:
         self.rect_list_items = []  # 存储列表项
         self.selected_rect_id = None  # 当前选中的矩形ID
         self.selected_rect_ids = set()  # 多选模式下选中的矩形ID集合
-        self.multi_select_enabled = False  # 多选模式启用标志（默认关闭）
+        self.multi_select_enabled = True  # 多选模式启用标志（默認開啟）
         self.last_selected_index = None  # 記錄最後一次選中的項目索引（用於 Shift + 點擊範圍選擇）
 
         # 功能開關變量
-        self.realtime_temp_enabled = False  # 即時溫度顯示模式（默認關閉）
-        self.magnifier_enabled = False  # 放大模式（默認關閉）
+        self.realtime_temp_enabled = True  # 即時溫度顯示模式（默認開啟）
+        self.magnifier_enabled = True  # 放大模式（默認開啟）
         self.temp_label_id = None  # 即時溫度標籤ID
 
         # 排序相关变量
@@ -260,6 +260,12 @@ class EditorCanvas:
         # 同步多选模式状态到 editor_rect
         if hasattr(self, 'editor_rect') and self.editor_rect:
             self.editor_rect.multi_select_enabled = self.multi_select_enabled
+        # 啟用即時溫度（綁定滑鼠移動事件）
+        if self.realtime_temp_enabled:
+            self.toggle_realtime_temp_mode()
+        # 啟用放大模式
+        if self.magnifier_enabled:
+            self.toggle_magnifier_mode()
         # 應用預設排序（名稱 A~Z）
         self.apply_sort()
         # 最后更新列表（apply_sort 內部已經調用了 update_rect_list，這裡可以移除）
@@ -1616,7 +1622,7 @@ class EditorCanvas:
         multi_select_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
         multi_select_frame.grid(row=0, column=0, pady=(0, 8), padx=10, sticky="ew")
         
-        self.multi_select_var = tk.BooleanVar(value=False)  # 默认关闭
+        self.multi_select_var = tk.BooleanVar(value=True)  # 默認開啟
         self.multi_select_checkbox = tk.Checkbutton(
             multi_select_frame,
             text="多选模式",
@@ -1654,7 +1660,7 @@ class EditorCanvas:
         realtime_temp_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
         realtime_temp_frame.grid(row=1, column=0, pady=(0, 8), padx=10, sticky="ew")
 
-        self.realtime_temp_var = tk.BooleanVar(value=False)  # 默認關閉
+        self.realtime_temp_var = tk.BooleanVar(value=True)  # 默認開啟
         self.realtime_temp_checkbox = tk.Checkbutton(
             realtime_temp_frame,
             text="即時溫度",
@@ -1693,7 +1699,7 @@ class EditorCanvas:
         magnifier_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
         magnifier_frame.grid(row=2, column=0, pady=(0, 8), padx=10, sticky="ew")
 
-        self.magnifier_var = tk.BooleanVar(value=False)  # 默認關閉
+        self.magnifier_var = tk.BooleanVar(value=True)  # 默認開啟
         self.magnifier_checkbox = tk.Checkbutton(
             magnifier_frame,
             text="放大模式",
@@ -1767,7 +1773,7 @@ class EditorCanvas:
         # 轉為矩形按鈕
         self.convert_to_rect_button = tk.Button(
             button_container,
-            text="🔲 轉為矩形",
+            text="轉為矩形 ⬜",
             font=UIStyle.BUTTON_FONT,
             width=10,
             height=2,
@@ -1783,7 +1789,7 @@ class EditorCanvas:
         # 轉為圓形按鈕
         self.convert_to_circle_button = tk.Button(
             button_container,
-            text="⭕ 轉為圓形",
+            text="轉為圓形 ⚪",
             font=UIStyle.BUTTON_FONT,
             width=10,
             height=2,
