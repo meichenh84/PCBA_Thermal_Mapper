@@ -198,7 +198,7 @@ class RectEditor:
                 # 更新名称标签位置和字體大小
                 if nameId:
                     name_center_x = (left + right) / 2
-                    self.canvas.coords(nameId, name_center_x, top - 15 * self.display_scale)
+                    self.canvas.coords(nameId, name_center_x, top - 3 * self.display_scale)
                     self.canvas.itemconfig(nameId, font=("Arial", name_font_size_scaled, "bold"))
 
                 # 更新温度文本位置和字體大小
@@ -254,7 +254,7 @@ class RectEditor:
         if nameId:
             self.canvas.itemconfig(nameId, text=name)
             name_center_x = (display_x1 + display_x2) / 2
-            self.canvas.coords(nameId, name_center_x, display_y1 - 15 * self.display_scale)
+            self.canvas.coords(nameId, name_center_x, display_y1 - 3 * self.display_scale)
         if tempTextId:
             self.canvas.itemconfig(tempTextId, text=max_temp)
             self.canvas.coords(tempTextId, display_cx, display_cy - 16 * self.display_scale)
@@ -751,7 +751,7 @@ class RectEditor:
 
                         # 更新名称标签位置（置中于矩形框上方）
                         name_center_x = (display_x1 + display_x2) / 2
-                        self.canvas.coords(nameId, name_center_x, display_y1 - 15 * display_scale)
+                        self.canvas.coords(nameId, name_center_x, display_y1 - 3 * display_scale)
 
                         # 更新温度文本位置（置中于矩形框内）
                         self.canvas.coords(tempTextId, display_cx, display_cy - 16 * display_scale)
@@ -1159,7 +1159,7 @@ class RectEditor:
 
         # 更新名称标签位置（置中于矩形框上方）
         name_center_x = (x1 + x2) / 2
-        self.canvas.coords(nameId, name_center_x, y1 - 15 * display_scale)
+        self.canvas.coords(nameId, name_center_x, y1 - 3 * display_scale)
 
         # 使用原图像坐标查询温度和最高温度位置
         max_temp = self.tempALoader.get_max_temp(int(orig_x1), int(orig_y1), int(orig_x2), int(orig_y2), 1.0)
