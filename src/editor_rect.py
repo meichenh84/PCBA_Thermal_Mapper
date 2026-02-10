@@ -38,7 +38,7 @@ import numpy as np
 
 from dialog_component_setting import ComponentSettingDialog
 from load_tempA import TempLoader
-from draw_rect import draw_canvas_item
+from draw_rect import draw_canvas_item, calc_temp_text_offset
 
 
 class RectEditor:
@@ -168,6 +168,56 @@ class RectEditor:
         # 重新绘制所有矩形框
         self.redraw_all_rectangles()
     
+    def _position_temp_text(self, rect, display_cx, display_cy, tempTextId, display_scale):
+        """根據 rect 的 temp_text_dir 定位溫度文字。
+
+        Args:
+            rect (dict): 元器件資料字典（含 temp_text_dir 欄位）
+            display_cx (float): 三角形中心 X 的顯示座標
+            display_cy (float): 三角形中心 Y 的顯示座標
+            tempTextId (int): Canvas 溫度文字物件 ID
+            display_scale (float): 目前的顯示縮放比例
+        """
+        temp_bbox = self.canvas.bbox(tempTextId)
+        if not temp_bbox:
+            self.canvas.coords(tempTextId, display_cx, display_cy - 16 * display_scale)
+            return
+        temp_w = temp_bbox[2] - temp_bbox[0]
+        temp_h = temp_bbox[3] - temp_bbox[1]
+        direction = rect.get("temp_text_dir", "T")
+        tri_half = max(7, int(8 * display_scale)) / 2
+        dx, dy = calc_temp_text_offset(direction, tri_half, temp_w, temp_h)
+        self.canvas.coords(tempTextId, display_cx + dx, display_cy + dy)
+
+    def set_temp_text_dir(self, rect_ids, direction):
+        """設定指定元器件的溫度文字方向，並立即更新 Canvas 顯示。
+
+        Args:
+            rect_ids (list): 要設定的矩形框 rectId 列表
+            direction (str): 方向代碼 ("TL", "T", "TR", "L", "R", "BL", "B", "BR")
+        """
+        rect_id_set = set(rect_ids)
+        for rect in self.rectangles:
+            if rect.get("rectId") in rect_id_set:
+                rect["temp_text_dir"] = direction
+                tempTextId = rect.get("tempTextId")
+                if not tempTextId:
+                    continue
+
+                # 計算顯示座標
+                cx = rect.get("cx", 0)
+                cy = rect.get("cy", 0)
+                if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+                    display_cx = cx * self.zoom_scale + self.canvas_offset_x
+                    display_cy = cy * self.zoom_scale + self.canvas_offset_y
+                    display_scale = self.zoom_scale
+                else:
+                    display_scale = self.display_scale if self.display_scale > 0 else 1.0
+                    display_cx = cx * display_scale
+                    display_cy = cy * display_scale
+
+                self._position_temp_text(rect, display_cx, display_cy, tempTextId, display_scale)
+
     def redraw_all_rectangles(self):
         """重新绘制所有矩形框 - 直接缩放现有矩形，不删除重建"""
         from config import GlobalConfig
@@ -203,8 +253,8 @@ class RectEditor:
 
                 # 更新温度文本位置和字體大小
                 if tempTextId:
-                    self.canvas.coords(tempTextId, cx, cy - 16 * self.display_scale)
                     self.canvas.itemconfig(tempTextId, font=("Arial", temp_font_size_scaled))
+                    self._position_temp_text(rect, cx, cy, tempTextId, self.display_scale)
 
                 # 更新三角形位置
                 if triangleId:
@@ -257,7 +307,16 @@ class RectEditor:
             self.canvas.coords(nameId, name_center_x, display_y1 - 3 * self.display_scale)
         if tempTextId:
             self.canvas.itemconfig(tempTextId, text=max_temp)
-            self.canvas.coords(tempTextId, display_cx, display_cy - 16 * self.display_scale)
+            # 從 rectangles 找到對應 rect，讀取方向
+            target_rect = None
+            for r in self.rectangles:
+                if r.get("rectId") == rectId:
+                    target_rect = r
+                    break
+            if target_rect:
+                self._position_temp_text(target_rect, display_cx, display_cy, tempTextId, self.display_scale)
+            else:
+                self.canvas.coords(tempTextId, display_cx, display_cy - 16 * self.display_scale)
         if triangleId:
             size = max(7, int(8 * self.display_scale))
             self.canvas.coords(triangleId, display_cx, display_cy - size // 2, 
@@ -753,9 +812,9 @@ class RectEditor:
                         name_center_x = (display_x1 + display_x2) / 2
                         self.canvas.coords(nameId, name_center_x, display_y1 - 3 * display_scale)
 
-                        # 更新温度文本位置（置中于矩形框内）
-                        self.canvas.coords(tempTextId, display_cx, display_cy - 16 * display_scale)
+                        # 更新温度文本位置（根據方向定位）
                         self.canvas.itemconfig(tempTextId, text=max_temp)
+                        self._position_temp_text(rect, display_cx, display_cy, tempTextId, display_scale)
 
                         # 更新三角形
                         size = max(7, int(8 * display_scale))
@@ -1175,9 +1234,18 @@ class RectEditor:
             display_cx = orig_cx * display_scale
             display_cy = orig_cy * display_scale
 
-        # 更新温度文本位置（置中于矩形框内）
-        self.canvas.coords(tempTextId, display_cx, display_cy - 16 * display_scale)
+        # 更新温度文本位置（根據方向定位）
         self.canvas.itemconfig(tempTextId, text=max_temp)
+        # 從 tempTextId 反查對應的 rect
+        target_rect = None
+        for r in self.rectangles:
+            if r.get("tempTextId") == tempTextId:
+                target_rect = r
+                break
+        if target_rect:
+            self._position_temp_text(target_rect, display_cx, display_cy, tempTextId, display_scale)
+        else:
+            self.canvas.coords(tempTextId, display_cx, display_cy - 16 * display_scale)
 
         # 计算新的三角形三个顶点（使用显示坐标）
         size = max(7, int(8 * display_scale))

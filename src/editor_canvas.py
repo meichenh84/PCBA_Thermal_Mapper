@@ -1796,6 +1796,75 @@ class EditorCanvas:
         )
         self.convert_to_circle_button.grid(row=5, column=0, pady=3, padx=10, sticky="ew")
 
+        # ========== 溫度文字位置九宮格 ==========
+        temp_dir_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        temp_dir_label_frame.grid(row=6, column=0, pady=(8, 2), padx=10, sticky="w")
+
+        temp_dir_label = tk.Label(
+            temp_dir_label_frame,
+            text="溫度位置",
+            font=("Arial", 9),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.DARK_GRAY
+        )
+        temp_dir_label.pack(side=tk.LEFT)
+
+        temp_dir_info_label = tk.Label(
+            temp_dir_label_frame,
+            text=" ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
+        )
+        temp_dir_info_label.pack(side=tk.LEFT, padx=(2, 0))
+        Tooltip(
+            temp_dir_info_label,
+            "溫度文字位置功能：\n"
+            "• 設定溫度數值相對於三角形標記的方向\n"
+            "• 點擊八個方位按鈕即可調整\n"
+            "• 中心為三角形位置（不可點擊）\n"
+            "• 支援多選批次設定",
+            delay=200
+        )
+
+        # 九宮格容器
+        grid_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        grid_frame.grid(row=7, column=0, pady=(2, 5), padx=10)
+
+        # 方向對應：(row, col) -> direction_code
+        dir_map = [
+            ("↖", "TL", 0, 0), ("↑", "T", 0, 1), ("↗", "TR", 0, 2),
+            ("←", "L",  1, 0), ("▲", None, 1, 1), ("→", "R",  1, 2),
+            ("↙", "BL", 2, 0), ("↓", "B", 2, 1), ("↘", "BR", 2, 2),
+        ]
+
+        self.temp_dir_buttons = {}  # direction_code -> Button widget
+        self.current_temp_dir = None  # 目前高亮的方向
+
+        btn_size = 40
+        for label, code, r, c in dir_map:
+            if code is None:
+                # 中心格：三角形圖示，不可點擊
+                center_label = tk.Label(
+                    grid_frame, text=label, width=3, height=1,
+                    font=("Arial", 14),
+                    bg=UIStyle.GRAY, fg=UIStyle.DARK_GRAY,
+                    relief=tk.SUNKEN, bd=1
+                )
+                center_label.grid(row=r, column=c, padx=1, pady=1)
+            else:
+                btn = tk.Button(
+                    grid_frame, text=label, width=3, height=1,
+                    font=("Arial", 12),
+                    bg=UIStyle.WHITE, fg=UIStyle.BLACK,
+                    relief=tk.RAISED, bd=1,
+                    command=lambda d=code: self.on_temp_dir_click(d),
+                    state=tk.DISABLED
+                )
+                btn.grid(row=r, column=c, padx=1, pady=1)
+                self.temp_dir_buttons[code] = btn
+
         # 合并按钮 - 固定高度30px
         self.merge_button = tk.Button(
             button_container,
@@ -1809,7 +1878,7 @@ class EditorCanvas:
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=self.on_merge_rects
         )
-        self.merge_button.grid(row=6, column=0, pady=8, padx=10, sticky="ew")
+        self.merge_button.grid(row=8, column=0, pady=8, padx=10, sticky="ew")
 
         # 删除按钮 - 固定高度30px
         self.delete_button = tk.Button(
@@ -1824,7 +1893,7 @@ class EditorCanvas:
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=self.on_delete_rect
         )
-        self.delete_button.grid(row=7, column=0, pady=8, padx=10, sticky="ew")
+        self.delete_button.grid(row=9, column=0, pady=8, padx=10, sticky="ew")
         
         # 初始化按钮状态
         self.update_delete_button_state()
@@ -2072,6 +2141,85 @@ class EditorCanvas:
             self.convert_to_rect_button.config(state=state)
         if hasattr(self, 'convert_to_circle_button'):
             self.convert_to_circle_button.config(state=state)
+
+    # ========== 九宮格溫度位置控制 ==========
+
+    def on_temp_dir_click(self, direction):
+        """九宮格方向按鈕點擊事件"""
+        # 收集所有選取的 rect_id
+        rect_ids = []
+        if self.selected_rect_ids:
+            rect_ids = list(self.selected_rect_ids)
+        elif self.selected_rect_id is not None:
+            rect_ids = [self.selected_rect_id]
+
+        if not rect_ids or not hasattr(self, 'editor_rect') or not self.editor_rect:
+            return
+
+        # 呼叫 editor_rect 設定方向
+        self.editor_rect.set_temp_text_dir(rect_ids, direction)
+
+        # 更新九宮格按鈕高亮
+        self._update_temp_dir_highlight(direction)
+
+    def _update_temp_dir_highlight(self, direction=None):
+        """更新九宮格按鈕的高亮狀態
+
+        Args:
+            direction (str|None): 要高亮的方向，None 表示不高亮任何按鈕
+        """
+        if not hasattr(self, 'temp_dir_buttons'):
+            return
+
+        self.current_temp_dir = direction
+
+        for code, btn in self.temp_dir_buttons.items():
+            if code == direction:
+                btn.config(bg=UIStyle.PRIMARY_BLUE, fg=UIStyle.WHITE)
+            else:
+                btn.config(bg=UIStyle.WHITE, fg=UIStyle.BLACK)
+
+    def update_temp_dir_buttons_state(self):
+        """根據選取狀態更新九宮格按鈕的啟用/禁用和高亮"""
+        if not hasattr(self, 'temp_dir_buttons'):
+            return
+
+        has_selection = (
+            (self.selected_rect_id is not None) or
+            (len(self.selected_rect_ids) > 0)
+        )
+
+        state = tk.NORMAL if has_selection else tk.DISABLED
+        for code, btn in self.temp_dir_buttons.items():
+            btn.config(state=state)
+
+        if not has_selection:
+            # 無選取：清除高亮
+            self._update_temp_dir_highlight(None)
+            return
+
+        # 讀取選取元器件的方向
+        if not hasattr(self, 'editor_rect') or not self.editor_rect:
+            self._update_temp_dir_highlight(None)
+            return
+
+        rect_ids = []
+        if self.selected_rect_ids:
+            rect_ids = list(self.selected_rect_ids)
+        elif self.selected_rect_id is not None:
+            rect_ids = [self.selected_rect_id]
+
+        directions = set()
+        for rect in self.editor_rect.rectangles:
+            if rect.get("rectId") in rect_ids:
+                directions.add(rect.get("temp_text_dir", "T"))
+
+        if len(directions) == 1:
+            # 所有選取元器件方向一致：高亮該方向
+            self._update_temp_dir_highlight(directions.pop())
+        else:
+            # 方向不一致：不高亮
+            self._update_temp_dir_highlight(None)
 
     def on_canvas_motion_show_temp(self, event):
         """滑鼠移動時顯示即時溫度"""
@@ -2648,9 +2796,10 @@ class EditorCanvas:
                 # 无选中的矩形框，按钮灰色不可用
                 self.delete_button.config(state='disabled', bg=UIStyle.GRAY, fg=UIStyle.DARK_GRAY)
 
-        # 同时更新合并按钮和形狀轉換按鈕狀態
+        # 同时更新合并按钮、形狀轉換按鈕和溫度位置按鈕狀態
         self.update_merge_button_state()
         self.update_shape_buttons_state()
+        self.update_temp_dir_buttons_state()
     
     def update_merge_button_state(self):
         """更新合并按钮的状态（选中>1个矩形框时可用）"""

@@ -31,6 +31,29 @@ from PIL import Image, ImageDraw, ImageFont
 import traceback
 from config import GlobalConfig
 
+
+def calc_temp_text_offset(direction, tri_half, temp_w, temp_h, gap=0):
+    """根據方向計算溫度文字中心相對於三角形中心的偏移量 (dx, dy)。
+
+    Args:
+        direction (str): 方向代碼，可選 "TL", "T", "TR", "L", "R", "BL", "B", "BR"
+        tri_half (float): 三角形半徑（從中心到邊緣的距離）
+        temp_w (float): 溫度文字寬度
+        temp_h (float): 溫度文字高度
+        gap (int): 三角形與文字之間的間距（預設 1px）
+
+    Returns:
+        tuple: (dx, dy) 偏移量
+    """
+    x_off = tri_half + gap + temp_w / 2
+    y_off = tri_half + gap + temp_h / 2
+    offsets = {
+        "TL": (-x_off, -y_off), "T": (0, -y_off), "TR": (x_off, -y_off),
+        "L":  (-x_off, 0),                         "R":  (x_off, 0),
+        "BL": (-x_off, y_off),  "B": (0, y_off),   "BR": (x_off, y_off),
+    }
+    return offsets.get(direction, (0, -y_off))  # 預設正上方
+
 def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8):
     """在影像上繪製三角形溫度標記和文字。
 
@@ -109,9 +132,19 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
     
     cv2.putText(imageA, f'{name}', (left, top - int(4*textScale)), cv2.FONT_HERSHEY_COMPLEX, name_font_scale, textColor, 1, cv2.LINE_AA)
 
+    # 根據方向計算溫度文字偏移
+    direction = item.get("temp_text_dir", "T")
+    temp_text = f'{max_temp}'
+    (tw, th), _ = cv2.getTextSize(temp_text, cv2.FONT_HERSHEY_COMPLEX, temp_font_scale, 1)
+    tri_half = size / 2
+    dx, dy = calc_temp_text_offset(direction, tri_half, tw, th)
+    # cv2 putText 使用左下角錨點，需從中心偏移轉換
+    temp_x = int(cx + dx - tw / 2)
+    temp_y = int(cy + dy + th / 2)
+
     # 在三角形的中心点附近绘制文本（阴影效果）
-    cv2.putText(imageA, f'{max_temp}', (cx - int(16*textScale) + int(2*textScale), cy - int(10*textScale) + int(2*textScale)), cv2.FONT_HERSHEY_COMPLEX, temp_font_scale, shadowColor, 1, cv2.LINE_AA)
-    cv2.putText(imageA, f'{max_temp}', (cx - int(16*textScale), cy - int(10*textScale)), cv2.FONT_HERSHEY_COMPLEX, temp_font_scale, tempColor, 1, cv2.LINE_AA)
+    cv2.putText(imageA, temp_text, (temp_x + int(2*textScale), temp_y + int(2*textScale)), cv2.FONT_HERSHEY_COMPLEX, temp_font_scale, shadowColor, 1, cv2.LINE_AA)
+    cv2.putText(imageA, temp_text, (temp_x, temp_y), cv2.FONT_HERSHEY_COMPLEX, temp_font_scale, tempColor, 1, cv2.LINE_AA)
 
     print("draw_triangle_and_text------->>> ", point1, point2, point3, cx, cy)
 
@@ -220,15 +253,28 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
     print(f"draw_canvas_item: name_font={name_font_size}*{font_scale:.2f}={name_font_size_scaled}, temp_font={temp_font_size}*{font_scale:.2f}={temp_font_size_scaled}")
 
     # 绘制实际文本
-    # 温度文字置中于矩形框内
-    tempTextId = canvas.create_text(cx, cy - 16 * imageScale, text=f'{max_temp}',
+    # 先建立溫度文字（暫時放在中心位置）
+    tempTextId = canvas.create_text(cx, cy, text=f'{max_temp}',
                        font=("Arial", temp_font_size_scaled), fill=tempColor, anchor="center")
+
+    # 根據方向計算溫度文字偏移
+    direction = item.get("temp_text_dir", "T")
+    temp_bbox = canvas.bbox(tempTextId)
+    if temp_bbox:
+        temp_w = temp_bbox[2] - temp_bbox[0]
+        temp_h = temp_bbox[3] - temp_bbox[1]
+        tri_half = size / 2
+        dx, dy = calc_temp_text_offset(direction, tri_half, temp_w, temp_h)
+        canvas.coords(tempTextId, cx + dx, cy + dy)
+    else:
+        # fallback: 預設正上方
+        canvas.coords(tempTextId, cx, cy - 16 * imageScale)
 
     # 名称文字置中于矩形框上方外侧（anchor="s" 使文字底部對齊指定 Y 座標）
     name_center_x = (left + right) / 2  # 矩形框水平中心
     nameId = canvas.create_text(name_center_x, top - 3 * imageScale, text=f'{name}',
                        font=("Arial", name_font_size_scaled, "bold"), fill=textColor, anchor="s")
-    
+
     return rectId, triangleId, tempTextId, nameId
 
 
@@ -269,9 +315,18 @@ def update_canvas_item(canvas, item, imageScale=1):
     canvas.coords(nameId, name_center_x, y1 - 3 * imageScale)
     canvas.itemconfig(nameId, font=("Arial", int(28 * font_scale), "bold"))
 
-    # 温度文字置中于矩形框内
-    canvas.coords(tempTextId, cx, cy - 16 * imageScale)
+    # 根據方向計算溫度文字偏移
     canvas.itemconfig(tempTextId, font=("Arial", int(14 * font_scale)))
+    direction = item.get("temp_text_dir", "T")
+    temp_bbox = canvas.bbox(tempTextId)
+    if temp_bbox:
+        temp_w = temp_bbox[2] - temp_bbox[0]
+        temp_h = temp_bbox[3] - temp_bbox[1]
+        tri_half = size / 2
+        dx, dy = calc_temp_text_offset(direction, tri_half, temp_w, temp_h)
+        canvas.coords(tempTextId, cx + dx, cy + dy)
+    else:
+        canvas.coords(tempTextId, cx, cy - 16 * imageScale)
 
     # 计算新的三角形三个顶点
     point1 = (cx, cy - size // 2)  # 顶点1 (尖角)
@@ -457,22 +512,31 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
             name_font = ImageFont.load_default()
             temp_font = ImageFont.load_default()
 
+        # 根據方向計算溫度文字偏移（PIL 使用左上角錨點）
+        direction = item.get("temp_text_dir", "T")
+        temp_text_str = str(max_temp)
+        temp_bbox = draw.textbbox((0, 0), temp_text_str, font=temp_font)
+        tw = temp_bbox[2] - temp_bbox[0]
+        th = temp_bbox[3] - temp_bbox[1]
+        tri_half = size / 2
+        dx, dy = calc_temp_text_offset(direction, tri_half, tw, th)
+        # 從中心偏移轉換為 PIL 左上角座標
+        temp_text_x = int(cx + dx - tw / 2)
+        temp_text_y = int(cy + dy - th / 2)
+
         # 对于Layout图，检查文本位置是否在边界内
         if imageIndex != 0:
-            # 计算文本位置
-            temp_text_x = cx - int(16 * textScale)
-            temp_text_y = cy - int(10 * textScale)
             name_text_x = left
             name_text_y = top - int(name_font_scale) - int(4 * textScale)
-            
+
             # 检查温度文本是否在边界内
             if 0 <= temp_text_x < img_width and 0 <= temp_text_y < img_height:
                 # 绘制温度文本
-                draw.text((temp_text_x, temp_text_y), str(max_temp), font=temp_font, fill=shadowColor)
-                draw.text((temp_text_x, temp_text_y), str(max_temp), font=temp_font, fill=tempColor)
+                draw.text((temp_text_x, temp_text_y), temp_text_str, font=temp_font, fill=shadowColor)
+                draw.text((temp_text_x, temp_text_y), temp_text_str, font=temp_font, fill=tempColor)
             else:
                 print(f"警告：温度文本 {name} 超出Layout图边界，跳过绘制")
-            
+
             # 检查名称文本是否在边界内
             if 0 <= name_text_x < img_width and 0 <= name_text_y < img_height:
                 # 绘制名称文本
@@ -481,8 +545,8 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
                 print(f"警告：名称文本 {name} 超出Layout图边界，跳过绘制")
         else:
             # 热力图直接绘制文本
-            draw.text((cx - int(16 * textScale), cy - int(10 * textScale)), str(max_temp), font=temp_font, fill=shadowColor)
-            draw.text((cx - int(16 * textScale), cy - int(10 * textScale)), str(max_temp), font=temp_font, fill=tempColor)
+            draw.text((temp_text_x, temp_text_y), temp_text_str, font=temp_font, fill=shadowColor)
+            draw.text((temp_text_x, temp_text_y), temp_text_str, font=temp_font, fill=tempColor)
             draw.text((left, top - int(name_font_scale) - int(4 * textScale)), name, font=name_font, fill=textColor)
 
         # pil_image.show()  # 直接显示 PIL 图像
