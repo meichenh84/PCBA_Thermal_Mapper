@@ -395,10 +395,10 @@ class EditorCanvas:
         # "刪除其他" 按鈕（在名稱篩選 ⓘ 圖示後方）
         self.delete_others_btn = tk.Button(
             filter_frame,
-            text="刪除其他",
+            text="\u26A0 刪除其他",
             font=("Arial", 8),
-            bg=UIStyle.DANGER_RED,
-            fg=UIStyle.WHITE,
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.BLACK,
             relief="raised",
             bd=1,
             padx=4,
@@ -407,6 +407,24 @@ class EditorCanvas:
             state='disabled'
         )
         self.delete_others_btn.grid(row=0, column=3, sticky="w", padx=(2, 5), pady=3)
+
+        # 刪除其他說明圖示
+        delete_others_info_label = tk.Label(
+            filter_frame,
+            text="ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
+        )
+        delete_others_info_label.grid(row=0, column=4, sticky="w", padx=(0, 5), pady=3)
+        Tooltip(
+            delete_others_info_label,
+            "刪除其他說明：\n"
+            "• 先用篩選條件篩選出要保留的元器件\n"
+            "• 點擊按鈕後，不符合篩選條件的項目將被永久刪除\n"
+            "• 此操作不可復原，請確認後再執行"
+        )
 
         # === 第二列：描述篩選輸入框 + 驚嘆號 ===
         # 描述篩選輸入框
@@ -684,6 +702,10 @@ class EditorCanvas:
             # 多選
             self.selected_rect_id = None
             self.highlight_multiple_rects_in_canvas(selected_rect_ids)
+            # 使用 Ctrl/Shift 選取多個時，自動勾選多選模式
+            if hasattr(self, 'multi_select_var') and not self.multi_select_var.get():
+                self.multi_select_var.set(True)
+                self.toggle_multi_select_mode()
 
         # 更新按鈕狀態
         if hasattr(self, 'update_delete_button_state'):
@@ -1607,7 +1629,26 @@ class EditorCanvas:
             selectcolor=UIStyle.WHITE,
             command=self.toggle_multi_select_mode
         )
-        self.multi_select_checkbox.pack(anchor='w')
+        self.multi_select_checkbox.pack(side='left')
+
+        # 多選模式說明圖示
+        multi_select_info_label = tk.Label(
+            multi_select_frame,
+            text="ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
+        )
+        multi_select_info_label.pack(side='left', padx=(2, 0))
+        Tooltip(
+            multi_select_info_label,
+            "多選模式說明：\n"
+            "• 勾選後可在列表中選取多個元器件\n"
+            "• 支援 Ctrl+點擊 逐一加選\n"
+            "• 支援 Shift+點擊 範圍選取\n"
+            "• 選取多個後可批次轉換形狀或刪除"
+        )
 
         # 即時溫度模式開關
         realtime_temp_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
@@ -1632,9 +1673,9 @@ class EditorCanvas:
         realtime_temp_info_label = tk.Label(
             realtime_temp_frame,
             text="ⓘ",
-            font=("Arial", 12, "bold"),
+            font=("Arial", 12),
             bg=UIStyle.VERY_LIGHT_BLUE,
-            fg=UIStyle.DARK_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
             cursor="hand2"
         )
         realtime_temp_info_label.pack(side='left', padx=(2, 0))
@@ -1665,7 +1706,26 @@ class EditorCanvas:
             selectcolor=UIStyle.WHITE,
             command=self.toggle_magnifier_mode
         )
-        self.magnifier_checkbox.pack(anchor='w')
+        self.magnifier_checkbox.pack(side='left')
+
+        # 放大模式說明圖示
+        magnifier_info_label = tk.Label(
+            magnifier_frame,
+            text="ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
+        )
+        magnifier_info_label.pack(side='left', padx=(2, 0))
+        Tooltip(
+            magnifier_info_label,
+            "放大模式說明：\n"
+            "• 勾選後可用滾輪放大/縮小熱力圖\n"
+            "• 右鍵拖動可平移檢視區域\n"
+            "• 滾輪縮小到最小即回到預設大小\n"
+            "• 取消勾選自動恢復預設顯示"
+        )
 
         # ========== 形狀轉換按鈕區域 ==========
         # 形狀轉換標籤容器
@@ -1686,7 +1746,7 @@ class EditorCanvas:
         shape_info_label = tk.Label(
             shape_label_frame,
             text=" ⓘ",
-            font=("Arial", 10),
+            font=("Arial", 12),
             bg=UIStyle.VERY_LIGHT_BLUE,
             fg=UIStyle.PRIMARY_BLUE,
             cursor="hand2"
