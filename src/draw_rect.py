@@ -32,6 +32,16 @@ import traceback
 from config import GlobalConfig
 
 
+OUTLINE_OFFSETS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+def _create_outline_texts(canvas, x, y, text, font, anchor="center", color="#000000"):
+    """建立 4 個偏移黑色文字，形成描邊效果。回傳 outline_ids 列表。"""
+    ids = []
+    for dx, dy in OUTLINE_OFFSETS:
+        oid = canvas.create_text(x + dx, y + dy, text=text, font=font, fill=color, anchor=anchor)
+        ids.append(oid)
+    return ids
+
 def calc_temp_text_offset(direction, tri_half, temp_w, temp_h, gap=0):
     """根據方向計算溫度文字中心相對於三角形中心的偏移量 (dx, dy)。
 
@@ -130,7 +140,11 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
     name_font_scale = (name_font_size / 12.0) * 0.55 * textScale
     temp_font_scale = (temp_font_size / 10.0) * 0.55 * textScale
     
-    cv2.putText(imageA, f'{name}', (left, top - int(4*textScale)), cv2.FONT_HERSHEY_COMPLEX, name_font_scale, textColor, 1, cv2.LINE_AA)
+    # 名稱文字 4 方向描邊
+    name_pos = (left, top - int(4*textScale))
+    for odx, ody in OUTLINE_OFFSETS:
+        cv2.putText(imageA, f'{name}', (name_pos[0] + odx, name_pos[1] + ody), cv2.FONT_HERSHEY_COMPLEX, name_font_scale, shadowColor, 1, cv2.LINE_AA)
+    cv2.putText(imageA, f'{name}', name_pos, cv2.FONT_HERSHEY_COMPLEX, name_font_scale, textColor, 1, cv2.LINE_AA)
 
     # 根據方向計算溫度文字偏移
     direction = item.get("temp_text_dir", "T")
@@ -142,8 +156,9 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
     temp_x = int(cx + dx - tw / 2)
     temp_y = int(cy + dy + th / 2)
 
-    # 在三角形的中心点附近绘制文本（阴影效果）
-    cv2.putText(imageA, temp_text, (temp_x + int(2*textScale), temp_y + int(2*textScale)), cv2.FONT_HERSHEY_COMPLEX, temp_font_scale, shadowColor, 1, cv2.LINE_AA)
+    # 溫度文字 4 方向描邊
+    for odx, ody in OUTLINE_OFFSETS:
+        cv2.putText(imageA, temp_text, (temp_x + odx, temp_y + ody), cv2.FONT_HERSHEY_COMPLEX, temp_font_scale, shadowColor, 1, cv2.LINE_AA)
     cv2.putText(imageA, temp_text, (temp_x, temp_y), cv2.FONT_HERSHEY_COMPLEX, temp_font_scale, tempColor, 1, cv2.LINE_AA)
 
     print("draw_triangle_and_text------->>> ", point1, point2, point3, cx, cy)
@@ -244,18 +259,16 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
     # 绘制三角形
     triangleId = canvas.create_polygon([point1, point2, point3], fill=tempColor, outline=tempColor, width=1)
 
-    # 绘制文本（带阴影效果）
-    shadow_offset = 2  # 阴影偏移量
-
     # 使用配置的字体大小
     name_font_size_scaled = int(name_font_size * font_scale)
     temp_font_size_scaled = int(temp_font_size * font_scale)
     print(f"draw_canvas_item: name_font={name_font_size}*{font_scale:.2f}={name_font_size_scaled}, temp_font={temp_font_size}*{font_scale:.2f}={temp_font_size_scaled}")
 
-    # 绘制实际文本
-    # 先建立溫度文字（暫時放在中心位置）
+    # 先建立溫度描邊文字（在主文字下方），再建立主文字
+    temp_font_tuple = ("Arial", temp_font_size_scaled)
+    tempOutlineIds = _create_outline_texts(canvas, cx, cy, f'{max_temp}', temp_font_tuple)
     tempTextId = canvas.create_text(cx, cy, text=f'{max_temp}',
-                       font=("Arial", temp_font_size_scaled), fill=tempColor, anchor="center")
+                       font=temp_font_tuple, fill=tempColor, anchor="center")
 
     # 根據方向計算溫度文字偏移
     direction = item.get("temp_text_dir", "T")
@@ -266,14 +279,26 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
         tri_half = size / 2
         dx, dy = calc_temp_text_offset(direction, tri_half, temp_w, temp_h)
         canvas.coords(tempTextId, cx + dx, cy + dy)
+        # 同步移動描邊文字
+        for oid, (odx, ody) in zip(tempOutlineIds, OUTLINE_OFFSETS):
+            canvas.coords(oid, cx + dx + odx, cy + dy + ody)
     else:
         # fallback: 預設正上方
         canvas.coords(tempTextId, cx, cy - 16 * imageScale)
+        for oid, (odx, ody) in zip(tempOutlineIds, OUTLINE_OFFSETS):
+            canvas.coords(oid, cx + odx, cy - 16 * imageScale + ody)
 
     # 名称文字置中于矩形框上方外侧（anchor="s" 使文字底部對齊指定 Y 座標）
     name_center_x = (left + right) / 2  # 矩形框水平中心
-    nameId = canvas.create_text(name_center_x, top - 3 * imageScale, text=f'{name}',
-                       font=("Arial", name_font_size_scaled, "bold"), fill=textColor, anchor="s")
+    name_y = top - 3 * imageScale
+    name_font_tuple = ("Arial", name_font_size_scaled, "bold")
+    nameOutlineIds = _create_outline_texts(canvas, name_center_x, name_y, f'{name}', name_font_tuple, anchor="s")
+    nameId = canvas.create_text(name_center_x, name_y, text=f'{name}',
+                       font=name_font_tuple, fill=textColor, anchor="s")
+
+    # 將描邊 ID 存入 item
+    item["tempOutlineIds"] = tempOutlineIds
+    item["nameOutlineIds"] = nameOutlineIds
 
     return rectId, triangleId, tempTextId, nameId
 
@@ -531,23 +556,32 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
 
             # 检查温度文本是否在边界内
             if 0 <= temp_text_x < img_width and 0 <= temp_text_y < img_height:
-                # 绘制温度文本
-                draw.text((temp_text_x, temp_text_y), temp_text_str, font=temp_font, fill=shadowColor)
+                # 溫度文字 4 方向描邊
+                for odx, ody in OUTLINE_OFFSETS:
+                    draw.text((temp_text_x + odx, temp_text_y + ody), temp_text_str, font=temp_font, fill=shadowColor)
                 draw.text((temp_text_x, temp_text_y), temp_text_str, font=temp_font, fill=tempColor)
             else:
                 print(f"警告：温度文本 {name} 超出Layout图边界，跳过绘制")
 
             # 检查名称文本是否在边界内
             if 0 <= name_text_x < img_width and 0 <= name_text_y < img_height:
-                # 绘制名称文本
+                # 名稱文字 4 方向描邊
+                for odx, ody in OUTLINE_OFFSETS:
+                    draw.text((name_text_x + odx, name_text_y + ody), name, font=name_font, fill=shadowColor)
                 draw.text((name_text_x, name_text_y), name, font=name_font, fill=textColor)
             else:
                 print(f"警告：名称文本 {name} 超出Layout图边界，跳过绘制")
         else:
-            # 热力图直接绘制文本
-            draw.text((temp_text_x, temp_text_y), temp_text_str, font=temp_font, fill=shadowColor)
+            # 热力图直接绘制文本 — 溫度文字 4 方向描邊
+            for odx, ody in OUTLINE_OFFSETS:
+                draw.text((temp_text_x + odx, temp_text_y + ody), temp_text_str, font=temp_font, fill=shadowColor)
             draw.text((temp_text_x, temp_text_y), temp_text_str, font=temp_font, fill=tempColor)
-            draw.text((left, top - int(name_font_scale) - int(4 * textScale)), name, font=name_font, fill=textColor)
+            # 名稱文字 4 方向描邊
+            name_pos_x = left
+            name_pos_y = top - int(name_font_scale) - int(4 * textScale)
+            for odx, ody in OUTLINE_OFFSETS:
+                draw.text((name_pos_x + odx, name_pos_y + ody), name, font=name_font, fill=shadowColor)
+            draw.text((name_pos_x, name_pos_y), name, font=name_font, fill=textColor)
 
         # pil_image.show()  # 直接显示 PIL 图像
 

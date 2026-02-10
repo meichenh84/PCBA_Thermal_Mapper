@@ -2049,11 +2049,13 @@ class EditorCanvas:
                 font_scale=base_scale  # 字體保持基礎縮放比例，不隨放大而變大
             )
 
-            # 更新原始 rect 的 Canvas ID
+            # 更新原始 rect 的 Canvas ID（含描邊 ID）
             rect["rectId"] = rectId
             rect["triangleId"] = triangleId
             rect["tempTextId"] = tempTextId
             rect["nameId"] = nameId
+            rect["tempOutlineIds"] = transformed_rect.get("tempOutlineIds")
+            rect["nameOutlineIds"] = transformed_rect.get("nameOutlineIds")
 
         # 清除錨點和選擇狀態（因為 Canvas ID 已改變）
         if hasattr(self.editor_rect, 'delete_anchors'):

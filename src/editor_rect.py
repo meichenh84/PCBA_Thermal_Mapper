@@ -38,7 +38,7 @@ import numpy as np
 
 from dialog_component_setting import ComponentSettingDialog
 from load_tempA import TempLoader
-from draw_rect import draw_canvas_item, calc_temp_text_offset
+from draw_rect import draw_canvas_item, calc_temp_text_offset, OUTLINE_OFFSETS
 
 
 class RectEditor:
@@ -181,6 +181,7 @@ class RectEditor:
         temp_bbox = self.canvas.bbox(tempTextId)
         if not temp_bbox:
             self.canvas.coords(tempTextId, display_cx, display_cy - 16 * display_scale)
+            self._move_outline(rect.get("tempOutlineIds"), display_cx, display_cy - 16 * display_scale)
             return
         temp_w = temp_bbox[2] - temp_bbox[0]
         temp_h = temp_bbox[3] - temp_bbox[1]
@@ -188,6 +189,27 @@ class RectEditor:
         tri_half = max(7, int(8 * display_scale)) / 2
         dx, dy = calc_temp_text_offset(direction, tri_half, temp_w, temp_h)
         self.canvas.coords(tempTextId, display_cx + dx, display_cy + dy)
+        self._move_outline(rect.get("tempOutlineIds"), display_cx + dx, display_cy + dy)
+
+    def _move_outline(self, outline_ids, x, y):
+        """移動描邊文字到指定中心位置。"""
+        if not outline_ids:
+            return
+        for oid, (odx, ody) in zip(outline_ids, OUTLINE_OFFSETS):
+            try:
+                self.canvas.coords(oid, x + odx, y + ody)
+            except:
+                pass
+
+    def _delete_outline(self, outline_ids):
+        """刪除描邊文字。"""
+        if not outline_ids:
+            return
+        for oid in outline_ids:
+            try:
+                self.canvas.delete(oid)
+            except:
+                pass
 
     def set_temp_text_dir(self, rect_ids, direction):
         """設定指定元器件的溫度文字方向，並立即更新 Canvas 顯示。
@@ -248,12 +270,25 @@ class RectEditor:
                 # 更新名称标签位置和字體大小
                 if nameId:
                     name_center_x = (left + right) / 2
-                    self.canvas.coords(nameId, name_center_x, top - 3 * self.display_scale)
+                    name_y = top - 3 * self.display_scale
+                    self.canvas.coords(nameId, name_center_x, name_y)
                     self.canvas.itemconfig(nameId, font=("Arial", name_font_size_scaled, "bold"))
+                    # 同步描邊
+                    self._move_outline(rect.get("nameOutlineIds"), name_center_x, name_y)
+                    for oid in (rect.get("nameOutlineIds") or []):
+                        try:
+                            self.canvas.itemconfig(oid, font=("Arial", name_font_size_scaled, "bold"))
+                        except:
+                            pass
 
                 # 更新温度文本位置和字體大小
                 if tempTextId:
                     self.canvas.itemconfig(tempTextId, font=("Arial", temp_font_size_scaled))
+                    for oid in (rect.get("tempOutlineIds") or []):
+                        try:
+                            self.canvas.itemconfig(oid, font=("Arial", temp_font_size_scaled))
+                        except:
+                            pass
                     self._position_temp_text(rect, cx, cy, tempTextId, self.display_scale)
 
                 # 更新三角形位置
@@ -301,18 +336,35 @@ class RectEditor:
         display_cx = cx * self.display_scale
         display_cy = cy * self.display_scale
         
+        # 找到對應 rect，用於讀取描邊 ID
+        target_rect = None
+        for r in self.rectangles:
+            if r.get("rectId") == rectId:
+                target_rect = r
+                break
+
         if nameId:
             self.canvas.itemconfig(nameId, text=name)
             name_center_x = (display_x1 + display_x2) / 2
-            self.canvas.coords(nameId, name_center_x, display_y1 - 3 * self.display_scale)
+            name_y = display_y1 - 3 * self.display_scale
+            self.canvas.coords(nameId, name_center_x, name_y)
+            # 同步描邊
+            if target_rect:
+                for oid in (target_rect.get("nameOutlineIds") or []):
+                    try:
+                        self.canvas.itemconfig(oid, text=name)
+                    except:
+                        pass
+                self._move_outline(target_rect.get("nameOutlineIds"), name_center_x, name_y)
         if tempTextId:
             self.canvas.itemconfig(tempTextId, text=max_temp)
-            # 從 rectangles 找到對應 rect，讀取方向
-            target_rect = None
-            for r in self.rectangles:
-                if r.get("rectId") == rectId:
-                    target_rect = r
-                    break
+            # 同步描邊文字內容
+            if target_rect:
+                for oid in (target_rect.get("tempOutlineIds") or []):
+                    try:
+                        self.canvas.itemconfig(oid, text=max_temp)
+                    except:
+                        pass
             if target_rect:
                 self._position_temp_text(target_rect, display_cx, display_cy, tempTextId, self.display_scale)
             else:
@@ -640,7 +692,9 @@ class RectEditor:
         Args:
             rect (dict): 矩形資料字典
         """
-        # 刪除舊的 Canvas 物件
+        # 刪除舊的 Canvas 物件（含描邊）
+        self._delete_outline(rect.get("tempOutlineIds"))
+        self._delete_outline(rect.get("nameOutlineIds"))
         old_ids = [
             rect.get("rectId"),
             rect.get("nameId"),
@@ -820,10 +874,17 @@ class RectEditor:
 
                         # 更新名称标签位置（置中于矩形框上方）
                         name_center_x = (display_x1 + display_x2) / 2
-                        self.canvas.coords(nameId, name_center_x, display_y1 - 3 * font_scale)
+                        name_y = display_y1 - 3 * font_scale
+                        self.canvas.coords(nameId, name_center_x, name_y)
+                        self._move_outline(rect.get("nameOutlineIds"), name_center_x, name_y)
 
                         # 更新温度文本位置（根據方向定位）
                         self.canvas.itemconfig(tempTextId, text=max_temp)
+                        for oid in (rect.get("tempOutlineIds") or []):
+                            try:
+                                self.canvas.itemconfig(oid, text=max_temp)
+                            except:
+                                pass
                         self._position_temp_text(rect, display_cx, display_cy, tempTextId, font_scale)
 
                         # 更新三角形
@@ -832,7 +893,7 @@ class RectEditor:
                         point2 = (display_cx - size // 2, display_cy + size // 2)
                         point3 = (display_cx + size // 2, display_cy + size // 2)
                         self.canvas.coords(triangleId, point1[0], point1[1], point2[0], point2[1], point3[0], point3[1])
-                    
+
                     # 如果温度发生变化，通知列表更新
                     if abs(max_temp - old_temp) > 0.1:  # 温度变化超过0.1度
                         if self.on_rect_change_callback:
@@ -852,6 +913,12 @@ class RectEditor:
         else:
             self.delete_origin_count += 1
 
+        # 刪除描邊文字
+        for rect in self.rectangles:
+            if rect.get("rectId") == rectId:
+                self._delete_outline(rect.get("tempOutlineIds"))
+                self._delete_outline(rect.get("nameOutlineIds"))
+                break
         # rectId = self.drag_data["rectId"]
         self.canvas.delete(rectId)
         self.canvas.delete(nameId)
@@ -1228,9 +1295,19 @@ class RectEditor:
             display_scale = self.display_scale if self.display_scale > 0 else 1.0
             font_scale = display_scale
 
+        # 從 nameId 反查對應的 rect（用於描邊同步）
+        target_rect = None
+        for r in self.rectangles:
+            if r.get("nameId") == nameId:
+                target_rect = r
+                break
+
         # 更新名称标签位置（置中于矩形框上方）
         name_center_x = (x1 + x2) / 2
-        self.canvas.coords(nameId, name_center_x, y1 - 3 * font_scale)
+        name_y = y1 - 3 * font_scale
+        self.canvas.coords(nameId, name_center_x, name_y)
+        if target_rect:
+            self._move_outline(target_rect.get("nameOutlineIds"), name_center_x, name_y)
 
         # 使用原图像坐标查询温度和最高温度位置
         max_temp = self.tempALoader.get_max_temp(int(orig_x1), int(orig_y1), int(orig_x2), int(orig_y2), 1.0)
@@ -1248,12 +1325,13 @@ class RectEditor:
 
         # 更新温度文本位置（根據方向定位）
         self.canvas.itemconfig(tempTextId, text=max_temp)
-        # 從 tempTextId 反查對應的 rect
-        target_rect = None
-        for r in self.rectangles:
-            if r.get("tempTextId") == tempTextId:
-                target_rect = r
-                break
+        # 同步描邊文字內容
+        if target_rect:
+            for oid in (target_rect.get("tempOutlineIds") or []):
+                try:
+                    self.canvas.itemconfig(oid, text=max_temp)
+                except:
+                    pass
         if target_rect:
             self._position_temp_text(target_rect, display_cx, display_cy, tempTextId, font_scale)
         else:
@@ -1313,6 +1391,9 @@ class RectEditor:
         """根据ID删除矩形"""
         for rect in self.rectangles:
             if rect.get("rectId") == rect_id:
+                # 刪除描邊文字
+                self._delete_outline(rect.get("tempOutlineIds"))
+                self._delete_outline(rect.get("nameOutlineIds"))
                 # 删除canvas元素
                 if rect.get("rectId"):
                     self.canvas.delete(rect["rectId"])
@@ -1322,7 +1403,7 @@ class RectEditor:
                     self.canvas.delete(rect["triangleId"])
                 if rect.get("tempTextId"):
                     self.canvas.delete(rect["tempTextId"])
-                
+
                 # 从列表中移除
                 self.rectangles.remove(rect)
                 
@@ -1352,6 +1433,9 @@ class RectEditor:
         for rect_id in rect_ids:
             for rect in self.rectangles[:]:  # 使用切片创建副本以避免迭代时修改列表
                 if rect.get("rectId") == rect_id:
+                    # 刪除描邊文字
+                    self._delete_outline(rect.get("tempOutlineIds"))
+                    self._delete_outline(rect.get("nameOutlineIds"))
                     # 删除canvas元素
                     if rect.get("rectId"):
                         self.canvas.delete(rect["rectId"])
@@ -1361,19 +1445,19 @@ class RectEditor:
                         self.canvas.delete(rect["triangleId"])
                     if rect.get("tempTextId"):
                         self.canvas.delete(rect["tempTextId"])
-                    
+
                     # 从列表中移除
                     self.rectangles.remove(rect)
-                    
+
                     # 更新计数
                     if rect.get("isNew"):
                         self.add_new_count -= 1
                     else:
                         self.delete_origin_count += 1
-                    
+
                     deleted_count += 1
                     break
-        
+
         # 清空锚点
         self.delete_anchors()
         # 重置拖拽数据
@@ -1467,6 +1551,9 @@ class RectEditor:
         for rect_id in rect_ids:
             for rect in self.rectangles[:]:
                 if rect.get("rectId") == rect_id:
+                    # 刪除描邊文字
+                    self._delete_outline(rect.get("tempOutlineIds"))
+                    self._delete_outline(rect.get("nameOutlineIds"))
                     # 删除canvas元素
                     if rect.get("rectId"):
                         self.canvas.delete(rect["rectId"])
