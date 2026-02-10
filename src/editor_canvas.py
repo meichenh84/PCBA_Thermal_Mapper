@@ -250,6 +250,14 @@ class EditorCanvas:
 
     def delayed_initialization(self):
         """延迟初始化，确保canvas尺寸正确"""
+        # 放大模式預設開啟時，先同步 editor_rect（必須在 update_bg_image 之前）
+        if self.magnifier_enabled and hasattr(self, 'editor_rect') and self.editor_rect:
+            self.editor_rect.set_magnifier_mode(True)
+            # 重置 zoom_scale 為 0，讓 calculate_fit_scale 能正確設為 min_zoom（fit 顯示）
+            # 否則預設 zoom_scale=1.0 大於 min_zoom，不會被更新，導致圖片以原始尺寸繪製
+            self.editor_rect.zoom_scale = 0
+            self.editor_rect.canvas_offset_x = 0
+            self.editor_rect.canvas_offset_y = 0
         # 首先更新背景图像，确保canvas尺寸正确
         self.update_bg_image()
         # 然后设置显示缩放比例
@@ -260,12 +268,9 @@ class EditorCanvas:
         # 同步多选模式状态到 editor_rect
         if hasattr(self, 'editor_rect') and self.editor_rect:
             self.editor_rect.multi_select_enabled = self.multi_select_enabled
-        # 啟用即時溫度（綁定滑鼠移動事件）
-        if self.realtime_temp_enabled:
-            self.toggle_realtime_temp_mode()
-        # 啟用放大模式
-        if self.magnifier_enabled:
-            self.toggle_magnifier_mode()
+        # 即時溫度預設開啟時，綁定滑鼠移動事件
+        if self.realtime_temp_enabled and hasattr(self, 'dialog') and self.dialog:
+            self.dialog.bind('<Motion>', self.on_canvas_motion_show_temp, add='+')
         # 應用預設排序（名稱 A~Z）
         self.apply_sort()
         # 最后更新列表（apply_sort 內部已經調用了 update_rect_list，這裡可以移除）
@@ -317,11 +322,11 @@ class EditorCanvas:
         search_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
         search_frame.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         search_frame.grid_columnconfigure(1, weight=1)  # 输入框占满中间部分
-        
+
         # 搜索图标标签
         search_label = tk.Label(search_frame, text="🔍", font=("Arial", 12), bg=UIStyle.VERY_LIGHT_BLUE, fg=UIStyle.PRIMARY_BLUE)
         search_label.grid(row=0, column=0, sticky="w", padx=(0, 3))  # 减少右边距
-        
+
         # 搜索输入框（使用占位符控件）
         from placeholder_entry import PlaceholderEntry
         self.search_entry = PlaceholderEntry(
@@ -331,7 +336,7 @@ class EditorCanvas:
             font=UIStyle.SMALL_FONT
         )
         self.search_entry.grid(row=0, column=1, sticky="ew", padx=(0, 3))  # 减少右边距，让输入框占满中间
-        
+
         # 清除搜索按钮（放大）
         clear_button = tk.Button(
             search_frame,
@@ -3038,13 +3043,13 @@ class EditorCanvas:
 
         search_text = self.search_entry.get().strip().lower()
         self.filter_rect_list(search_text)
-    
+
     def clear_search(self):
         """清除搜索内容"""
         if hasattr(self, 'search_entry'):
             self.search_entry.clear()
             self.filter_rect_list("")
-    
+
     def filter_rect_list(self, search_text):
         """根据搜索文本过滤矩形框列表（使用 Treeview API）"""
         # 🔥 修復：使用新的 Treeview 篩選邏輯
