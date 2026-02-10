@@ -1442,20 +1442,26 @@ class RectEditor:
         # 計算 fit 比例
         self.calculate_fit_scale()
 
-    def calculate_fit_scale(self):
-        """計算能完整顯示圖像的最小縮放比例"""
+    def calculate_fit_scale(self, canvas_w=None, canvas_h=None):
+        """計算能完整顯示圖像的最小縮放比例
+
+        Args:
+            canvas_w: Canvas 寬度（可選，預設用 winfo_width）
+            canvas_h: Canvas 高度（可選，預設用 winfo_height）
+        """
         if not self.original_bg_image:
             return
 
-        canvas_w = self.canvas.winfo_width()
-        canvas_h = self.canvas.winfo_height()
+        if canvas_w is None:
+            canvas_w = self.canvas.winfo_width()
+        if canvas_h is None:
+            canvas_h = self.canvas.winfo_height()
         img_w = self.original_bg_image.width
         img_h = self.original_bg_image.height
 
         if canvas_w > 0 and canvas_h > 0:
             fit_scale = min(canvas_w / img_w, canvas_h / img_h)
-            # 最小縮放不能小於 1.0（原始大小）
-            self.min_zoom = max(1.0, fit_scale)
+            self.min_zoom = fit_scale
             # 確保初始縮放不小於 min_zoom
             if self.zoom_scale < self.min_zoom:
                 self.zoom_scale = self.min_zoom

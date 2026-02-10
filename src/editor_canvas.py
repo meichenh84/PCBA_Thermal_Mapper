@@ -1542,8 +1542,8 @@ class EditorCanvas:
         
         # 檢查是否啟用了放大模式
         if hasattr(self, 'magnifier_enabled') and self.magnifier_enabled and hasattr(self, 'editor_rect') and self.editor_rect:
-            # 放大模式：重新計算 fit_scale 並重新繪製
-            self.editor_rect.calculate_fit_scale()
+            # 放大模式：以實際 canvas 尺寸重新計算 fit_scale
+            self.editor_rect.calculate_fit_scale(new_width, new_height)
             # 如果當前縮放小於新的 min_zoom，調整縮放
             if self.editor_rect.zoom_scale < self.editor_rect.min_zoom:
                 self.editor_rect.zoom_scale = self.editor_rect.min_zoom
@@ -1832,6 +1832,11 @@ class EditorCanvas:
                 # _zoom_was_active 在 on_zoom_change() 中設為 True
                 need_restore = getattr(self, '_zoom_was_active', False)
             self.editor_rect.set_magnifier_mode(self.magnifier_enabled)
+            # 啟用放大模式時，以當前 canvas 尺寸重新計算 min_zoom（= display_scale）
+            if not old_enabled and self.magnifier_enabled:
+                cw = self.canvas.winfo_width()
+                ch = self.canvas.winfo_height()
+                self.editor_rect.calculate_fit_scale(cw, ch)
 
         # 只有真的放大過才需要恢復 default 顯示
         if need_restore:
