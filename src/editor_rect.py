@@ -232,7 +232,9 @@ class RectEditor:
                 if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
                     display_cx = cx * self.zoom_scale + self.canvas_offset_x
                     display_cy = cy * self.zoom_scale + self.canvas_offset_y
-                    display_scale = self.zoom_scale
+                    # 🔥 使用 font_scale=1.0，與三角形和文字的實際大小一致
+                    # 不可使用 zoom_scale，否則 tri_half 會隨放大倍率變大導致文字離三角形太遠
+                    display_scale = 1.0
                 else:
                     display_scale = self.display_scale if self.display_scale > 0 else 1.0
                     display_cx = cx * display_scale
