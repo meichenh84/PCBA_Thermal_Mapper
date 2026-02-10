@@ -572,6 +572,9 @@ class RectEditor:
         Args:
             rect (dict): 矩形資料字典
         """
+        # 記住轉換前的矩形邊界，以便轉回矩形時恢復
+        rect["_rect_bounds"] = (rect["x1"], rect["y1"], rect["x2"], rect["y2"])
+
         # 計算矩形的幾何中心（邊界框中心）
         geometric_cx = (rect["x1"] + rect["x2"]) / 2
         geometric_cy = (rect["y1"] + rect["y2"]) / 2
@@ -604,15 +607,19 @@ class RectEditor:
         self._redraw_single_rect(rect)
 
     def convert_to_rectangle(self, rect):
-        """將圓形轉換為矩形（保持外接框大小）
+        """將圓形轉換為矩形（恢復轉換前的矩形邊界）
 
         Args:
             rect (dict): 矩形資料字典
         """
-        # 保持當前邊界不變（策略 A）
         rect["shape"] = "rectangle"
 
-        # 重新計算範圍內的最高溫度點位置（邊界框相同，但形狀改變可能影響識別）
+        # 恢復轉換前保存的矩形邊界（若有的話）
+        saved = rect.pop("_rect_bounds", None)
+        if saved:
+            rect["x1"], rect["y1"], rect["x2"], rect["y2"] = saved
+
+        # 重新計算範圍內的最高溫度點位置
         cx, cy = self.tempALoader.get_max_temp_coords(
             int(rect["x1"]), int(rect["y1"]),
             int(rect["x2"]), int(rect["y2"]), 1.0)
