@@ -1874,7 +1874,7 @@ class EditorCanvas:
         # 合并按钮 - 固定高度30px
         self.merge_button = tk.Button(
             button_container,
-            text="🔗 合并",
+            text="合并 ➕",
             font=UIStyle.BUTTON_FONT,
             width=10,
             height=2,
@@ -1889,7 +1889,7 @@ class EditorCanvas:
         # 删除按钮 - 固定高度30px
         self.delete_button = tk.Button(
             button_container,
-            text="🗑️ 删除",
+            text="删除 ❌",
             font=UIStyle.BUTTON_FONT,
             width=10,
             height=2,  # 调整高度以适应30px
