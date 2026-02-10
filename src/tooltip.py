@@ -90,8 +90,46 @@ class Tooltip:
     def _on_motion(self, event):
         """滑鼠移動時更新提示框位置"""
         if self.tooltip_window:
-            # 更新提示框位置，跟隨游標
-            self.tooltip_window.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 10}")
+            x, y = self._calc_position(event.x_root, event.y_root)
+            self.tooltip_window.wm_geometry(f"+{x}+{y}")
+
+    def _calc_position(self, cursor_x, cursor_y):
+        """計算提示框位置，避免超出螢幕邊界。
+
+        優先顯示在游標右下方；若超出螢幕右邊界則改為左側，
+        若超出螢幕下邊界則改為上方。
+
+        Args:
+            cursor_x (int): 游標螢幕 X 座標
+            cursor_y (int): 游標螢幕 Y 座標
+
+        Returns:
+            tuple: (x, y) 提示框左上角螢幕座標
+        """
+        offset = 15
+        screen_w = self.widget.winfo_screenwidth()
+        screen_h = self.widget.winfo_screenheight()
+
+        # 取得提示框尺寸（需要先 update 才能拿到正確值）
+        if self.tooltip_window:
+            self.tooltip_window.update_idletasks()
+            tip_w = self.tooltip_window.winfo_reqwidth()
+            tip_h = self.tooltip_window.winfo_reqheight()
+        else:
+            tip_w = 0
+            tip_h = 0
+
+        # 水平方向：預設右側，超出則改左側
+        x = cursor_x + offset
+        if x + tip_w > screen_w:
+            x = cursor_x - offset - tip_w
+
+        # 垂直方向：預設下方，超出則改上方
+        y = cursor_y + 10
+        if y + tip_h > screen_h:
+            y = cursor_y - 10 - tip_h
+
+        return x, y
 
     def _show_tooltip(self, event):
         """顯示提示框"""
@@ -101,11 +139,6 @@ class Tooltip:
         # 創建提示框視窗
         self.tooltip_window = tk.Toplevel(self.widget)
         self.tooltip_window.wm_overrideredirect(True)  # 移除視窗邊框和標題列
-
-        # 設定提示框位置（游標右下方）
-        x = event.x_root + 15
-        y = event.y_root + 10
-        self.tooltip_window.wm_geometry(f"+{x}+{y}")
 
         # 創建提示訊息標籤
         label = tk.Label(
@@ -121,6 +154,10 @@ class Tooltip:
             pady=6
         )
         label.pack()
+
+        # 計算位置（需在 label.pack() 後才能取得正確尺寸）
+        x, y = self._calc_position(event.x_root, event.y_root)
+        self.tooltip_window.wm_geometry(f"+{x}+{y}")
 
         # 確保提示框在最上層
         self.tooltip_window.lift()
