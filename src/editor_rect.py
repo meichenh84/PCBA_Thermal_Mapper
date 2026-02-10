@@ -331,12 +331,26 @@ class RectEditor:
 
         # print("update_rect ------>>>> ", x1, y1, x2, y2, cx, cy, max_temp, name, nameId, triangleId, tempTextId, rectId)
         # 更新canvas显示 - 需要将原图像坐标转换为显示坐标
-        display_x1 = x1 * self.display_scale
-        display_y1 = y1 * self.display_scale
-        display_x2 = x2 * self.display_scale
-        display_y2 = y2 * self.display_scale
-        display_cx = cx * self.display_scale
-        display_cy = cy * self.display_scale
+        # 放大模式下使用 zoom_scale + offset，否則使用 display_scale
+        if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+            scale = self.zoom_scale
+            offset_x = self.canvas_offset_x
+            offset_y = self.canvas_offset_y
+            display_x1 = x1 * scale + offset_x
+            display_y1 = y1 * scale + offset_y
+            display_x2 = x2 * scale + offset_x
+            display_y2 = y2 * scale + offset_y
+            display_cx = cx * scale + offset_x
+            display_cy = cy * scale + offset_y
+            display_scale = scale
+        else:
+            display_x1 = x1 * self.display_scale
+            display_y1 = y1 * self.display_scale
+            display_x2 = x2 * self.display_scale
+            display_y2 = y2 * self.display_scale
+            display_cx = cx * self.display_scale
+            display_cy = cy * self.display_scale
+            display_scale = self.display_scale
         
         # 找到對應 rect，用於讀取描邊 ID
         target_rect = None
@@ -348,7 +362,7 @@ class RectEditor:
         if nameId:
             self.canvas.itemconfig(nameId, text=name)
             name_center_x = (display_x1 + display_x2) / 2
-            name_y = display_y1 - 3 * self.display_scale
+            name_y = display_y1 - 3 * display_scale
             self.canvas.coords(nameId, name_center_x, name_y)
             # 同步描邊
             if target_rect:
@@ -368,13 +382,13 @@ class RectEditor:
                     except:
                         pass
             if target_rect:
-                self._position_temp_text(target_rect, display_cx, display_cy, tempTextId, self.display_scale)
+                self._position_temp_text(target_rect, display_cx, display_cy, tempTextId, display_scale)
             else:
-                self.canvas.coords(tempTextId, display_cx, display_cy - 16 * self.display_scale)
+                self.canvas.coords(tempTextId, display_cx, display_cy - 16 * display_scale)
         if triangleId:
-            size = max(7, int(8 * self.display_scale))
-            self.canvas.coords(triangleId, display_cx, display_cy - size // 2, 
-                             display_cx - size // 2, display_cy + size // 2, 
+            size = max(7, int(8 * display_scale))
+            self.canvas.coords(triangleId, display_cx, display_cy - size // 2,
+                             display_cx - size // 2, display_cy + size // 2,
                              display_cx + size // 2, display_cy + size // 2)
         if rectId:
             self.canvas.coords(rectId, display_x1, display_y1, display_x2, display_y2)
