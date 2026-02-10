@@ -34,6 +34,7 @@ UI 元件對應命名：
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk, ImageGrab
+from placeholder_entry import PlaceholderEntry
 
 # 匯入 UIStyle 以保持樣式統一
 try:
@@ -285,7 +286,7 @@ class EditorCanvas:
         
         # 配置左侧面板的grid属性
         left_panel.grid_rowconfigure(0, weight=0)  # 标题行，固定高度
-        left_panel.grid_rowconfigure(1, weight=0)  # 搜索框行，固定高度
+        # left_panel.grid_rowconfigure(1, weight=0)  # 搜索框行（已註解）
         left_panel.grid_rowconfigure(2, weight=0)  # 篩選條件行，固定高度
         left_panel.grid_rowconfigure(3, weight=1)  # Treeview表格區域，自適應高度
         left_panel.grid_columnconfigure(0, weight=1)  # 单列，占满宽度
@@ -318,42 +319,33 @@ class EditorCanvas:
             "• Ctrl + 點擊：跳選個別項目"
         )
 
-        # 搜索框容器
-        search_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
-        search_frame.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        search_frame.grid_columnconfigure(1, weight=1)  # 输入框占满中间部分
-
-        # 搜索图标标签
-        search_label = tk.Label(search_frame, text="🔍", font=("Arial", 12), bg=UIStyle.VERY_LIGHT_BLUE, fg=UIStyle.PRIMARY_BLUE)
-        search_label.grid(row=0, column=0, sticky="w", padx=(0, 3))  # 减少右边距
-
-        # 搜索输入框（使用占位符控件）
-        from placeholder_entry import PlaceholderEntry
-        self.search_entry = PlaceholderEntry(
-            search_frame,
-            placeholder="搜索器件名称",
-            placeholder_color="gray",
-            font=UIStyle.SMALL_FONT
-        )
-        self.search_entry.grid(row=0, column=1, sticky="ew", padx=(0, 3))  # 减少右边距，让输入框占满中间
-
-        # 清除搜索按钮（放大）
-        clear_button = tk.Button(
-            search_frame,
-            text="✕",
-            font=("Arial", 10, "bold"),
-            width=3,
-            height=1,
-            bg=UIStyle.VERY_LIGHT_BLUE,
-            fg=UIStyle.PRIMARY_BLUE,
-            relief='flat',
-            bd=0,
-            command=self.clear_search
-        )
-        clear_button.grid(row=0, column=2, sticky="e")
-
-        # 绑定搜索事件
-        self.search_entry.bind('<KeyRelease>', self.on_search_changed)
+        # [已註解] 搜索輸入框功能（已由篩選保留系統取代）
+        # search_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
+        # search_frame.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        # search_frame.grid_columnconfigure(1, weight=1)
+        # search_label = tk.Label(search_frame, text="🔍", font=("Arial", 12), bg=UIStyle.VERY_LIGHT_BLUE, fg=UIStyle.PRIMARY_BLUE)
+        # search_label.grid(row=0, column=0, sticky="w", padx=(0, 3))
+        # self.search_entry = PlaceholderEntry(
+        #     search_frame,
+        #     placeholder="搜索器件名称",
+        #     placeholder_color="gray",
+        #     font=UIStyle.SMALL_FONT
+        # )
+        # self.search_entry.grid(row=0, column=1, sticky="ew", padx=(0, 3))
+        # clear_button = tk.Button(
+        #     search_frame,
+        #     text="✕",
+        #     font=("Arial", 10, "bold"),
+        #     width=3,
+        #     height=1,
+        #     bg=UIStyle.VERY_LIGHT_BLUE,
+        #     fg=UIStyle.PRIMARY_BLUE,
+        #     relief='flat',
+        #     bd=0,
+        #     command=self.clear_search
+        # )
+        # clear_button.grid(row=0, column=2, sticky="e")
+        # self.search_entry.bind('<KeyRelease>', self.on_search_changed)
 
         # 篩選條件輸入框框架（在表頭上方）
         filter_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
@@ -3036,39 +3028,31 @@ class EditorCanvas:
         else:
             return False
 
-    def on_search_changed(self, event=None):
-        """搜索框内容变化时的回调"""
-        if not hasattr(self, 'search_entry'):
-            return
+    # def on_search_changed(self, event=None):
+    #     """搜索框内容变化时的回调"""
+    #     if not hasattr(self, 'search_entry'):
+    #         return
 
-        search_text = self.search_entry.get().strip().lower()
-        self.filter_rect_list(search_text)
+    #     search_text = self.search_entry.get().strip().lower()
+    #     self.filter_rect_list(search_text)
 
-    def clear_search(self):
-        """清除搜索内容"""
-        if hasattr(self, 'search_entry'):
-            self.search_entry.clear()
-            self.filter_rect_list("")
+    # def clear_search(self):
+    #     """清除搜索内容"""
+    #     if hasattr(self, 'search_entry'):
+    #         self.search_entry.clear()
+    #         self.filter_rect_list("")
 
-    def filter_rect_list(self, search_text):
-        """根据搜索文本过滤矩形框列表（使用 Treeview API）"""
-        # 🔥 修復：使用新的 Treeview 篩選邏輯
-        # 將舊的單一搜索框的文本設置到新的名稱篩選框中
-        if hasattr(self, 'filter_name_entry'):
-            # 保存當前的其他篩選條件
-            current_desc = self.filter_desc_entry.get() if hasattr(self, 'filter_desc_entry') else ""
-            current_temp = self.filter_temp_entry.get() if hasattr(self, 'filter_temp_entry') else ""
-
-            # 設置名稱篩選
-            self.filter_name_entry.delete(0, tk.END)
-            if search_text:
-                self.filter_name_entry.insert(0, search_text)
-
-            # 調用新的篩選邏輯
-            self.apply_filter()
-        else:
-            # 如果新篩選系統不存在，直接刷新列表
-            self.update_rect_list()
+    # def filter_rect_list(self, search_text):
+    #     """根据搜索文本过滤矩形框列表（使用 Treeview API）"""
+    #     if hasattr(self, 'filter_name_entry'):
+    #         current_desc = self.filter_desc_entry.get() if hasattr(self, 'filter_desc_entry') else ""
+    #         current_temp = self.filter_temp_entry.get() if hasattr(self, 'filter_temp_entry') else ""
+    #         self.filter_name_entry.delete(0, tk.END)
+    #         if search_text:
+    #             self.filter_name_entry.insert(0, search_text)
+    #         self.apply_filter()
+    #     else:
+    #         self.update_rect_list()
     
     def initialize_layout_query(self):
         """初始化Layout查询器，用于智能识别元器件名称"""
