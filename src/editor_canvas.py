@@ -1825,19 +1825,50 @@ class EditorCanvas:
         status = "啟用" if self.magnifier_enabled else "關閉"
         print(f"✓ 放大模式已{status}")
 
-        # 設置 RectEditor 的放大模式
+        # 在 set_magnifier_mode 重置參數前，先檢查是否真的有放大過
+        need_restore = False
         if hasattr(self, 'editor_rect') and self.editor_rect:
+            if old_enabled and not self.magnifier_enabled:
+                # _zoom_was_active 在 on_zoom_change() 中設為 True
+                need_restore = getattr(self, '_zoom_was_active', False)
             self.editor_rect.set_magnifier_mode(self.magnifier_enabled)
 
-        # 如果從放大模式切換回非放大模式，恢復正常繪製
-        if old_enabled and not self.magnifier_enabled:
-            # 調用 update_bg_image() 恢復非縮放模式的繪製
-            self.update_bg_image()
+        # 只有真的放大過才需要恢復 default 顯示
+        if need_restore:
+            self._restore_default_view()
+            self._zoom_was_active = False
+
+    def _restore_default_view(self):
+        """從放大狀態恢復到 default 顯示大小（保留所有編輯狀態）
+
+        on_zoom_change() 期間 canvas.delete("all") 導致所有 canvas item ID 失效，
+        此方法透過 update_bg_image() 重建背景圖（使用正確的 current_display_scale），
+        再逐一重建所有矩形/圓形標記。
+        """
+        if not hasattr(self, 'editor_rect') or not self.editor_rect:
+            return
+
+        # 清空 Canvas（zoom 模式建立的 canvas item 都需要重建）
+        self.canvas.delete("all")
+        self.bg_image_id = None
+
+        # 繞過 last_window_width guard，強制 update_bg_image 重新執行
+        self.last_window_width = -1
+        self.update_bg_image()
+
+        # update_bg_image → update_editor_display_scale → redraw_all_rectangles
+        # 但 redraw_all_rectangles 用 canvas.coords() 更新已刪除的 item 會靜默失敗
+        # 需要用 _redraw_single_rect 重新建立所有標記
+        for rect in self.editor_rect.rectangles:
+            self.editor_rect._redraw_single_rect(rect)
 
     def on_zoom_change(self):
         """縮放變化時的回調，重新繪製 Canvas"""
         if not hasattr(self, 'editor_rect') or not self.editor_rect:
             return
+
+        # 標記已進行過縮放操作（供 toggle_magnifier_mode 判斷是否需要恢復）
+        self._zoom_was_active = True
 
         # 獲取縮放變換參數
         transform = self.editor_rect.get_zoom_transform()
@@ -1854,7 +1885,7 @@ class EditorCanvas:
         scaled_img = self.bg_image.resize((scaled_w, scaled_h), Image.LANCZOS)
         self.tk_bg_image = ImageTk.PhotoImage(scaled_img)
 
-        self.canvas.create_image(
+        self.bg_image_id = self.canvas.create_image(
             offset_x, offset_y,
             anchor="nw",
             image=self.tk_bg_image
