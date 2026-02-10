@@ -806,6 +806,8 @@ class RectEditor:
                             display_y1 = y1 * self.zoom_scale + self.canvas_offset_y
                             display_x2 = x2 * self.zoom_scale + self.canvas_offset_x
                             display_scale = self.zoom_scale
+                            # 🔥 放大模式下，三角形和文字大小保持不變
+                            font_scale = 1.0
                         else:
                             # 非縮放模式：使用 display_scale
                             display_cx = cx * self.display_scale if self.display_scale > 0 else cx
@@ -814,17 +816,18 @@ class RectEditor:
                             display_y1 = y1 * self.display_scale if self.display_scale > 0 else y1
                             display_x2 = x2 * self.display_scale if self.display_scale > 0 else x2
                             display_scale = self.display_scale if self.display_scale > 0 else 1.0
+                            font_scale = display_scale
 
                         # 更新名称标签位置（置中于矩形框上方）
                         name_center_x = (display_x1 + display_x2) / 2
-                        self.canvas.coords(nameId, name_center_x, display_y1 - 3 * display_scale)
+                        self.canvas.coords(nameId, name_center_x, display_y1 - 3 * font_scale)
 
                         # 更新温度文本位置（根據方向定位）
                         self.canvas.itemconfig(tempTextId, text=max_temp)
-                        self._position_temp_text(rect, display_cx, display_cy, tempTextId, display_scale)
+                        self._position_temp_text(rect, display_cx, display_cy, tempTextId, font_scale)
 
                         # 更新三角形
-                        size = max(7, int(8 * display_scale))
+                        size = max(7, int(8 * font_scale))
                         point1 = (display_cx, display_cy - size // 2)
                         point2 = (display_cx - size // 2, display_cy + size // 2)
                         point3 = (display_cx + size // 2, display_cy + size // 2)
@@ -1209,8 +1212,9 @@ class RectEditor:
             orig_x2 = (x2 - self.canvas_offset_x) / self.zoom_scale
             orig_y2 = (y2 - self.canvas_offset_y) / self.zoom_scale
 
-            # 計算顯示比例（用於字體和圖示大小）
             display_scale = self.zoom_scale
+            # 🔥 放大模式下，三角形和文字大小保持不變
+            font_scale = 1.0
         else:
             # 非縮放模式：使用 display_scale 轉換
             if self.display_scale > 0:
@@ -1222,10 +1226,11 @@ class RectEditor:
                 orig_x1, orig_y1, orig_x2, orig_y2 = x1, y1, x2, y2
 
             display_scale = self.display_scale if self.display_scale > 0 else 1.0
+            font_scale = display_scale
 
         # 更新名称标签位置（置中于矩形框上方）
         name_center_x = (x1 + x2) / 2
-        self.canvas.coords(nameId, name_center_x, y1 - 3 * display_scale)
+        self.canvas.coords(nameId, name_center_x, y1 - 3 * font_scale)
 
         # 使用原图像坐标查询温度和最高温度位置
         max_temp = self.tempALoader.get_max_temp(int(orig_x1), int(orig_y1), int(orig_x2), int(orig_y2), 1.0)
@@ -1250,12 +1255,12 @@ class RectEditor:
                 target_rect = r
                 break
         if target_rect:
-            self._position_temp_text(target_rect, display_cx, display_cy, tempTextId, display_scale)
+            self._position_temp_text(target_rect, display_cx, display_cy, tempTextId, font_scale)
         else:
-            self.canvas.coords(tempTextId, display_cx, display_cy - 16 * display_scale)
+            self.canvas.coords(tempTextId, display_cx, display_cy - 16 * font_scale)
 
         # 计算新的三角形三个顶点（使用显示坐标）
-        size = max(7, int(8 * display_scale))
+        size = max(7, int(8 * font_scale))
         point1 = (display_cx, display_cy - size // 2)  # 顶点1 (尖角)
         point2 = (display_cx - size // 2, display_cy + size // 2)  # 顶点2 (左下角)
         point3 = (display_cx + size // 2, display_cy + size // 2)  # 顶点3 (右下角)
