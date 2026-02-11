@@ -446,8 +446,14 @@ class RectEditor:
 
         if nameId:
             self.canvas.itemconfig(nameId, text=name)
-            name_center_x = (display_x1 + display_x2) / 2
-            name_y = display_y1 - 3 * display_scale
+            update_angle = target_rect.get("angle", 0) if target_rect else 0
+            if update_angle != 0 and (not target_rect or target_rect.get("shape", "rectangle") != "circle"):
+                corners_n = get_rotated_corners((display_x1 + display_x2) / 2, (display_y1 + display_y2) / 2,
+                                                 (display_x2 - display_x1) / 2, (display_y2 - display_y1) / 2, update_angle)
+                name_center_x, name_y = calc_name_position_for_rotated(corners_n, display_scale)
+            else:
+                name_center_x = (display_x1 + display_x2) / 2
+                name_y = display_y1 - 3 * display_scale
             self.canvas.coords(nameId, name_center_x, name_y)
             # 同步描邊
             if target_rect:
@@ -1034,6 +1040,7 @@ class RectEditor:
                             display_x1 = x1 * self.zoom_scale + self.canvas_offset_x
                             display_y1 = y1 * self.zoom_scale + self.canvas_offset_y
                             display_x2 = x2 * self.zoom_scale + self.canvas_offset_x
+                            display_y2 = y2 * self.zoom_scale + self.canvas_offset_y
                             display_scale = self.zoom_scale
                             # 🔥 放大模式下，三角形和文字大小保持不變
                             font_scale = 1.0
@@ -1044,12 +1051,19 @@ class RectEditor:
                             display_x1 = x1 * self.display_scale if self.display_scale > 0 else x1
                             display_y1 = y1 * self.display_scale if self.display_scale > 0 else y1
                             display_x2 = x2 * self.display_scale if self.display_scale > 0 else x2
+                            display_y2 = y2 * self.display_scale if self.display_scale > 0 else y2
                             display_scale = self.display_scale if self.display_scale > 0 else 1.0
                             font_scale = display_scale
 
-                        # 更新名称标签位置（置中于矩形框上方）
-                        name_center_x = (display_x1 + display_x2) / 2
-                        name_y = display_y1 - 3 * font_scale
+                        # 更新名称标签位置（旋轉時定位到最高頂點上方）
+                        coord_angle = rect.get("angle", 0)
+                        if coord_angle != 0 and rect.get("shape", "rectangle") != "circle":
+                            corners_n = get_rotated_corners((display_x1 + display_x2) / 2, (display_y1 + display_y2) / 2,
+                                                             (display_x2 - display_x1) / 2, (display_y2 - display_y1) / 2, coord_angle)
+                            name_center_x, name_y = calc_name_position_for_rotated(corners_n, font_scale)
+                        else:
+                            name_center_x = (display_x1 + display_x2) / 2
+                            name_y = display_y1 - 3 * font_scale
                         self.canvas.coords(nameId, name_center_x, name_y)
                         self._move_outline(rect.get("nameOutlineIds"), name_center_x, name_y)
 
