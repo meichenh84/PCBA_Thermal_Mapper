@@ -2242,27 +2242,13 @@ class EditorCanvas:
         # 更新列表顯示
         self.update_rect_list()
 
-        # 🔥 修復：恢復選取狀態（使用轉換前記錄的列表索引）
-        if hasattr(self, 'tree') and self.tree and selected_indices:
-            try:
-                # 如果是多選
-                if len(selected_indices) > 1:
-                    for index in selected_indices:
-                        item_id = str(index)
-                        if self.tree.exists(item_id):
-                            self.tree.selection_add(item_id)
-                    print(f"✓ 形狀轉換後恢復多選高亮，共 {len(selected_indices)} 個項目")
-                # 如果是單選
-                elif len(selected_indices) == 1:
-                    item_id = str(selected_indices[0])
-                    if self.tree.exists(item_id):
-                        self.tree.selection_set(item_id)
-                        self.tree.see(item_id)
-                    print(f"✓ 形狀轉換後恢復單選高亮，index={selected_indices[0]}")
-            except Exception as e:
-                print(f"✗ 恢復選取狀態時出錯: {e}")
+        # 恢復選取狀態（Treeview + Canvas 高亮）
+        self._restore_selection_by_indices(selected_indices)
 
-        # 靜默完成，不顯示對話框（形狀改變即可）
+        # 更新形狀按鈕狀態
+        self.update_shape_buttons_state()
+        # 更新旋轉控制狀態
+        self._update_rotation_state_for_selection()
 
     def update_shape_buttons_state(self):
         """更新形狀轉換按鈕的啟用/禁用狀態"""
@@ -2379,7 +2365,7 @@ class EditorCanvas:
         self._apply_rotation(angle)
 
     def _apply_rotation(self, angle):
-        """執行旋轉並同步更新 Treeview。
+        """執行旋轉並同步更新 Treeview，並保留選取狀態。
 
         Args:
             angle (float): 逆時針旋轉角度（度）
@@ -2397,7 +2383,15 @@ class EditorCanvas:
         if not rect_ids:
             return
 
-        # 呼叫 editor_rect 設定旋轉角度
+        # 記錄選取的矩形在列表中的索引（索引在重繪後不會變，rectId 會變）
+        selected_indices = []
+        for rect_id in rect_ids:
+            for i, rect in enumerate(self.editor_rect.rectangles):
+                if rect.get('rectId') == rect_id:
+                    selected_indices.append(i)
+                    break
+
+        # 呼叫 editor_rect 設定旋轉角度（內部會重繪，rectId 會改變）
         self.editor_rect.set_rotation_angle(rect_ids, angle)
 
         # 更新旋轉按鈕高亮
@@ -2406,21 +2400,58 @@ class EditorCanvas:
         # 更新左側 Treeview 溫度同步
         self.update_rect_list()
 
-        # 恢復選取狀態
-        self._restore_selection_after_list_update(rect_ids)
+        # 用穩定的索引恢復選取狀態（Treeview + Canvas 高亮）
+        self._restore_selection_by_indices(selected_indices)
 
-    def _restore_selection_after_list_update(self, rect_ids):
-        """在 update_rect_list 後恢復 Treeview 選取狀態"""
-        if not hasattr(self, 'tree') or not self.tree or not hasattr(self, 'editor_rect'):
+    def _restore_selection_by_indices(self, indices):
+        """用矩形列表索引恢復完整的選取狀態（Treeview + Canvas 高亮）。
+
+        因為旋轉等操作會重繪 Canvas 物件導致 rectId 改變，
+        所以用穩定的列表索引來找到新的 rectId 後恢復選取。
+        """
+        if not indices or not hasattr(self, 'editor_rect') or not self.editor_rect:
             return
+
+        # 從穩定索引取得新的 rectId
+        new_rect_ids = []
+        for idx in indices:
+            if 0 <= idx < len(self.editor_rect.rectangles):
+                rect = self.editor_rect.rectangles[idx]
+                rect_id = rect.get('rectId')
+                if rect_id:
+                    new_rect_ids.append(rect_id)
+
+        if not new_rect_ids:
+            return
+
         try:
-            for rect_id in rect_ids:
-                for i, rect in enumerate(self.editor_rect.rectangles):
-                    if rect.get('rectId') == rect_id:
-                        item_id = str(i)
+            if len(new_rect_ids) == 1:
+                # 單選：恢復 Treeview 選取 + Canvas 高亮 + 錨點
+                rect_id = new_rect_ids[0]
+                self.selected_rect_id = rect_id
+                self.selected_rect_ids.clear()
+
+                item_id = str(indices[0])
+                if hasattr(self, 'tree') and self.tree and self.tree.exists(item_id):
+                    self.tree.selection_set(item_id)
+                    self.tree.see(item_id)
+
+                self.highlight_rect_in_canvas(rect_id)
+            else:
+                # 多選：恢復 Treeview 選取 + Canvas 高亮（無錨點）
+                self.selected_rect_id = None
+                self.selected_rect_ids = set(new_rect_ids)
+
+                if hasattr(self, 'tree') and self.tree:
+                    for idx in indices:
+                        item_id = str(idx)
                         if self.tree.exists(item_id):
                             self.tree.selection_add(item_id)
-                        break
+
+                self.highlight_multiple_rects_in_canvas(new_rect_ids)
+
+            # 更新刪除按鈕狀態
+            self.update_delete_button_state()
         except Exception as e:
             print(f"✗ 恢復選取狀態時出錯: {e}")
 
