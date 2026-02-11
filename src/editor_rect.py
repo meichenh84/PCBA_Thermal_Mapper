@@ -211,6 +211,19 @@ class RectEditor:
             except:
                 pass
 
+    def _move_triangle_outline(self, outline_ids, point1, point2, point3):
+        """移動三角形描邊到指定的三個頂點位置。"""
+        if not outline_ids:
+            return
+        for oid, (odx, ody) in zip(outline_ids, OUTLINE_OFFSETS):
+            try:
+                self.canvas.coords(oid,
+                    point1[0] + odx, point1[1] + ody,
+                    point2[0] + odx, point2[1] + ody,
+                    point3[0] + odx, point3[1] + ody)
+            except:
+                pass
+
     def set_temp_text_dir(self, rect_ids, direction):
         """設定指定元器件的溫度文字方向，並立即更新 Canvas 顯示。
 
@@ -300,6 +313,7 @@ class RectEditor:
                     point2 = (cx - size // 2, cy + size // 2)
                     point3 = (cx + size // 2, cy + size // 2)
                     self.canvas.coords(triangleId, point1[0], point1[1], point2[0], point2[1], point3[0], point3[1])
+                    self._move_triangle_outline(rect.get("triangleOutlineIds"), point1, point2, point3)
 
             # 更新保存的字體縮放比例
             rect["_font_scale"] = self.display_scale
@@ -387,13 +401,16 @@ class RectEditor:
                 self.canvas.coords(tempTextId, display_cx, display_cy - 16 * display_scale)
         if triangleId:
             size = max(7, int(8 * display_scale))
-            self.canvas.coords(triangleId, display_cx, display_cy - size // 2,
-                             display_cx - size // 2, display_cy + size // 2,
-                             display_cx + size // 2, display_cy + size // 2)
+            point1 = (display_cx, display_cy - size // 2)
+            point2 = (display_cx - size // 2, display_cy + size // 2)
+            point3 = (display_cx + size // 2, display_cy + size // 2)
+            self.canvas.coords(triangleId, point1[0], point1[1], point2[0], point2[1], point3[0], point3[1])
+            if target_rect:
+                self._move_triangle_outline(target_rect.get("triangleOutlineIds"), point1, point2, point3)
         if rectId:
             self.canvas.coords(rectId, display_x1, display_y1, display_x2, display_y2)
         self.update_anchors()
-        
+
         # 通知EditorCanvas更新列表显示
         if self.on_rect_change_callback:
             self.on_rect_change_callback(rectId, "dialog_update")
@@ -711,6 +728,7 @@ class RectEditor:
         # 刪除舊的 Canvas 物件（含描邊）
         self._delete_outline(rect.get("tempOutlineIds"))
         self._delete_outline(rect.get("nameOutlineIds"))
+        self._delete_outline(rect.get("triangleOutlineIds"))
         old_ids = [
             rect.get("rectId"),
             rect.get("nameId"),
@@ -909,6 +927,7 @@ class RectEditor:
                         point2 = (display_cx - size // 2, display_cy + size // 2)
                         point3 = (display_cx + size // 2, display_cy + size // 2)
                         self.canvas.coords(triangleId, point1[0], point1[1], point2[0], point2[1], point3[0], point3[1])
+                        self._move_triangle_outline(rect.get("triangleOutlineIds"), point1, point2, point3)
 
                     # 如果温度发生变化，通知列表更新
                     if abs(max_temp - old_temp) > 0.1:  # 温度变化超过0.1度
@@ -929,11 +948,12 @@ class RectEditor:
         else:
             self.delete_origin_count += 1
 
-        # 刪除描邊文字
+        # 刪除描邊
         for rect in self.rectangles:
             if rect.get("rectId") == rectId:
                 self._delete_outline(rect.get("tempOutlineIds"))
                 self._delete_outline(rect.get("nameOutlineIds"))
+                self._delete_outline(rect.get("triangleOutlineIds"))
                 break
         # rectId = self.drag_data["rectId"]
         self.canvas.delete(rectId)
@@ -1359,6 +1379,8 @@ class RectEditor:
         point2 = (display_cx - size // 2, display_cy + size // 2)  # 顶点2 (左下角)
         point3 = (display_cx + size // 2, display_cy + size // 2)  # 顶点3 (右下角)
         self.canvas.coords(triangleId, point1[0], point1[1], point2[0], point2[1], point3[0], point3[1])
+        if target_rect:
+            self._move_triangle_outline(target_rect.get("triangleOutlineIds"), point1, point2, point3)
 
         # 注意：不在这里更新rect数据，避免与update_rectangle_coordinate重复更新
         # 数据更新统一在update_rectangle_coordinate中处理
@@ -1407,9 +1429,10 @@ class RectEditor:
         """根据ID删除矩形"""
         for rect in self.rectangles:
             if rect.get("rectId") == rect_id:
-                # 刪除描邊文字
+                # 刪除描邊
                 self._delete_outline(rect.get("tempOutlineIds"))
                 self._delete_outline(rect.get("nameOutlineIds"))
+                self._delete_outline(rect.get("triangleOutlineIds"))
                 # 删除canvas元素
                 if rect.get("rectId"):
                     self.canvas.delete(rect["rectId"])
@@ -1449,9 +1472,10 @@ class RectEditor:
         for rect_id in rect_ids:
             for rect in self.rectangles[:]:  # 使用切片创建副本以避免迭代时修改列表
                 if rect.get("rectId") == rect_id:
-                    # 刪除描邊文字
+                    # 刪除描邊
                     self._delete_outline(rect.get("tempOutlineIds"))
                     self._delete_outline(rect.get("nameOutlineIds"))
+                    self._delete_outline(rect.get("triangleOutlineIds"))
                     # 删除canvas元素
                     if rect.get("rectId"):
                         self.canvas.delete(rect["rectId"])
@@ -1567,9 +1591,10 @@ class RectEditor:
         for rect_id in rect_ids:
             for rect in self.rectangles[:]:
                 if rect.get("rectId") == rect_id:
-                    # 刪除描邊文字
+                    # 刪除描邊
                     self._delete_outline(rect.get("tempOutlineIds"))
                     self._delete_outline(rect.get("nameOutlineIds"))
+                    self._delete_outline(rect.get("triangleOutlineIds"))
                     # 删除canvas元素
                     if rect.get("rectId"):
                         self.canvas.delete(rect["rectId"])

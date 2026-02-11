@@ -315,8 +315,8 @@ class EditorCanvas:
             help_icon,
             "多選操作說明：\n"
             "• 單擊：選擇單一項目\n"
-            "• Shift + 點擊：選擇連續範圍\n"
-            "• Ctrl + 點擊：跳選個別項目"
+            "• Shift + 點擊：列表選擇連續範圍\n"
+            "• Ctrl + 點擊：列表跳選個別項目"
         )
 
         # [已註解] 搜索輸入框功能（已由篩選保留系統取代）
@@ -771,6 +771,22 @@ class EditorCanvas:
                         self.canvas.itemconfig(triangle_id, state='normal')
                     except:
                         pass
+                # 同步顯示描邊（黑色輪廓）
+                for oid in (rect.get('tempOutlineIds') or []):
+                    try:
+                        self.canvas.itemconfig(oid, state='normal')
+                    except:
+                        pass
+                for oid in (rect.get('nameOutlineIds') or []):
+                    try:
+                        self.canvas.itemconfig(oid, state='normal')
+                    except:
+                        pass
+                for oid in (rect.get('triangleOutlineIds') or []):
+                    try:
+                        self.canvas.itemconfig(oid, state='normal')
+                    except:
+                        pass
             return
 
         # 獲取符合篩選條件的矩形框 ID 集合
@@ -815,6 +831,22 @@ class EditorCanvas:
             if triangle_id:
                 try:
                     self.canvas.itemconfig(triangle_id, state=state)
+                except:
+                    pass
+            # 同步顯示/隱藏描邊（黑色輪廓）
+            for oid in (rect.get('tempOutlineIds') or []):
+                try:
+                    self.canvas.itemconfig(oid, state=state)
+                except:
+                    pass
+            for oid in (rect.get('nameOutlineIds') or []):
+                try:
+                    self.canvas.itemconfig(oid, state=state)
+                except:
+                    pass
+            for oid in (rect.get('triangleOutlineIds') or []):
+                try:
+                    self.canvas.itemconfig(oid, state=state)
                 except:
                     pass
 
@@ -2059,6 +2091,7 @@ class EditorCanvas:
             rect["nameId"] = nameId
             rect["tempOutlineIds"] = transformed_rect.get("tempOutlineIds")
             rect["nameOutlineIds"] = transformed_rect.get("nameOutlineIds")
+            rect["triangleOutlineIds"] = transformed_rect.get("triangleOutlineIds")
 
         # 清除錨點和選擇狀態（因為 Canvas ID 已改變）
         if hasattr(self.editor_rect, 'delete_anchors'):

@@ -42,6 +42,17 @@ def _create_outline_texts(canvas, x, y, text, font, anchor="center", color="#000
         ids.append(oid)
     return ids
 
+def _create_outline_triangles(canvas, point1, point2, point3, color="#000000"):
+    """建立 4 個偏移黑色三角形 polygon，形成描邊效果。回傳 outline_ids 列表。"""
+    ids = []
+    for dx, dy in OUTLINE_OFFSETS:
+        p1 = (point1[0] + dx, point1[1] + dy)
+        p2 = (point2[0] + dx, point2[1] + dy)
+        p3 = (point3[0] + dx, point3[1] + dy)
+        oid = canvas.create_polygon([p1, p2, p3], fill=color, outline=color, width=1)
+        ids.append(oid)
+    return ids
+
 def calc_temp_text_offset(direction, tri_half, temp_w, temp_h, gap=0):
     """根據方向計算溫度文字中心相對於三角形中心的偏移量 (dx, dy)。
 
@@ -132,6 +143,14 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
     pts = np.array([point1, point2, point3], np.int32)
     pts = pts.reshape((-1, 1, 2))
 
+    # 三角形 4 方向描邊
+    for odx, ody in OUTLINE_OFFSETS:
+        outline_pts = np.array([
+            (point1[0] + odx, point1[1] + ody),
+            (point2[0] + odx, point2[1] + ody),
+            (point3[0] + odx, point3[1] + ody)
+        ], np.int32).reshape((-1, 1, 2))
+        cv2.fillPoly(imageA, [outline_pts], color=shadowColor)
     # 绘制三角形
     cv2.fillPoly(imageA, [pts], color=tempColor)
 
@@ -256,6 +275,8 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
     point2 = (cx - size // 2, cy + size // 2)  # 顶点2 (左下角)
     point3 = (cx + size // 2, cy + size // 2)  # 顶点3 (右下角)
 
+    # 先建立三角形描邊（在主三角形下方）
+    triangleOutlineIds = _create_outline_triangles(canvas, point1, point2, point3, shadowColor)
     # 绘制三角形
     triangleId = canvas.create_polygon([point1, point2, point3], fill=tempColor, outline=tempColor, width=1)
 
@@ -299,6 +320,7 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
     # 將描邊 ID 存入 item
     item["tempOutlineIds"] = tempOutlineIds
     item["nameOutlineIds"] = nameOutlineIds
+    item["triangleOutlineIds"] = triangleOutlineIds
 
     return rectId, triangleId, tempTextId, nameId
 
@@ -513,12 +535,28 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
                 # 将顶点连接成一个三角形
                 pts = np.array([point1, point2, point3], np.int32)
                 pts = pts.reshape((-1, 1, 2))
+                # 三角形 4 方向描邊
+                for odx, ody in OUTLINE_OFFSETS:
+                    outline_pts = np.array([
+                        (point1[0] + odx, point1[1] + ody),
+                        (point2[0] + odx, point2[1] + ody),
+                        (point3[0] + odx, point3[1] + ody)
+                    ], np.int32).reshape((-1, 1, 2))
+                    cv2.fillPoly(imageA, [outline_pts], color=shadowColor)
                 # 绘制三角形
                 cv2.fillPoly(imageA, [pts], color=tempColor)
         else:
             # 热力图直接绘制三角形
             pts = np.array([point1, point2, point3], np.int32)
             pts = pts.reshape((-1, 1, 2))
+            # 三角形 4 方向描邊
+            for odx, ody in OUTLINE_OFFSETS:
+                outline_pts = np.array([
+                    (point1[0] + odx, point1[1] + ody),
+                    (point2[0] + odx, point2[1] + ody),
+                    (point3[0] + odx, point3[1] + ody)
+                ], np.int32).reshape((-1, 1, 2))
+                cv2.fillPoly(imageA, [outline_pts], color=shadowColor)
             cv2.fillPoly(imageA, [pts], color=tempColor)
 
         # 使用 Pillow 绘制文本
