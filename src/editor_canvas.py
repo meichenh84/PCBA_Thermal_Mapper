@@ -209,7 +209,11 @@ class EditorCanvas:
         
         self.dialog.bind('<Key>', test_key)
         self.canvas.bind('<Key>', test_key)
-        
+
+        # 綁定 Ctrl+Z 快捷鍵到回到上一步
+        self.dialog.bind('<Control-z>', lambda e: self.on_undo())
+        self.canvas.bind('<Control-z>', lambda e: self.on_undo())
+
         print("🔍🔍🔍 Delete键事件绑定完成")
         
         # 确保对话框可以接收键盘事件
@@ -1656,132 +1660,123 @@ class EditorCanvas:
         button_container.grid(row=1, column=0, sticky="nsew", pady=10)
         
         # 配置按钮容器的grid属性，按钮固定高度，不拉伸
-        button_container.grid_rowconfigure(0, weight=0)  # 多选开关行，固定高度
-        button_container.grid_rowconfigure(1, weight=0)  # 合并按钮行，固定高度
-        button_container.grid_rowconfigure(2, weight=0)  # 删除按钮行，固定高度
+        for r in range(15):
+            button_container.grid_rowconfigure(r, weight=0)
         button_container.grid_columnconfigure(0, weight=1)  # 单列，占满宽度
-        
-        # 多选模式开关 - 使用复选框
-        multi_select_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        multi_select_frame.grid(row=0, column=0, pady=(0, 8), padx=10, sticky="ew")
-        
-        self.multi_select_var = tk.BooleanVar(value=True)  # 默認開啟
-        self.multi_select_checkbox = tk.Checkbutton(
-            multi_select_frame,
-            text="多选模式",
-            variable=self.multi_select_var,
+
+        # ========== Row 0: 回到起點 + ⓘ ==========
+        reset_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        reset_frame.grid(row=0, column=0, pady=(0, 3), padx=10, sticky="ew")
+        self._reset_button = tk.Button(
+            reset_frame,
+            text="回到起點",
             font=UIStyle.BUTTON_FONT,
-            bg=UIStyle.VERY_LIGHT_BLUE,
+            height=1,
+            bg=UIStyle.GRAY,
             fg=UIStyle.BLACK,
-            activebackground=UIStyle.VERY_LIGHT_BLUE,
-            activeforeground=UIStyle.BLACK,
-            selectcolor=UIStyle.WHITE,
-            command=self.toggle_multi_select_mode
+            relief=UIStyle.BUTTON_RELIEF,
+            bd=UIStyle.BUTTON_BORDER_WIDTH,
+            command=self.on_reset
         )
-        self.multi_select_checkbox.pack(side='left')
-
-        # 多選模式說明圖示
-        multi_select_info_label = tk.Label(
-            multi_select_frame,
-            text="ⓘ",
-            font=("Arial", 12),
-            bg=UIStyle.VERY_LIGHT_BLUE,
-            fg=UIStyle.PRIMARY_BLUE,
-            cursor="hand2"
+        self._reset_button.pack(side='left', expand=True, fill='x')
+        reset_info_label = tk.Label(
+            reset_frame, text="ⓘ", font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE, fg=UIStyle.PRIMARY_BLUE, cursor="hand2"
         )
-        multi_select_info_label.pack(side='left', padx=(2, 0))
+        reset_info_label.pack(side='left', padx=(4, 0))
         Tooltip(
-            multi_select_info_label,
-            "多選模式說明：\n"
-            "• 勾選後可在列表中選取多個元器件\n"
-            "• 支援 Ctrl+點擊 逐一加選\n"
-            "• 支援 Shift+點擊 範圍選取\n"
-            "• 選取多個後可批次轉換形狀或刪除"
+            reset_info_label,
+            "回到起點功能：\n"
+            "• 將所有元器件恢復為初始載入時的狀態\n"
+            "• 此操作會清除所有修改紀錄"
         )
 
-        # 即時溫度模式開關
-        realtime_temp_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        realtime_temp_frame.grid(row=1, column=0, pady=(0, 8), padx=10, sticky="ew")
-
-        self.realtime_temp_var = tk.BooleanVar(value=True)  # 默認開啟
-        self.realtime_temp_checkbox = tk.Checkbutton(
-            realtime_temp_frame,
-            text="即時溫度",
-            variable=self.realtime_temp_var,
+        # ========== Row 1: 回到上一步 + ⓘ ==========
+        undo_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        undo_frame.grid(row=1, column=0, pady=(0, 3), padx=10, sticky="ew")
+        self._undo_button = tk.Button(
+            undo_frame,
+            text="回到上一步 (0/3)",
             font=UIStyle.BUTTON_FONT,
-            bg=UIStyle.VERY_LIGHT_BLUE,
+            height=1,
+            bg=UIStyle.GRAY,
             fg=UIStyle.BLACK,
-            activebackground=UIStyle.VERY_LIGHT_BLUE,
-            activeforeground=UIStyle.BLACK,
-            selectcolor=UIStyle.WHITE,
-            command=self.toggle_realtime_temp_mode
+            relief=UIStyle.BUTTON_RELIEF,
+            bd=UIStyle.BUTTON_BORDER_WIDTH,
+            command=self.on_undo,
+            state=tk.DISABLED
         )
-        self.realtime_temp_checkbox.pack(side='left', anchor='w')
-
-        # 即時溫度說明圖示
-        realtime_temp_info_label = tk.Label(
-            realtime_temp_frame,
-            text="ⓘ",
-            font=("Arial", 12),
-            bg=UIStyle.VERY_LIGHT_BLUE,
-            fg=UIStyle.PRIMARY_BLUE,
-            cursor="hand2"
+        self._undo_button.pack(side='left', expand=True, fill='x')
+        undo_info_label = tk.Label(
+            undo_frame, text="ⓘ", font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE, fg=UIStyle.PRIMARY_BLUE, cursor="hand2"
         )
-        realtime_temp_info_label.pack(side='left', padx=(2, 0))
+        undo_info_label.pack(side='left', padx=(4, 0))
         Tooltip(
-            realtime_temp_info_label,
-            "即時溫度功能說明：\n"
-            "勾選後，將滑鼠移動到熱力圖上\n"
-            "即可在游標旁邊顯示該位置的溫度值\n"
-            "（黃色背景 + 紅色文字）\n\n"
-            "溫度標籤會自動跟隨游標移動\n"
-            "移出熱力圖範圍後會自動隱藏"
+            undo_info_label,
+            "回到上一步功能：\n"
+            "• 復原最近一次操作（最多保留 3 步）\n"
+            "• 快捷鍵：Ctrl+Z"
         )
 
-        # 放大模式開關
-        magnifier_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        magnifier_frame.grid(row=2, column=0, pady=(0, 8), padx=10, sticky="ew")
-
-        self.magnifier_var = tk.BooleanVar(value=True)  # 默認開啟
-        self.magnifier_checkbox = tk.Checkbutton(
-            magnifier_frame,
-            text="放大模式",
-            variable=self.magnifier_var,
+        # ========== Row 2: 合併 + ⓘ ==========
+        merge_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        merge_frame.grid(row=2, column=0, pady=(0, 3), padx=10, sticky="ew")
+        self.merge_button = tk.Button(
+            merge_frame,
+            text="合并 ➕",
             font=UIStyle.BUTTON_FONT,
-            bg=UIStyle.VERY_LIGHT_BLUE,
-            fg=UIStyle.BLACK,
-            activebackground=UIStyle.VERY_LIGHT_BLUE,
-            activeforeground=UIStyle.BLACK,
-            selectcolor=UIStyle.WHITE,
-            command=self.toggle_magnifier_mode
+            height=1,
+            bg=UIStyle.PRIMARY_BLUE,
+            fg=UIStyle.WHITE,
+            relief=UIStyle.BUTTON_RELIEF,
+            bd=UIStyle.BUTTON_BORDER_WIDTH,
+            command=self.on_merge_rects
         )
-        self.magnifier_checkbox.pack(side='left')
-
-        # 放大模式說明圖示
-        magnifier_info_label = tk.Label(
-            magnifier_frame,
-            text="ⓘ",
-            font=("Arial", 12),
-            bg=UIStyle.VERY_LIGHT_BLUE,
-            fg=UIStyle.PRIMARY_BLUE,
-            cursor="hand2"
+        self.merge_button.pack(side='left', expand=True, fill='x')
+        merge_info_label = tk.Label(
+            merge_frame, text="ⓘ", font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE, fg=UIStyle.PRIMARY_BLUE, cursor="hand2"
         )
-        magnifier_info_label.pack(side='left', padx=(2, 0))
+        merge_info_label.pack(side='left', padx=(4, 0))
         Tooltip(
-            magnifier_info_label,
-            "放大模式說明：\n"
-            "• 勾選後可用滾輪放大/縮小熱力圖\n"
-            "• 右鍵拖動可平移檢視區域\n"
-            "• 滾輪縮小到最小即回到預設大小\n"
-            "• 取消勾選自動恢復預設顯示"
+            merge_info_label,
+            "合併功能：\n"
+            "• 將多選的元器件合併為一個\n"
+            "• 需先選取 2 個以上元器件"
         )
 
-        # ========== 形狀轉換按鈕區域 ==========
-        # 形狀轉換標籤容器
+        # ========== Row 3: 刪除 + ⓘ ==========
+        delete_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        delete_frame.grid(row=3, column=0, pady=(0, 8), padx=10, sticky="ew")
+        self.delete_button = tk.Button(
+            delete_frame,
+            text="删除 ❌",
+            font=UIStyle.BUTTON_FONT,
+            height=1,
+            bg=UIStyle.DANGER_RED,
+            fg=UIStyle.WHITE,
+            relief=UIStyle.BUTTON_RELIEF,
+            bd=UIStyle.BUTTON_BORDER_WIDTH,
+            command=self.on_delete_rect
+        )
+        self.delete_button.pack(side='left', expand=True, fill='x')
+        delete_info_label = tk.Label(
+            delete_frame, text="ⓘ", font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE, fg=UIStyle.PRIMARY_BLUE, cursor="hand2"
+        )
+        delete_info_label.pack(side='left', padx=(4, 0))
+        Tooltip(
+            delete_info_label,
+            "刪除功能：\n"
+            "• 刪除選取的元器件\n"
+            "• 快捷鍵：Delete / BackSpace"
+        )
+
+        # ========== Row 4: 形狀轉換標籤 + ⓘ ==========
         shape_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        shape_label_frame.grid(row=3, column=0, pady=(5, 2), padx=10, sticky="w")
+        shape_label_frame.grid(row=4, column=0, pady=(5, 2), padx=10, sticky="w")
 
-        # 形狀轉換標籤
         shape_label = tk.Label(
             shape_label_frame,
             text="形狀轉換",
@@ -1791,7 +1786,6 @@ class EditorCanvas:
         )
         shape_label.pack(side=tk.LEFT)
 
-        # 圓圈 i 圖示
         shape_info_label = tk.Label(
             shape_label_frame,
             text=" ⓘ",
@@ -1802,7 +1796,6 @@ class EditorCanvas:
         )
         shape_info_label.pack(side=tk.LEFT, padx=(2, 0))
 
-        # 添加 tooltip 說明（Tooltip 已在文件頂部導入）
         Tooltip(
             shape_info_label,
             "形狀轉換功能：\n"
@@ -1813,41 +1806,39 @@ class EditorCanvas:
             delay=200
         )
 
-        # 轉為矩形按鈕
+        # ========== Row 5: 轉為矩形 ==========
         self.convert_to_rect_button = tk.Button(
             button_container,
             text="轉為矩形 ⬜",
             font=UIStyle.BUTTON_FONT,
-            width=10,
             height=2,
             bg=UIStyle.SUCCESS_GREEN,
             fg=UIStyle.WHITE,
             relief=UIStyle.BUTTON_RELIEF,
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=lambda: self.on_convert_shape("rectangle"),
-            state=tk.DISABLED  # 初始禁用
+            state=tk.DISABLED
         )
-        self.convert_to_rect_button.grid(row=4, column=0, pady=3, padx=10, sticky="ew")
+        self.convert_to_rect_button.grid(row=5, column=0, pady=3, padx=10, sticky="ew")
 
-        # 轉為圓形按鈕
+        # ========== Row 6: 轉為圓形 ==========
         self.convert_to_circle_button = tk.Button(
             button_container,
             text="轉為圓形 ⚪",
             font=UIStyle.BUTTON_FONT,
-            width=10,
             height=2,
             bg=UIStyle.WARNING_ORANGE,
             fg=UIStyle.WHITE,
             relief=UIStyle.BUTTON_RELIEF,
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=lambda: self.on_convert_shape("circle"),
-            state=tk.DISABLED  # 初始禁用
+            state=tk.DISABLED
         )
-        self.convert_to_circle_button.grid(row=5, column=0, pady=3, padx=10, sticky="ew")
+        self.convert_to_circle_button.grid(row=6, column=0, pady=3, padx=10, sticky="ew")
 
-        # ========== 溫度文字位置九宮格 ==========
+        # ========== Row 7: 溫度位置標籤 + ⓘ ==========
         temp_dir_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        temp_dir_label_frame.grid(row=6, column=0, pady=(8, 2), padx=10, sticky="w")
+        temp_dir_label_frame.grid(row=7, column=0, pady=(8, 2), padx=10, sticky="w")
 
         temp_dir_label = tk.Label(
             temp_dir_label_frame,
@@ -1877,24 +1868,22 @@ class EditorCanvas:
             delay=200
         )
 
-        # 九宮格容器
+        # ========== Row 8: 九宮格 ==========
         grid_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        grid_frame.grid(row=7, column=0, pady=(2, 5), padx=10)
+        grid_frame.grid(row=8, column=0, pady=(2, 5), padx=10)
 
-        # 方向對應：(row, col) -> direction_code
         dir_map = [
             ("↖", "TL", 0, 0), ("↑", "T", 0, 1), ("↗", "TR", 0, 2),
             ("←", "L",  1, 0), ("▲", None, 1, 1), ("→", "R",  1, 2),
             ("↙", "BL", 2, 0), ("↓", "B", 2, 1), ("↘", "BR", 2, 2),
         ]
 
-        self.temp_dir_buttons = {}  # direction_code -> Button widget
-        self.current_temp_dir = None  # 目前高亮的方向
+        self.temp_dir_buttons = {}
+        self.current_temp_dir = None
 
         btn_size = 40
         for label, code, r, c in dir_map:
             if code is None:
-                # 中心格：三角形圖示，不可點擊
                 center_label = tk.Label(
                     grid_frame, text=label, width=3, height=1,
                     font=("Arial", 14),
@@ -1914,9 +1903,9 @@ class EditorCanvas:
                 btn.grid(row=r, column=c, padx=1, pady=1)
                 self.temp_dir_buttons[code] = btn
 
-        # ========== 旋轉角度控制區域 ==========
+        # ========== Row 9: 旋轉角度標籤 + ⓘ ==========
         rotation_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        rotation_label_frame.grid(row=8, column=0, pady=(8, 2), padx=10, sticky="w")
+        rotation_label_frame.grid(row=9, column=0, pady=(8, 2), padx=10, sticky="w")
 
         rotation_label = tk.Label(
             rotation_label_frame,
@@ -1947,9 +1936,9 @@ class EditorCanvas:
             delay=200
         )
 
-        # 預設角度按鈕（0° / 45° / 90° / 135°）
+        # ========== Row 10: 預設角度按鈕 ==========
         rotation_btn_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        rotation_btn_frame.grid(row=9, column=0, pady=(2, 2), padx=10, sticky="ew")
+        rotation_btn_frame.grid(row=10, column=0, pady=(2, 2), padx=10, sticky="ew")
 
         self.rotation_buttons = {}
         self.current_rotation_angle = 0
@@ -1970,9 +1959,9 @@ class EditorCanvas:
             btn.pack(side=tk.LEFT, padx=1)
             self.rotation_buttons[a] = btn
 
-        # 自訂角度輸入框 + 套用按鈕
+        # ========== Row 11: 自訂角度輸入 ==========
         custom_rotation_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        custom_rotation_frame.grid(row=10, column=0, pady=(2, 5), padx=10, sticky="ew")
+        custom_rotation_frame.grid(row=11, column=0, pady=(2, 5), padx=10, sticky="ew")
 
         self.custom_rotation_entry = tk.Entry(
             custom_rotation_frame,
@@ -2003,67 +1992,117 @@ class EditorCanvas:
         )
         self.custom_rotation_apply_btn.pack(side=tk.LEFT)
 
-        # ========== 復原按鈕區域 ==========
-        # 回到起點按鈕
-        self._reset_button = tk.Button(
-            button_container,
-            text="回到起點",
+        # ========== Row 12: 放大模式 + ⓘ ==========
+        magnifier_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        magnifier_frame.grid(row=12, column=0, pady=(8, 8), padx=10, sticky="ew")
+
+        self.magnifier_var = tk.BooleanVar(value=True)
+        self.magnifier_checkbox = tk.Checkbutton(
+            magnifier_frame,
+            text="放大模式",
+            variable=self.magnifier_var,
             font=UIStyle.BUTTON_FONT,
-            width=10,
-            height=1,
-            bg=UIStyle.GRAY,
+            bg=UIStyle.VERY_LIGHT_BLUE,
             fg=UIStyle.BLACK,
-            relief=UIStyle.BUTTON_RELIEF,
-            bd=UIStyle.BUTTON_BORDER_WIDTH,
-            command=self.on_reset
+            activebackground=UIStyle.VERY_LIGHT_BLUE,
+            activeforeground=UIStyle.BLACK,
+            selectcolor=UIStyle.WHITE,
+            command=self.toggle_magnifier_mode
         )
-        self._reset_button.grid(row=11, column=0, pady=(8, 3), padx=10, sticky="ew")
+        self.magnifier_checkbox.pack(side='left')
 
-        # 回到上一步按鈕
-        self._undo_button = tk.Button(
-            button_container,
-            text="回到上一步 (0/3)",
+        magnifier_info_label = tk.Label(
+            magnifier_frame,
+            text="ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
+        )
+        magnifier_info_label.pack(side='left', padx=(2, 0))
+        Tooltip(
+            magnifier_info_label,
+            "放大模式說明：\n"
+            "• 勾選後可用滾輪放大/縮小熱力圖\n"
+            "• 右鍵拖動可平移檢視區域\n"
+            "• 滾輪縮小到最小即回到預設大小\n"
+            "• 取消勾選自動恢復預設顯示"
+        )
+
+        # ========== Row 13: 即時溫度 + ⓘ ==========
+        realtime_temp_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        realtime_temp_frame.grid(row=13, column=0, pady=(0, 8), padx=10, sticky="ew")
+
+        self.realtime_temp_var = tk.BooleanVar(value=True)
+        self.realtime_temp_checkbox = tk.Checkbutton(
+            realtime_temp_frame,
+            text="即時溫度",
+            variable=self.realtime_temp_var,
             font=UIStyle.BUTTON_FONT,
-            width=10,
-            height=1,
-            bg=UIStyle.GRAY,
+            bg=UIStyle.VERY_LIGHT_BLUE,
             fg=UIStyle.BLACK,
-            relief=UIStyle.BUTTON_RELIEF,
-            bd=UIStyle.BUTTON_BORDER_WIDTH,
-            command=self.on_undo,
-            state=tk.DISABLED
+            activebackground=UIStyle.VERY_LIGHT_BLUE,
+            activeforeground=UIStyle.BLACK,
+            selectcolor=UIStyle.WHITE,
+            command=self.toggle_realtime_temp_mode
         )
-        self._undo_button.grid(row=12, column=0, pady=(0, 3), padx=10, sticky="ew")
+        self.realtime_temp_checkbox.pack(side='left', anchor='w')
 
-        # 合并按钮
-        self.merge_button = tk.Button(
-            button_container,
-            text="合并 ➕",
-            font=UIStyle.BUTTON_FONT,
-            width=10,
-            height=2,
-            bg=UIStyle.PRIMARY_BLUE,
-            fg=UIStyle.WHITE,
-            relief=UIStyle.BUTTON_RELIEF,
-            bd=UIStyle.BUTTON_BORDER_WIDTH,
-            command=self.on_merge_rects
+        realtime_temp_info_label = tk.Label(
+            realtime_temp_frame,
+            text="ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
         )
-        self.merge_button.grid(row=13, column=0, pady=8, padx=10, sticky="ew")
+        realtime_temp_info_label.pack(side='left', padx=(2, 0))
+        Tooltip(
+            realtime_temp_info_label,
+            "即時溫度功能說明：\n"
+            "勾選後，將滑鼠移動到熱力圖上\n"
+            "即可在游標旁邊顯示該位置的溫度值\n"
+            "（黃色背景 + 紅色文字）\n\n"
+            "溫度標籤會自動跟隨游標移動\n"
+            "移出熱力圖範圍後會自動隱藏"
+        )
 
-        # 删除按钮
-        self.delete_button = tk.Button(
-            button_container,
-            text="删除 ❌",
+        # ========== Row 14: 多選模式 + ⓘ ==========
+        multi_select_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        multi_select_frame.grid(row=14, column=0, pady=(0, 8), padx=10, sticky="ew")
+
+        self.multi_select_var = tk.BooleanVar(value=True)
+        self.multi_select_checkbox = tk.Checkbutton(
+            multi_select_frame,
+            text="多选模式",
+            variable=self.multi_select_var,
             font=UIStyle.BUTTON_FONT,
-            width=10,
-            height=2,
-            bg=UIStyle.DANGER_RED,
-            fg=UIStyle.WHITE,
-            relief=UIStyle.BUTTON_RELIEF,
-            bd=UIStyle.BUTTON_BORDER_WIDTH,
-            command=self.on_delete_rect
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.BLACK,
+            activebackground=UIStyle.VERY_LIGHT_BLUE,
+            activeforeground=UIStyle.BLACK,
+            selectcolor=UIStyle.WHITE,
+            command=self.toggle_multi_select_mode
         )
-        self.delete_button.grid(row=14, column=0, pady=8, padx=10, sticky="ew")
+        self.multi_select_checkbox.pack(side='left')
+
+        multi_select_info_label = tk.Label(
+            multi_select_frame,
+            text="ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
+        )
+        multi_select_info_label.pack(side='left', padx=(2, 0))
+        Tooltip(
+            multi_select_info_label,
+            "多選模式說明：\n"
+            "• 勾選後可在列表中選取多個元器件\n"
+            "• 支援 Ctrl+點擊 逐一加選\n"
+            "• 支援 Shift+點擊 範圍選取\n"
+            "• 選取多個後可批次轉換形狀或刪除"
+        )
         
         # 初始化按钮状态
         self.update_delete_button_state()
