@@ -1452,14 +1452,12 @@ class EditorCanvas:
             # 停用旋轉控制
             self.update_rotation_ui_state(False)
         elif change_type == "delete":
-            # 删除矩形框后，从列表中移除对应项
-            self.remove_list_item_by_id(rect_id)
             # 清空选中状态
             self.selected_rect_id = None
+            # 重建列表（刪除後索引會變，需完整重建）
+            self.update_rect_list()
             # 更新删除按钮状态
             self.update_delete_button_state()
-            # 更新标题中的数量
-            self.update_title_count()
             print(f"✓ 矩形框 {rect_id} 已从Canvas和列表中删除")
         elif change_type == "dialog_update":
             # 双击对话框更新后，只更新选中的item，不刷新整个列表
@@ -1529,21 +1527,17 @@ class EditorCanvas:
         """处理批量删除事件"""
         if not rect_ids:
             return
-        
-        # 批量删除列表项
-        for rect_id in rect_ids:
-            self.remove_list_item_by_id(rect_id)
-        
+
         # 清空选中状态
         self.selected_rect_id = None
         self.selected_rect_ids.clear()
-        
+
+        # 重新整理列表（Treeview iid 是列表索引，刪除後索引會變，需完整重建）
+        self.update_rect_list()
+
         # 更新删除按钮状态
         self.update_delete_button_state()
-        
-        # 更新标题中的数量
-        self.update_title_count()
-        
+
         print(f"✓ 批量删除了 {len(rect_ids)} 个矩形框")
     
     def on_click(self, event):
@@ -2764,25 +2758,9 @@ class EditorCanvas:
             if len(self.selected_rect_ids) > 0:
                 print(f"🔍🔍🔍 开始批量删除 {len(self.selected_rect_ids)} 个矩形框")
                 
-                # 批量删除
+                # 批量删除（內部會觸發 multi_delete 回調，自動更新列表）
                 self.editor_rect.delete_rectangles_by_ids(list(self.selected_rect_ids))
-                
-                # 批量删除列表项
-                for rect_id in list(self.selected_rect_ids):
-                    self.remove_list_item_by_id(rect_id)
-                
-                # 清空选中状态
-                self.selected_rect_ids.clear()
-                self.selected_rect_id = None
-                
-                # 更新删除按钮状态
-                self.update_delete_button_state()
-                
-                # 更新标题中的数量
-                self.update_title_count()
-                
-                print(f"✓✓✓ 通过{'键盘Delete键' if event else '删除按钮'}批量删除了矩形框")
-                
+
                 # 确保焦点回到对话框
                 self.dialog.focus_set()
                 return
@@ -2803,26 +2781,9 @@ class EditorCanvas:
                 print(f"⚠️⚠️⚠️ 当前所有矩形框: {[r.get('rectId') for r in self.editor_rect.rectangles]}")
                 return
             
-            # 删除选中的矩形框
-            print(f"🔍🔍🔍 调用delete_rectangle_by_id({self.selected_rect_id})")
+            # 删除选中的矩形框（內部會觸發 delete 回調，自動更新列表）
             self.editor_rect.delete_rectangle_by_id(self.selected_rect_id)
-            print(f"🔍🔍🔍 delete_rectangle_by_id调用完成")
-            
-            # 只删除对应的列表项，不刷新整个列表
-            print(f"🔍🔍🔍 调用remove_list_item_by_id({self.selected_rect_id})")
-            self.remove_list_item_by_id(self.selected_rect_id)
-            print(f"🔍🔍🔍 remove_list_item_by_id调用完成")
-            
-            # 清空选中状态
-            self.selected_rect_id = None
-            # 更新删除按钮状态
-            self.update_delete_button_state()
-            
-            # 更新标题中的数量
-            self.update_title_count()
-            
-            print(f"✓✓✓ 通过{'键盘Delete键' if event else '删除按钮'}删除了矩形框")
-            
+
             # 确保焦点回到对话框
             self.dialog.focus_set()
         else:
