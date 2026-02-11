@@ -3191,10 +3191,10 @@ class EditorCanvas:
         self.selected_rect_ids.clear()
         self.update_delete_button_state()
 
-        # 清空篩選條件並刷新列表
-        self.filter_name_entry.delete(0, tk.END)
-        self.filter_desc_entry.delete(0, tk.END)
-        self.filter_temp_entry.delete(0, tk.END)
+        # 清空篩選條件並恢復灰色提示詞
+        self.filter_name_entry.set("")
+        self.filter_desc_entry.set("")
+        self.filter_temp_entry.set("")
         self.apply_filters()
         self.update_rect_list()
 
