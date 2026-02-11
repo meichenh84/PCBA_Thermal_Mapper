@@ -263,6 +263,60 @@ class TempLoader:
         # 返回縮放座標系中的座標
         return (max_x * scale, max_y * scale) if found else (0, 0)
 
+    def get_max_temp_in_polygon(self, corners, scale=1):
+        """查詢旋轉多邊形區域內的最高溫度值。
+
+        使用 cv2.fillPoly 建立多邊形遮罩，再以遮罩取溫度矩陣中的最大值。
+        效能優於逐像素 Python 迴圈。
+
+        Args:
+            corners (list[tuple]): 多邊形頂點座標（縮放後座標系）。
+                                   例如 [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]。
+            scale (float): 座標縮放比例，預設為 1。
+
+        Returns:
+            float: 多邊形區域內的最高溫度值。若區域無效，則回傳 0。
+        """
+        from rotation_utils import create_polygon_mask
+
+        maxH, maxW = self._tempA.shape
+        # 將頂點座標轉換到溫度矩陣座標系
+        matrix_corners = [(x / scale, y / scale) for x, y in corners]
+
+        mask = create_polygon_mask(matrix_corners, (maxH, maxW))
+        masked = self._tempA[mask]
+
+        if masked.size > 0:
+            return float(np.max(masked))
+        return 0
+
+    def get_max_temp_coords_in_polygon(self, corners, scale=1):
+        """查詢旋轉多邊形區域內最高溫度點的座標。
+
+        Args:
+            corners (list[tuple]): 多邊形頂點座標（縮放後座標系）。
+            scale (float): 座標縮放比例，預設為 1。
+
+        Returns:
+            tuple: (x, y) 最高溫度點在縮放座標系中的座標。若區域無效，則回傳 (0, 0)。
+        """
+        from rotation_utils import create_polygon_mask
+
+        maxH, maxW = self._tempA.shape
+        matrix_corners = [(x / scale, y / scale) for x, y in corners]
+
+        mask = create_polygon_mask(matrix_corners, (maxH, maxW))
+        masked = self._tempA[mask]
+
+        if masked.size > 0:
+            max_val = np.max(masked)
+            # 找到最大值在遮罩內的位置
+            # 用 np.where 同時滿足遮罩和最大值
+            ys, xs = np.where(mask & (self._tempA == max_val))
+            if len(ys) > 0:
+                return (int(xs[0]) * scale, int(ys[0]) * scale)
+        return (0, 0)
+
 
 # ============================================================================
 # 外部程式碼使用範例

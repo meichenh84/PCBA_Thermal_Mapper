@@ -30,6 +30,7 @@ import tkinter as tk
 from PIL import Image, ImageDraw, ImageFont
 import traceback
 from config import GlobalConfig
+from rotation_utils import get_rotated_corners, corners_to_flat
 
 
 OUTLINE_OFFSETS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
@@ -129,7 +130,18 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
     cx = int(cx * imageScale)
     cy = int(cy * imageScale)
 
-    cv2.rectangle(imageA, (left, top), (right, bottom), rectColor, 1, cv2.LINE_AA)  # 绿色框
+    # 繪製矩形框（支援旋轉）
+    angle = item.get("angle", 0)
+    if angle != 0:
+        geo_cx = (left + right) / 2
+        geo_cy = (top + bottom) / 2
+        half_w = (right - left) / 2
+        half_h = (bottom - top) / 2
+        corners = get_rotated_corners(geo_cx, geo_cy, half_w, half_h, angle)
+        pts = np.array(corners, np.int32).reshape((-1, 1, 2))
+        cv2.polylines(imageA, [pts], isClosed=True, color=rectColor, thickness=1, lineType=cv2.LINE_AA)
+    else:
+        cv2.rectangle(imageA, (left, top), (right, bottom), rectColor, 1, cv2.LINE_AA)  # 绿色框
     # 计算三角形的三个顶点
     center = (cx, cy)
     # 顶点1 (尖角)
@@ -263,10 +275,20 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
     
     shadowColor = "#000000"  # 黑色
 
-    # 绘制形状（矩形或圆形）
+    # 绘制形状（矩形或圆形，支援旋轉）
     shape = item.get("shape", "rectangle")  # 預設為矩形
+    angle = item.get("angle", 0)
     if shape == "circle":
         rectId = canvas.create_oval(left, top, right, bottom, outline=rectColor, width=2)
+    elif angle != 0:
+        # 旋轉矩形：用 create_polygon 替代 create_rectangle
+        geo_cx = (left + right) / 2
+        geo_cy = (top + bottom) / 2
+        half_w = (right - left) / 2
+        half_h = (bottom - top) / 2
+        corners = get_rotated_corners(geo_cx, geo_cy, half_w, half_h, angle)
+        flat = corners_to_flat(corners)
+        rectId = canvas.create_polygon(flat, outline=rectColor, fill='', width=2)
     else:
         rectId = canvas.create_rectangle(left, top, right, bottom, outline=rectColor, width=2)
 
@@ -355,7 +377,18 @@ def update_canvas_item(canvas, item, imageScale=1):
     # if(canvas_width < x2):
     # print("uuuuu -> ", x2, y2, imageScale)
 
-    canvas.coords(rectId, x1, y1, x2, y2)
+    # 更新矩形框座標（支援旋轉 polygon）
+    angle = item.get("angle", 0)
+    if angle != 0:
+        geo_cx_u = (x1 + x2) / 2
+        geo_cy_u = (y1 + y2) / 2
+        half_w_u = (x2 - x1) / 2
+        half_h_u = (y2 - y1) / 2
+        corners_u = get_rotated_corners(geo_cx_u, geo_cy_u, half_w_u, half_h_u, angle)
+        flat_u = corners_to_flat(corners_u)
+        canvas.coords(rectId, *flat_u)
+    else:
+        canvas.coords(rectId, x1, y1, x2, y2)
 
     # 名称文字置中于矩形框上方外侧
     name_center_x = (x1 + x2) / 2
@@ -510,8 +543,18 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
             cx = max(0, min(cx, img_width - 1))
             cy = max(0, min(cy, img_height - 1))
 
-        # 绘制矩形框
-        cv2.rectangle(imageA, (left, top), (right, bottom), rectColor, 1, cv2.LINE_AA)
+        # 绘制矩形框（支援旋轉）
+        angle = item.get("angle", 0)
+        if angle != 0:
+            geo_cx_draw = (left + right) / 2
+            geo_cy_draw = (top + bottom) / 2
+            half_w_draw = (right - left) / 2
+            half_h_draw = (bottom - top) / 2
+            rot_corners = get_rotated_corners(geo_cx_draw, geo_cy_draw, half_w_draw, half_h_draw, angle)
+            rot_pts = np.array(rot_corners, np.int32).reshape((-1, 1, 2))
+            cv2.polylines(imageA, [rot_pts], isClosed=True, color=rectColor, thickness=1, lineType=cv2.LINE_AA)
+        else:
+            cv2.rectangle(imageA, (left, top), (right, bottom), rectColor, 1, cv2.LINE_AA)
 
         # 计算三角形的三个顶点
         center = (cx, cy)

@@ -39,6 +39,10 @@ import numpy as np
 from dialog_component_setting import ComponentSettingDialog
 from load_tempA import TempLoader
 from draw_rect import draw_canvas_item, calc_temp_text_offset, OUTLINE_OFFSETS
+from rotation_utils import (
+    get_rotated_corners, get_rotated_anchor_positions,
+    corners_to_flat, point_in_polygon, rotate_point
+)
 
 
 class RectEditor:
@@ -255,6 +259,57 @@ class RectEditor:
 
                 self._position_temp_text(rect, display_cx, display_cy, tempTextId, display_scale)
 
+    def set_rotation_angle(self, rect_ids, angle):
+        """設定指定元器件的旋轉角度，並重新查詢溫度。
+
+        Args:
+            rect_ids (list): 要旋轉的矩形框 rectId 列表
+            angle (float): 逆時針旋轉角度（度）
+
+        Returns:
+            bool: 是否有溫度變化（供呼叫端決定是否更新 Treeview）
+        """
+        rect_id_set = set(rect_ids)
+        temp_changed = False
+
+        for rect in self.rectangles:
+            if rect.get("rectId") not in rect_id_set:
+                continue
+
+            # 圓形不支援旋轉
+            if rect.get("shape") == "circle":
+                continue
+
+            old_temp = rect.get("max_temp", 0)
+            rect["angle"] = angle
+
+            # 用旋轉多邊形重新查詢溫度
+            x1, y1, x2, y2 = rect["x1"], rect["y1"], rect["x2"], rect["y2"]
+            geo_cx = (x1 + x2) / 2
+            geo_cy = (y1 + y2) / 2
+            half_w = (x2 - x1) / 2
+            half_h = (y2 - y1) / 2
+
+            if angle != 0:
+                corners = get_rotated_corners(geo_cx, geo_cy, half_w, half_h, angle)
+                max_temp = self.tempALoader.get_max_temp_in_polygon(corners, 1.0)
+                cx, cy = self.tempALoader.get_max_temp_coords_in_polygon(corners, 1.0)
+            else:
+                max_temp = self.tempALoader.get_max_temp(int(x1), int(y1), int(x2), int(y2), 1.0)
+                cx, cy = self.tempALoader.get_max_temp_coords(int(x1), int(y1), int(x2), int(y2), 1.0)
+
+            rect["cx"] = cx
+            rect["cy"] = cy
+            rect["max_temp"] = max_temp
+
+            if abs(max_temp - old_temp) > 0.01:
+                temp_changed = True
+
+            # 重繪
+            self._redraw_single_rect(rect)
+
+        return temp_changed
+
     def redraw_all_rectangles(self):
         """重新绘制所有矩形框 - 直接缩放现有矩形，不删除重建"""
         from config import GlobalConfig
@@ -279,8 +334,18 @@ class RectEditor:
                 cx = rect.get("cx", 0) * self.display_scale
                 cy = rect.get("cy", 0) * self.display_scale
 
-                # 直接更新现有矩形的坐标
-                self.canvas.coords(rectId, left, top, right, bottom)
+                # 直接更新现有矩形的坐标（支援旋轉 polygon）
+                angle = rect.get("angle", 0)
+                if angle != 0 and rect.get("shape", "rectangle") != "circle":
+                    geo_cx_r = (left + right) / 2
+                    geo_cy_r = (top + bottom) / 2
+                    half_w_r = (right - left) / 2
+                    half_h_r = (bottom - top) / 2
+                    corners_r = get_rotated_corners(geo_cx_r, geo_cy_r, half_w_r, half_h_r, angle)
+                    flat_r = corners_to_flat(corners_r)
+                    self.canvas.coords(rectId, *flat_r)
+                else:
+                    self.canvas.coords(rectId, left, top, right, bottom)
 
                 # 更新名称标签位置和字體大小
                 if nameId:
@@ -408,7 +473,18 @@ class RectEditor:
             if target_rect:
                 self._move_triangle_outline(target_rect.get("triangleOutlineIds"), point1, point2, point3)
         if rectId:
-            self.canvas.coords(rectId, display_x1, display_y1, display_x2, display_y2)
+            # 支援旋轉 polygon
+            rect_angle = target_rect.get("angle", 0) if target_rect else 0
+            if rect_angle != 0 and target_rect and target_rect.get("shape", "rectangle") != "circle":
+                gcx = (display_x1 + display_x2) / 2
+                gcy = (display_y1 + display_y2) / 2
+                ghw = (display_x2 - display_x1) / 2
+                ghh = (display_y2 - display_y1) / 2
+                rot_corners = get_rotated_corners(gcx, gcy, ghw, ghh, rect_angle)
+                rot_flat = corners_to_flat(rot_corners)
+                self.canvas.coords(rectId, *rot_flat)
+            else:
+                self.canvas.coords(rectId, display_x1, display_y1, display_x2, display_y2)
         self.update_anchors()
 
         # 通知EditorCanvas更新列表显示
@@ -660,6 +736,10 @@ class RectEditor:
         # 記住轉換前的矩形邊界，以便轉回矩形時恢復
         rect["_rect_bounds"] = (rect["x1"], rect["y1"], rect["x2"], rect["y2"])
 
+        # 保存旋轉角度，圓形不使用旋轉
+        rect["_saved_angle"] = rect.get("angle", 0)
+        rect["angle"] = 0
+
         # 計算矩形的幾何中心（邊界框中心）
         geometric_cx = (rect["x1"] + rect["x2"]) / 2
         geometric_cy = (rect["y1"] + rect["y2"]) / 2
@@ -692,7 +772,7 @@ class RectEditor:
         self._redraw_single_rect(rect)
 
     def convert_to_rectangle(self, rect):
-        """將圓形轉換為矩形（恢復轉換前的矩形邊界）
+        """將圓形轉換為矩形（恢復轉換前的矩形邊界和旋轉角度）
 
         Args:
             rect (dict): 矩形資料字典
@@ -704,13 +784,26 @@ class RectEditor:
         if saved:
             rect["x1"], rect["y1"], rect["x2"], rect["y2"] = saved
 
-        # 重新計算範圍內的最高溫度點位置
-        cx, cy = self.tempALoader.get_max_temp_coords(
-            int(rect["x1"]), int(rect["y1"]),
-            int(rect["x2"]), int(rect["y2"]), 1.0)
-        max_temp = self.tempALoader.get_max_temp(
-            int(rect["x1"]), int(rect["y1"]),
-            int(rect["x2"]), int(rect["y2"]), 1.0)
+        # 恢復旋轉角度
+        rect["angle"] = rect.pop("_saved_angle", 0)
+
+        # 重新計算範圍內的最高溫度點位置（考慮旋轉角度）
+        angle = rect.get("angle", 0)
+        x1, y1, x2, y2 = rect["x1"], rect["y1"], rect["x2"], rect["y2"]
+
+        if angle != 0:
+            geo_cx = (x1 + x2) / 2
+            geo_cy = (y1 + y2) / 2
+            half_w = (x2 - x1) / 2
+            half_h = (y2 - y1) / 2
+            corners = get_rotated_corners(geo_cx, geo_cy, half_w, half_h, angle)
+            max_temp = self.tempALoader.get_max_temp_in_polygon(corners, 1.0)
+            cx, cy = self.tempALoader.get_max_temp_coords_in_polygon(corners, 1.0)
+        else:
+            cx, cy = self.tempALoader.get_max_temp_coords(
+                int(x1), int(y1), int(x2), int(y2), 1.0)
+            max_temp = self.tempALoader.get_max_temp(
+                int(x1), int(y1), int(x2), int(y2), 1.0)
 
         rect["cx"] = cx
         rect["cy"] = cy
@@ -831,27 +924,59 @@ class RectEditor:
             pass
 
     def update_rectangle_coordinate(self, rectId):
-        if self.canvas.coords(rectId):
-            # 获取canvas显示坐标（螢幕座標）
-            screen_x1, screen_y1, screen_x2, screen_y2 = self.canvas.coords(rectId)
+        coords = self.canvas.coords(rectId)
+        if coords:
+            # 判斷是否為旋轉 polygon
+            rect_data = self._get_rect_data_by_canvas_id(rectId)
+            angle = rect_data.get("angle", 0) if rect_data else 0
 
-            # 檢查是否啟用了縮放模式
-            if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
-                # 縮放模式：使用 zoom_scale 和 offset 轉換回圖像座標
-                x1 = (screen_x1 - self.canvas_offset_x) / self.zoom_scale
-                y1 = (screen_y1 - self.canvas_offset_y) / self.zoom_scale
-                x2 = (screen_x2 - self.canvas_offset_x) / self.zoom_scale
-                y2 = (screen_y2 - self.canvas_offset_y) / self.zoom_scale
-            else:
-                # 非縮放模式：使用 display_scale 轉換
-                if self.display_scale > 0:
-                    x1 = screen_x1 / self.display_scale
-                    y1 = screen_y1 / self.display_scale
-                    x2 = screen_x2 / self.display_scale
-                    y2 = screen_y2 / self.display_scale
+            if angle != 0 and len(coords) == 8:
+                # 旋轉 polygon：從 polygon 中心計算位移量
+                # polygon 中心 = 4 個頂點的平均值
+                poly_cx = sum(coords[i] for i in range(0, 8, 2)) / 4
+                poly_cy = sum(coords[i+1] for i in range(0, 8, 2)) / 4
+
+                # 計算原始中心的顯示座標
+                old_x1, old_y1 = rect_data["x1"], rect_data["y1"]
+                old_x2, old_y2 = rect_data["x2"], rect_data["y2"]
+
+                if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+                    scale = self.zoom_scale
+                    ox, oy = self.canvas_offset_x, self.canvas_offset_y
                 else:
-                    x1, y1, x2, y2 = screen_x1, screen_y1, screen_x2, screen_y2
-            
+                    scale = self.display_scale if self.display_scale > 0 else 1.0
+                    ox, oy = 0, 0
+
+                old_disp_cx = (old_x1 + old_x2) / 2 * scale + ox
+                old_disp_cy = (old_y1 + old_y2) / 2 * scale + oy
+
+                # 位移量
+                delta_x = (poly_cx - old_disp_cx) / scale
+                delta_y = (poly_cy - old_disp_cy) / scale
+
+                # 套用位移
+                x1 = old_x1 + delta_x
+                y1 = old_y1 + delta_y
+                x2 = old_x2 + delta_x
+                y2 = old_y2 + delta_y
+            else:
+                # 軸對齊矩形/圓形
+                screen_x1, screen_y1, screen_x2, screen_y2 = coords[:4]
+
+                if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+                    x1 = (screen_x1 - self.canvas_offset_x) / self.zoom_scale
+                    y1 = (screen_y1 - self.canvas_offset_y) / self.zoom_scale
+                    x2 = (screen_x2 - self.canvas_offset_x) / self.zoom_scale
+                    y2 = (screen_y2 - self.canvas_offset_y) / self.zoom_scale
+                else:
+                    if self.display_scale > 0:
+                        x1 = screen_x1 / self.display_scale
+                        y1 = screen_y1 / self.display_scale
+                        x2 = screen_x2 / self.display_scale
+                        y2 = screen_y2 / self.display_scale
+                    else:
+                        x1, y1, x2, y2 = screen_x1, screen_y1, screen_x2, screen_y2
+
             for rect in self.rectangles:
                 if rect["rectId"] == rectId:
                     old_temp = rect.get("max_temp", 0)
@@ -862,6 +987,7 @@ class RectEditor:
 
                     # 根據形狀類型查詢溫度數據
                     shape = rect.get("shape", "rectangle")
+                    rect_angle = rect.get("angle", 0)
                     if shape == "circle":
                         # 圓形：只考慮圓形內部的點
                         center_x = (x1 + x2) / 2
@@ -869,6 +995,15 @@ class RectEditor:
                         radius = (x2 - x1) / 2
                         cx, cy = self.tempALoader.get_max_temp_coords_in_circle(center_x, center_y, radius, 1.0)
                         max_temp = self.tempALoader.get_max_temp_in_circle(center_x, center_y, radius, 1.0)
+                    elif rect_angle != 0:
+                        # 旋轉矩形：使用多邊形區域查詢
+                        geo_cx_q = (x1 + x2) / 2
+                        geo_cy_q = (y1 + y2) / 2
+                        half_w_q = (x2 - x1) / 2
+                        half_h_q = (y2 - y1) / 2
+                        corners_q = get_rotated_corners(geo_cx_q, geo_cy_q, half_w_q, half_h_q, rect_angle)
+                        cx, cy = self.tempALoader.get_max_temp_coords_in_polygon(corners_q, 1.0)
+                        max_temp = self.tempALoader.get_max_temp_in_polygon(corners_q, 1.0)
                     else:
                         # 矩形：使用矩形區域查詢
                         cx, cy = self.tempALoader.get_max_temp_coords(int(x1), int(y1), int(x2), int(y2), 1.0)
@@ -972,38 +1107,73 @@ class RectEditor:
         # 通知清空选中
         if self.on_rect_change_callback:
             self.on_rect_change_callback(None, "clear_select")
+    def _get_rect_data_by_canvas_id(self, canvas_id):
+        """根據 Canvas rectId 查找對應的 rect 資料字典。"""
+        for r in self.rectangles:
+            if r.get("rectId") == canvas_id:
+                return r
+        return None
+
     def create_anchors(self, rect):
         """Create anchors for the given rectangle."""
         # Create anchors for the given rectangle
         self.delete_anchors()
-        
+
         try:
             coords = self.canvas.coords(rect)
             if not coords or len(coords) < 4:
                 print(f"× create_anchors 失败: 无法获取矩形 {rect} 的坐标，coords={coords}")
                 return
-                
-            x1, y1, x2, y2 = coords
-            print(f"✓ create_anchors: 矩形 {rect} 坐标=({x1}, {y1}, {x2}, {y2}), conner_width={self.conner_width}")
-            
+
             # 从配置中读取锚点颜色
             from config import GlobalConfig
             config = GlobalConfig()
             anchor_fill_color = config.get("heat_anchor_color", "#FF0000")
             anchor_outline_color = "#000000"  # 锚点边框保持黑色
-            
-            self.anchors = [
-                self.canvas.create_oval(x1 - self.conner_width, y1 - self.conner_width, x1 + self.conner_width, y1 + self.conner_width, fill=anchor_fill_color, outline=anchor_outline_color, tags="anchor"),
-                self.canvas.create_oval(x2 - self.conner_width, y1 - self.conner_width, x2 + self.conner_width, y1 + self.conner_width, fill=anchor_fill_color, outline=anchor_outline_color, tags="anchor"),
-                self.canvas.create_oval(x1 - self.conner_width, y2 - self.conner_width, x1 + self.conner_width, y2 + self.conner_width, fill=anchor_fill_color, outline=anchor_outline_color, tags="anchor"),
-                self.canvas.create_oval(x2 - self.conner_width, y2 - self.conner_width, x2 + self.conner_width, y2 + self.conner_width, fill=anchor_fill_color, outline=anchor_outline_color, tags="anchor"),
-                self.canvas.create_oval(x1 - self.conner_width, (y1 + y2) // 2 - self.conner_width, x1 + self.conner_width, (y1 + y2) // 2 + self.conner_width, fill=anchor_fill_color, outline=anchor_outline_color, tags="anchor"),
-                self.canvas.create_oval(x2 - self.conner_width, (y1 + y2) // 2 - self.conner_width, x2 + self.conner_width, (y1 + y2) // 2 + self.conner_width, fill=anchor_fill_color, outline=anchor_outline_color, tags="anchor"),
-                self.canvas.create_oval((x1 + x2) // 2 - self.conner_width, y1 - self.conner_width, (x1 + x2) // 2 + self.conner_width, y1 + self.conner_width, fill=anchor_fill_color, outline=anchor_outline_color, tags="anchor"),
-                self.canvas.create_oval((x1 + x2) // 2 - self.conner_width, y2 - self.conner_width, (x1 + x2) // 2 + self.conner_width, y2 + self.conner_width, fill=anchor_fill_color, outline=anchor_outline_color, tags="anchor"),
-            ]
-            print(f"✓ 已创建 {len(self.anchors)} 个锚点: {self.anchors}")
-            
+
+            # 判斷是否為旋轉 polygon（8 個座標值 = 4 頂點）
+            rect_data = self._get_rect_data_by_canvas_id(rect)
+            angle = rect_data.get("angle", 0) if rect_data else 0
+
+            if angle != 0 and len(coords) == 8:
+                # 旋轉矩形：從 rect 資料計算錨點位置
+                x1_o, y1_o, x2_o, y2_o = rect_data["x1"], rect_data["y1"], rect_data["x2"], rect_data["y2"]
+                # 轉為顯示座標
+                if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+                    scale = self.zoom_scale
+                    ox, oy = self.canvas_offset_x, self.canvas_offset_y
+                else:
+                    scale = self.display_scale
+                    ox, oy = 0, 0
+                d_cx = (x1_o + x2_o) / 2 * scale + ox
+                d_cy = (y1_o + y2_o) / 2 * scale + oy
+                d_hw = (x2_o - x1_o) / 2 * scale
+                d_hh = (y2_o - y1_o) / 2 * scale
+                anchor_positions = get_rotated_anchor_positions(d_cx, d_cy, d_hw, d_hh, angle)
+            else:
+                x1, y1, x2, y2 = coords[:4]
+                anchor_positions = [
+                    (x1, y1),                       # 0: TL
+                    (x2, y1),                       # 1: TR
+                    (x1, y2),                       # 2: BL
+                    (x2, y2),                       # 3: BR
+                    (x1, (y1 + y2) / 2),            # 4: L-mid
+                    (x2, (y1 + y2) / 2),            # 5: R-mid
+                    ((x1 + x2) / 2, y1),            # 6: T-mid
+                    ((x1 + x2) / 2, y2),            # 7: B-mid
+                ]
+
+            cw = self.conner_width
+            self.anchors = []
+            for ax, ay in anchor_positions:
+                a = self.canvas.create_oval(
+                    ax - cw, ay - cw, ax + cw, ay + cw,
+                    fill=anchor_fill_color, outline=anchor_outline_color, tags="anchor"
+                )
+                self.anchors.append(a)
+
+            print(f"✓ 已创建 {len(self.anchors)} 个锚点")
+
         except Exception as e:
             print(f"× create_anchors 错误: {e}")
             self.anchors = []
@@ -1026,8 +1196,7 @@ class RectEditor:
         rectId = self.drag_data["rectId"]
 
         if rectId and self.canvas.coords(rectId):
-            x1, y1, x2, y2 = self.canvas.coords(rectId)
-            # 是否是锚点
+            # 是否是锚点（不需要解包 rectId 座標，直接檢查錨點）
             for i, anchor in enumerate(self.anchors):
                 coords = _x1, _y1, _x2, _y2 = self.canvas.coords(anchor)
                 if (_x1 <= event.x <= _x2) and (_y1 <= event.y <= _y2): #  and (x1 <= ((_x1 + _x2) // 2) <= x2) and (y1 <= ((_y1 + _y2) // 2) <= y2)
@@ -1040,12 +1209,22 @@ class RectEditor:
             for rect in self.rectangles:
                 rectId = rect.get("rectId")
                 if rectId and self.canvas.coords(rectId):
-                    # 使用canvas实际坐标进行判断，而不是原图像坐标
-                    x1, y1, x2, y2 = self.canvas.coords(rectId)
+                    coords = self.canvas.coords(rectId)
                     nameId, triangleId, tempTextId, isNew = rect.get("nameId"), rect.get("triangleId"), rect.get("tempTextId"), rect.get("isNew")
-                    # 是否是矩形范围内 
-                    if x1 <= event.x <= x2 and y1 <= event.y <= y2:
-                        clicked_rect = rectId 
+                    angle = rect.get("angle", 0)
+
+                    hit = False
+                    if angle != 0 and len(coords) == 8:
+                        # 旋轉矩形：用 point_in_polygon 偵測點擊
+                        polygon_corners = [(coords[i], coords[i+1]) for i in range(0, 8, 2)]
+                        hit = point_in_polygon(event.x, event.y, polygon_corners)
+                    elif len(coords) >= 4:
+                        # 軸對齊矩形/圓形
+                        x1, y1, x2, y2 = coords[:4]
+                        hit = x1 <= event.x <= x2 and y1 <= event.y <= y2
+
+                    if hit:
+                        clicked_rect = rectId
                         clicked_name = nameId
                         clicked_triangleId = triangleId
                         clicked_tempTextId = tempTextId
@@ -1168,17 +1347,77 @@ class RectEditor:
     def resize_rectangle(self, event):
         """Resize the selected rectangle based on the anchor point."""
         rectId = self.drag_data["rectId"]
-        x1, y1, x2, y2 = self.canvas.coords(rectId)
+        coords = self.canvas.coords(rectId)
         anchor = self.drag_data["anchor"]
 
-        # 檢查是否為圓形
-        rect_data = None
-        for r in self.rectangles:
-            if r.get("rectId") == rectId:
-                rect_data = r
-                break
-
+        # 檢查是否為圓形或旋轉矩形
+        rect_data = self._get_rect_data_by_canvas_id(rectId)
         is_circle = rect_data and rect_data.get("shape") == "circle"
+        angle = rect_data.get("angle", 0) if rect_data else 0
+
+        if angle != 0 and not is_circle:
+            # 旋轉矩形縮放：將滑鼠座標逆旋轉到本地座標系
+            x1_o, y1_o, x2_o, y2_o = rect_data["x1"], rect_data["y1"], rect_data["x2"], rect_data["y2"]
+            if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+                scale = self.zoom_scale
+                ox, oy = self.canvas_offset_x, self.canvas_offset_y
+            else:
+                scale = self.display_scale if self.display_scale > 0 else 1.0
+                ox, oy = 0, 0
+            disp_cx = (x1_o + x2_o) / 2 * scale + ox
+            disp_cy = (y1_o + y2_o) / 2 * scale + oy
+
+            # 逆旋轉滑鼠座標
+            local_mx, local_my = rotate_point(event.x, event.y, disp_cx, disp_cy, -angle)
+
+            # 在本地座標系中的未旋轉邊界
+            local_x1 = x1_o * scale + ox
+            local_y1 = y1_o * scale + oy
+            local_x2 = x2_o * scale + ox
+            local_y2 = y2_o * scale + oy
+
+            # 套用軸對齊縮放邏輯
+            if anchor == 0:  # TL
+                local_x1 = min(local_mx, local_x2 - self.min_width)
+                local_y1 = min(local_my, local_y2 - self.min_width)
+            elif anchor == 1:  # TR
+                local_x2 = max(local_mx, local_x1 + self.min_width)
+                local_y1 = min(local_my, local_y2 - self.min_width)
+            elif anchor == 2:  # BL
+                local_x1 = min(local_mx, local_x2 - self.min_width)
+                local_y2 = max(local_my, local_y1 + self.min_width)
+            elif anchor == 3:  # BR
+                local_x2 = max(local_mx, local_x1 + self.min_width)
+                local_y2 = max(local_my, local_y1 + self.min_width)
+            elif anchor == 4:  # L-mid
+                local_x1 = min(local_mx, local_x2 - self.min_width)
+            elif anchor == 5:  # R-mid
+                local_x2 = max(local_mx, local_x1 + self.min_width)
+            elif anchor == 6:  # T-mid
+                local_y1 = min(local_my, local_y2 - self.min_width)
+            elif anchor == 7:  # B-mid
+                local_y2 = max(local_my, local_y1 + self.min_width)
+
+            # 轉回原圖像座標
+            rect_data["x1"] = (local_x1 - ox) / scale
+            rect_data["y1"] = (local_y1 - oy) / scale
+            rect_data["x2"] = (local_x2 - ox) / scale
+            rect_data["y2"] = (local_y2 - oy) / scale
+
+            # 重新計算旋轉頂點並更新 polygon
+            new_cx = (local_x1 + local_x2) / 2
+            new_cy = (local_y1 + local_y2) / 2
+            new_hw = (local_x2 - local_x1) / 2
+            new_hh = (local_y2 - local_y1) / 2
+            corners_resize = get_rotated_corners(new_cx, new_cy, new_hw, new_hh, angle)
+            flat_resize = corners_to_flat(corners_resize)
+            self.canvas.coords(rectId, *flat_resize)
+
+            # Update the anchors after resize
+            self.update_anchors()
+            return
+
+        x1, y1, x2, y2 = coords[:4]
 
         if is_circle:
             # 圓形調整：保持正方形邊界，維持圓形
@@ -1244,11 +1483,25 @@ class RectEditor:
             for rect in self.rectangles:
                 rectId = rect.get("rectId")
                 if rectId and self.canvas.coords(rectId):
-                    rx1, ry1, rx2, ry2 = self.canvas.coords(rectId)
-                    # 判断矩形框是否完全包含在多选框内
-                    if (min_x <= rx1 and rx2 <= max_x and 
-                        min_y <= ry1 and ry2 <= max_y):
-                        self.selected_rect_ids.add(rectId)
+                    r_coords = self.canvas.coords(rectId)
+                    r_angle = rect.get("angle", 0)
+
+                    if r_angle != 0 and len(r_coords) == 8:
+                        # 旋轉矩形：檢查 4 個頂點是否都在選取框內
+                        all_inside = True
+                        for vi in range(0, 8, 2):
+                            vx, vy = r_coords[vi], r_coords[vi+1]
+                            if not (min_x <= vx <= max_x and min_y <= vy <= max_y):
+                                all_inside = False
+                                break
+                        if all_inside:
+                            self.selected_rect_ids.add(rectId)
+                    elif len(r_coords) >= 4:
+                        rx1, ry1, rx2, ry2 = r_coords[:4]
+                        # 判断矩形框是否完全包含在多选框内
+                        if (min_x <= rx1 and rx2 <= max_x and
+                            min_y <= ry1 and ry2 <= max_y):
+                            self.selected_rect_ids.add(rectId)
             
             # 删除多选框
             if self.multi_select_rect:
@@ -1284,22 +1537,65 @@ class RectEditor:
         rectId = self.drag_data["rectId"]
         if rectId and len(self.anchors) > 0:
             #"""更新锚点位置"""
-            # 获取矩形的坐标
-            x1, y1, x2, y2 = self.canvas.coords(rectId)
-            
-            # 更新锚点的位置
-            self.canvas.coords(self.anchors[0], x1 - self.conner_width, y1 - self.conner_width, x1 + self.conner_width, y1 + self.conner_width)  # top-left
-            self.canvas.coords(self.anchors[1], x2 - self.conner_width, y1 - self.conner_width, x2 + self.conner_width, y1 + self.conner_width)  # top-right
-            self.canvas.coords(self.anchors[2], x1 - self.conner_width, y2 - self.conner_width, x1 + self.conner_width, y2 + self.conner_width)  # bottom-left
-            self.canvas.coords(self.anchors[3], x2 - self.conner_width, y2 - self.conner_width, x2 + self.conner_width, y2 + self.conner_width)  # bottom-right
-            self.canvas.coords(self.anchors[4], x1 - self.conner_width, (y1 + y2) // 2 - self.conner_width, x1 + self.conner_width, (y1 + y2) // 2 + self.conner_width)  # top-center
-            self.canvas.coords(self.anchors[5], x2 - self.conner_width, (y1 + y2) // 2 - self.conner_width, x2 + self.conner_width, (y1 + y2) // 2 + self.conner_width)  # right-center
-            self.canvas.coords(self.anchors[6], (x1 + x2) // 2 - self.conner_width, y1 - self.conner_width, (x1 + x2) // 2 + self.conner_width, y1 + self.conner_width)  # left-center
-            self.canvas.coords(self.anchors[7], (x1 + x2) // 2 - self.conner_width, y2 - self.conner_width, (x1 + x2) // 2 + self.conner_width, y2 + self.conner_width)  # bottom-center
+            coords = self.canvas.coords(rectId)
+            cw = self.conner_width
 
+            # 判斷是否為旋轉 polygon
+            rect_data = self._get_rect_data_by_canvas_id(rectId)
+            angle = rect_data.get("angle", 0) if rect_data else 0
+
+            if angle != 0 and len(coords) == 8:
+                # 旋轉矩形：從實際的 polygon canvas 座標計算錨點
+                # corners 順序: TL, TR, BR, BL
+                c = coords  # [TL_x, TL_y, TR_x, TR_y, BR_x, BR_y, BL_x, BL_y]
+                anchor_positions = [
+                    (c[0], c[1]),                                  # 0: TL
+                    (c[2], c[3]),                                  # 1: TR
+                    (c[6], c[7]),                                  # 2: BL
+                    (c[4], c[5]),                                  # 3: BR
+                    ((c[0]+c[6])/2, (c[1]+c[7])/2),               # 4: L-mid
+                    ((c[2]+c[4])/2, (c[3]+c[5])/2),               # 5: R-mid
+                    ((c[0]+c[2])/2, (c[1]+c[3])/2),               # 6: T-mid
+                    ((c[4]+c[6])/2, (c[5]+c[7])/2),               # 7: B-mid
+                ]
+                for i, (ax, ay) in enumerate(anchor_positions):
+                    if i < len(self.anchors):
+                        self.canvas.coords(self.anchors[i], ax - cw, ay - cw, ax + cw, ay + cw)
+            else:
+                # 軸對齊矩形/圓形
+                x1, y1, x2, y2 = coords[:4]
+                self.canvas.coords(self.anchors[0], x1 - cw, y1 - cw, x1 + cw, y1 + cw)  # top-left
+                self.canvas.coords(self.anchors[1], x2 - cw, y1 - cw, x2 + cw, y1 + cw)  # top-right
+                self.canvas.coords(self.anchors[2], x1 - cw, y2 - cw, x1 + cw, y2 + cw)  # bottom-left
+                self.canvas.coords(self.anchors[3], x2 - cw, y2 - cw, x2 + cw, y2 + cw)  # bottom-right
+                self.canvas.coords(self.anchors[4], x1 - cw, (y1 + y2) // 2 - cw, x1 + cw, (y1 + y2) // 2 + cw)  # left-center
+                self.canvas.coords(self.anchors[5], x2 - cw, (y1 + y2) // 2 - cw, x2 + cw, (y1 + y2) // 2 + cw)  # right-center
+                self.canvas.coords(self.anchors[6], (x1 + x2) // 2 - cw, y1 - cw, (x1 + x2) // 2 + cw, y1 + cw)  # top-center
+                self.canvas.coords(self.anchors[7], (x1 + x2) // 2 - cw, y2 - cw, (x1 + x2) // 2 + cw, y2 + cw)  # bottom-center
+
+            # 取得軸對齊的顯示座標用於溫度更新
+            if angle != 0 and len(coords) == 8:
+                # 旋轉矩形：從 polygon 中心和半寬半高計算軸對齊邊界
+                c = coords
+                poly_cx = sum(c[i] for i in range(0, 8, 2)) / 4
+                poly_cy = sum(c[i+1] for i in range(0, 8, 2)) / 4
+                if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+                    scale = self.zoom_scale
+                    ox, oy = self.canvas_offset_x, self.canvas_offset_y
+                else:
+                    scale = self.display_scale if self.display_scale > 0 else 1.0
+                    ox, oy = 0, 0
+                d_hw = (rect_data["x2"] - rect_data["x1"]) / 2 * scale
+                d_hh = (rect_data["y2"] - rect_data["y1"]) / 2 * scale
+                disp_x1 = poly_cx - d_hw
+                disp_y1 = poly_cy - d_hh
+                disp_x2 = poly_cx + d_hw
+                disp_y2 = poly_cy + d_hh
+            else:
+                disp_x1, disp_y1, disp_x2, disp_y2 = coords[:4]
 
             nameId, tempTextId, triangleId, isNew = self.drag_data["nameId"], self.drag_data["tempTextId"], self.drag_data["triangleId"], self.drag_data["isNew"],
-            self.update_temp_rect(x1, y1, x2, y2, nameId, tempTextId, triangleId)
+            self.update_temp_rect(disp_x1, disp_y1, disp_x2, disp_y2, nameId, tempTextId, triangleId)
 
             if isNew is None:
                 self.modify_origin_set.add(rectId)
@@ -1345,9 +1641,19 @@ class RectEditor:
         if target_rect:
             self._move_outline(target_rect.get("nameOutlineIds"), name_center_x, name_y)
 
-        # 使用原图像坐标查询温度和最高温度位置
-        max_temp = self.tempALoader.get_max_temp(int(orig_x1), int(orig_y1), int(orig_x2), int(orig_y2), 1.0)
-        orig_cx, orig_cy = self.tempALoader.get_max_temp_coords(int(orig_x1), int(orig_y1), int(orig_x2), int(orig_y2), 1.0)
+        # 使用原图像坐标查询温度和最高温度位置（支援旋轉）
+        temp_angle = target_rect.get("angle", 0) if target_rect else 0
+        if temp_angle != 0:
+            geo_cx_t = (orig_x1 + orig_x2) / 2
+            geo_cy_t = (orig_y1 + orig_y2) / 2
+            half_w_t = (orig_x2 - orig_x1) / 2
+            half_h_t = (orig_y2 - orig_y1) / 2
+            corners_t = get_rotated_corners(geo_cx_t, geo_cy_t, half_w_t, half_h_t, temp_angle)
+            max_temp = self.tempALoader.get_max_temp_in_polygon(corners_t, 1.0)
+            orig_cx, orig_cy = self.tempALoader.get_max_temp_coords_in_polygon(corners_t, 1.0)
+        else:
+            max_temp = self.tempALoader.get_max_temp(int(orig_x1), int(orig_y1), int(orig_x2), int(orig_y2), 1.0)
+            orig_cx, orig_cy = self.tempALoader.get_max_temp_coords(int(orig_x1), int(orig_y1), int(orig_x2), int(orig_y2), 1.0)
 
         # 将原图像坐标转换为显示坐标来显示温度文本和三角形
         if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:

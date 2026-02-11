@@ -134,7 +134,7 @@ class EditorCanvas:
         self.filtered_rectangles = []  # 保存篩選後的矩形框
 
         # 欄位寬度配置（統一管理，修改此處即可同步更新所有相關欄位）
-        self.COLUMN_WIDTH_NAME = 3   # 名稱欄位寬度
+        self.COLUMN_WIDTH_NAME = 3   # 點位名稱欄位寬度
         self.COLUMN_WIDTH_DESC = 28   # 描述欄位寬度
         self.COLUMN_WIDTH_TEMP = 3    # 溫度欄位寬度
 
@@ -272,7 +272,7 @@ class EditorCanvas:
         # 即時溫度預設開啟時，綁定滑鼠移動事件
         if self.realtime_temp_enabled and hasattr(self, 'dialog') and self.dialog:
             self.dialog.bind('<Motion>', self.on_canvas_motion_show_temp, add='+')
-        # 應用預設排序（名稱 A~Z）
+        # 應用預設排序（點位名稱 A~Z）
         self.apply_sort()
         # 最后更新列表（apply_sort 內部已經調用了 update_rect_list，這裡可以移除）
         # self.update_rect_list()
@@ -354,7 +354,7 @@ class EditorCanvas:
         # 統一的篩選輸入框寬度
         FILTER_INPUT_WIDTH = 35
 
-        # === 第一列：篩選保留標籤 + 名稱篩選輸入框 + 驚嘆號 + 刪除其他按鈕 ===
+        # === 第一列：篩選保留標籤 + 點位名稱篩選輸入框 + 驚嘆號 + 刪除其他按鈕 ===
         # "篩選保留" 標籤
         filter_label = tk.Label(
             filter_frame,
@@ -365,10 +365,10 @@ class EditorCanvas:
         )
         filter_label.grid(row=0, column=0, sticky="w", padx=(5, 5), pady=3)
 
-        # 名稱篩選輸入框
+        # 點位名稱篩選輸入框
         self.filter_name_entry = PlaceholderEntry(
             filter_frame,
-            placeholder='名稱：輸入 C,HA',
+            placeholder='點位名稱：輸入 C,HA',
             placeholder_color="gray",
             font=("Arial", 9),
             width=FILTER_INPUT_WIDTH,
@@ -379,7 +379,7 @@ class EditorCanvas:
         self.filter_name_entry.grid(row=0, column=1, sticky="w", padx=(0, 2), pady=3)
         self.filter_name_entry.bind('<KeyRelease>', self.on_filter_changed)
 
-        # 名稱篩選資訊圖示（帶 tooltip）
+        # 點位名稱篩選資訊圖示（帶 tooltip）
         name_info_label = tk.Label(
             filter_frame,
             text="ⓘ",
@@ -395,7 +395,7 @@ class EditorCanvas:
                 "• 多值（OR）：輸入 \"C\",\"HA\" 篩選包含 C 或 HA 的項目\n"
                 "• 格式支援：\"C\",\"HA\" 或 C,HA")
 
-        # "刪除其他" 按鈕（在名稱篩選 ⓘ 圖示後方）
+        # "刪除其他" 按鈕（在點位名稱篩選 ⓘ 圖示後方）
         self.delete_others_btn = tk.Button(
             filter_frame,
             text="\u26A0 刪除其他",
@@ -507,12 +507,12 @@ class EditorCanvas:
 
         # 配置欄位
         self.tree.column('#0', width=0, stretch=tk.NO)  # 隱藏第一欄（tree column）
-        self.tree.column('name', width=int(self.COLUMN_WIDTH_NAME * 8), anchor='w')  # 名稱欄位
+        self.tree.column('name', width=int(self.COLUMN_WIDTH_NAME * 8), anchor='w')  # 點位名稱欄位
         self.tree.column('desc', width=int(self.COLUMN_WIDTH_DESC * 8), anchor='w')  # 描述欄位
         self.tree.column('temp', width=int(self.COLUMN_WIDTH_TEMP * 8), anchor='center')  # 溫度欄位
 
         # 配置表頭
-        self.tree.heading('name', text='名稱 ▼', command=self.toggle_sort_by_name)
+        self.tree.heading('name', text='點位名稱 ▼', command=self.toggle_sort_by_name)
         self.tree.heading('desc', text='描述', command=self.toggle_sort_by_desc)
         self.tree.heading('temp', text='溫度', command=self.toggle_sort_by_temp)
 
@@ -535,7 +535,7 @@ class EditorCanvas:
 
         # 移除名称推荐下拉框
 
-        # 初始化列表（應用預設排序：名稱 A~Z）
+        # 初始化列表（應用預設排序：點位名稱 A~Z）
         # 注意：update_rect_list() 會自動調用 update_sort_indicators()
         self.update_rect_list()
 
@@ -713,6 +713,8 @@ class EditorCanvas:
         # 更新按鈕狀態
         if hasattr(self, 'update_delete_button_state'):
             self.update_delete_button_state()
+        # 更新旋轉控制狀態
+        self._update_rotation_state_for_selection()
 
     def on_tree_click(self, event):
         """Treeview 點擊事件處理（支持 Ctrl/Shift 鍵）"""
@@ -1287,14 +1289,14 @@ class EditorCanvas:
         if list_index is not None and target_rect:
             item_id = str(list_index)
             if self.tree.exists(item_id):
-                # 更新名稱和溫度
+                # 更新點位名稱和溫度
                 new_name = target_rect.get('name', 'Unknown')
                 description = target_rect.get('description', '')
                 new_temp = target_rect.get('max_temp', 0)
                 temp_text = f"{new_temp:.1f}°C"
 
                 self.tree.item(item_id, values=(new_name, description, temp_text))
-                print(f"✓ 已更新列表項 index={list_index}: 名稱={new_name}, 溫度={temp_text}")
+                print(f"✓ 已更新列表項 index={list_index}: 點位名稱={new_name}, 溫度={temp_text}")
 
     def update_rect_name(self, rect_id, new_name):
         """更新矩形框名称"""
@@ -1359,7 +1361,7 @@ class EditorCanvas:
                 # 獲取當前的項目值
                 current_values = self.tree.item(item_id, 'values')
                 if current_values and len(current_values) >= 3:
-                    # 更新溫度顯示（保持名稱和描述不變）
+                    # 更新溫度顯示（保持點位名稱和描述不變）
                     name = current_values[0]
                     description = current_values[1]
                     temp_text = f"{new_temp:.1f}°C"
@@ -1441,10 +1443,14 @@ class EditorCanvas:
             self.update_delete_button_state()
             # 更新形狀轉換按鈕狀態
             self.update_shape_buttons_state()
+            # 更新旋轉控制狀態
+            self._update_rotation_state_for_selection()
         elif change_type == "clear_select":
             self.clear_all_selections()
             # 更新删除按钮状态
             self.update_delete_button_state()
+            # 停用旋轉控制
+            self.update_rotation_ui_state(False)
         elif change_type == "delete":
             # 删除矩形框后，从列表中移除对应项
             self.remove_list_item_by_id(rect_id)
@@ -1511,11 +1517,14 @@ class EditorCanvas:
         # 更新刪除按鈕狀態
         self.update_delete_button_state()
 
+        # 更新旋轉控制狀態
+        self._update_rotation_state_for_selection()
+
         # 確保對話框可以接收鍵盤事件
         self.dialog.focus_set()
 
         print(f"✓ 多選高亮了 {len(self.selected_rect_ids)} 個矩形框")
-    
+
     def handle_multi_delete(self, rect_ids):
         """处理批量删除事件"""
         if not rect_ids:
@@ -1900,6 +1909,95 @@ class EditorCanvas:
                 btn.grid(row=r, column=c, padx=1, pady=1)
                 self.temp_dir_buttons[code] = btn
 
+        # ========== 旋轉角度控制區域 ==========
+        rotation_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        rotation_label_frame.grid(row=8, column=0, pady=(8, 2), padx=10, sticky="w")
+
+        rotation_label = tk.Label(
+            rotation_label_frame,
+            text="旋轉角度",
+            font=("Arial", 9),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.DARK_GRAY
+        )
+        rotation_label.pack(side=tk.LEFT)
+
+        rotation_info_label = tk.Label(
+            rotation_label_frame,
+            text=" ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
+        )
+        rotation_info_label.pack(side=tk.LEFT, padx=(2, 0))
+        Tooltip(
+            rotation_info_label,
+            "旋轉角度功能：\n"
+            "• 矩形框以幾何中心為軸逆時針旋轉\n"
+            "• 點選預設角度或輸入自訂角度\n"
+            "• 旋轉後最高溫度會在新區域內重新查找\n"
+            "• 圓形不支援旋轉\n"
+            "• 支援多選批次旋轉",
+            delay=200
+        )
+
+        # 預設角度按鈕（0° / 45° / 90° / 135°）
+        rotation_btn_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        rotation_btn_frame.grid(row=9, column=0, pady=(2, 2), padx=10, sticky="ew")
+
+        self.rotation_buttons = {}
+        self.current_rotation_angle = 0
+        preset_angles = [0, 45, 90, 135]
+        for i, a in enumerate(preset_angles):
+            btn = tk.Button(
+                rotation_btn_frame,
+                text=f"{a}°",
+                font=("Arial", 9),
+                width=4,
+                bg=UIStyle.WHITE,
+                fg=UIStyle.BLACK,
+                relief=tk.RAISED,
+                bd=1,
+                command=lambda angle=a: self.on_rotation_click(angle),
+                state=tk.DISABLED
+            )
+            btn.pack(side=tk.LEFT, padx=1)
+            self.rotation_buttons[a] = btn
+
+        # 自訂角度輸入框 + 套用按鈕
+        custom_rotation_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        custom_rotation_frame.grid(row=10, column=0, pady=(2, 5), padx=10, sticky="ew")
+
+        self.custom_rotation_entry = tk.Entry(
+            custom_rotation_frame,
+            width=6,
+            font=("Arial", 9),
+            state=tk.DISABLED
+        )
+        self.custom_rotation_entry.pack(side=tk.LEFT, padx=(0, 2))
+
+        tk.Label(
+            custom_rotation_frame,
+            text="°",
+            font=("Arial", 9),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.BLACK
+        ).pack(side=tk.LEFT, padx=(0, 4))
+
+        self.custom_rotation_apply_btn = tk.Button(
+            custom_rotation_frame,
+            text="套用",
+            font=("Arial", 9),
+            bg=UIStyle.SUCCESS_GREEN,
+            fg=UIStyle.WHITE,
+            relief=tk.RAISED,
+            bd=1,
+            command=self.on_rotation_custom_apply,
+            state=tk.DISABLED
+        )
+        self.custom_rotation_apply_btn.pack(side=tk.LEFT)
+
         # 合并按钮 - 固定高度30px
         self.merge_button = tk.Button(
             button_container,
@@ -1913,7 +2011,7 @@ class EditorCanvas:
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=self.on_merge_rects
         )
-        self.merge_button.grid(row=8, column=0, pady=8, padx=10, sticky="ew")
+        self.merge_button.grid(row=11, column=0, pady=8, padx=10, sticky="ew")
 
         # 删除按钮 - 固定高度30px
         self.delete_button = tk.Button(
@@ -1928,7 +2026,7 @@ class EditorCanvas:
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=self.on_delete_rect
         )
-        self.delete_button.grid(row=9, column=0, pady=8, padx=10, sticky="ew")
+        self.delete_button.grid(row=12, column=0, pady=8, padx=10, sticky="ew")
         
         # 初始化按钮状态
         self.update_delete_button_state()
@@ -2258,6 +2356,149 @@ class EditorCanvas:
         else:
             # 方向不一致：不高亮
             self._update_temp_dir_highlight(None)
+
+    # ========== 旋轉角度控制 ==========
+
+    def on_rotation_click(self, angle):
+        """預設角度按鈕點擊事件"""
+        self._apply_rotation(angle)
+
+    def on_rotation_custom_apply(self):
+        """自訂角度套用按鈕點擊事件"""
+        if not hasattr(self, 'custom_rotation_entry'):
+            return
+        text = self.custom_rotation_entry.get().strip()
+        if not text:
+            return
+        try:
+            angle = float(text)
+        except ValueError:
+            from tkinter import messagebox
+            messagebox.showwarning("提示", "請輸入有效的角度數值")
+            return
+        self._apply_rotation(angle)
+
+    def _apply_rotation(self, angle):
+        """執行旋轉並同步更新 Treeview。
+
+        Args:
+            angle (float): 逆時針旋轉角度（度）
+        """
+        if not hasattr(self, 'editor_rect') or not self.editor_rect:
+            return
+
+        # 收集選取的 rect_id
+        rect_ids = []
+        if self.selected_rect_ids:
+            rect_ids = list(self.selected_rect_ids)
+        elif self.selected_rect_id is not None:
+            rect_ids = [self.selected_rect_id]
+
+        if not rect_ids:
+            return
+
+        # 呼叫 editor_rect 設定旋轉角度
+        self.editor_rect.set_rotation_angle(rect_ids, angle)
+
+        # 更新旋轉按鈕高亮
+        self._update_rotation_button_highlight(angle)
+
+        # 更新左側 Treeview 溫度同步
+        self.update_rect_list()
+
+        # 恢復選取狀態
+        self._restore_selection_after_list_update(rect_ids)
+
+    def _restore_selection_after_list_update(self, rect_ids):
+        """在 update_rect_list 後恢復 Treeview 選取狀態"""
+        if not hasattr(self, 'tree') or not self.tree or not hasattr(self, 'editor_rect'):
+            return
+        try:
+            for rect_id in rect_ids:
+                for i, rect in enumerate(self.editor_rect.rectangles):
+                    if rect.get('rectId') == rect_id:
+                        item_id = str(i)
+                        if self.tree.exists(item_id):
+                            self.tree.selection_add(item_id)
+                        break
+        except Exception as e:
+            print(f"✗ 恢復選取狀態時出錯: {e}")
+
+    def _update_rotation_button_highlight(self, angle=None):
+        """更新旋轉按鈕的高亮狀態"""
+        if not hasattr(self, 'rotation_buttons'):
+            return
+
+        self.current_rotation_angle = angle
+
+        for a, btn in self.rotation_buttons.items():
+            if btn.cget('state') == tk.DISABLED:
+                continue
+            if angle is not None and abs(a - angle) < 0.01:
+                btn.config(bg=UIStyle.PRIMARY_BLUE, fg=UIStyle.WHITE)
+            else:
+                btn.config(bg=UIStyle.WHITE, fg=UIStyle.BLACK)
+
+    def _update_rotation_state_for_selection(self):
+        """根據目前選取的元器件更新旋轉控制的啟用/停用和角度高亮。"""
+        if not hasattr(self, 'editor_rect') or not self.editor_rect:
+            self.update_rotation_ui_state(False)
+            return
+
+        # 收集選取的 rect_id
+        rect_ids = []
+        if self.selected_rect_ids:
+            rect_ids = list(self.selected_rect_ids)
+        elif self.selected_rect_id is not None:
+            rect_ids = [self.selected_rect_id]
+
+        if not rect_ids:
+            self.update_rotation_ui_state(False)
+            return
+
+        # 檢查是否全部都是圓形（圓形不支援旋轉）
+        all_circle = True
+        angles = set()
+        for rect in self.editor_rect.rectangles:
+            if rect.get("rectId") in rect_ids:
+                if rect.get("shape", "rectangle") != "circle":
+                    all_circle = False
+                    angles.add(rect.get("angle", 0))
+
+        if all_circle:
+            self.update_rotation_ui_state(False)
+            return
+
+        # 如果所有非圓形元器件角度一致，高亮該角度
+        if len(angles) == 1:
+            self.update_rotation_ui_state(True, angles.pop())
+        else:
+            self.update_rotation_ui_state(True, None)
+
+    def update_rotation_ui_state(self, enable, current_angle=None):
+        """啟用/停用旋轉控制
+
+        Args:
+            enable (bool): True=啟用, False=停用
+            current_angle (float|None): 目前選取元器件的旋轉角度
+        """
+        state = tk.NORMAL if enable else tk.DISABLED
+
+        if hasattr(self, 'rotation_buttons'):
+            for btn in self.rotation_buttons.values():
+                btn.config(state=state)
+                if not enable:
+                    btn.config(bg=UIStyle.WHITE, fg=UIStyle.BLACK)
+
+        if hasattr(self, 'custom_rotation_entry'):
+            self.custom_rotation_entry.config(state=state)
+        if hasattr(self, 'custom_rotation_apply_btn'):
+            self.custom_rotation_apply_btn.config(state=state)
+
+        if enable:
+            self._update_rotation_button_highlight(current_angle)
+        else:
+            self._update_rotation_button_highlight(None)
 
     def on_canvas_motion_show_temp(self, event):
         """滑鼠移動時顯示即時溫度"""
@@ -2634,12 +2875,12 @@ class EditorCanvas:
             self.title_label.config(text=f"元器件列表({count})")
     
     def toggle_sort_by_name(self):
-        """切換按名稱排序"""
+        """切換按點位名稱排序"""
         if self.sort_mode == "name_asc":
             # 已經是名稱升序，不需要切換（保持當前狀態）
             return
         else:
-            # 切換到名稱升序
+            # 切換到點位名稱升序
             self.sort_mode = "name_asc"
             self.apply_sort()
             self.update_sort_indicators()
@@ -2680,7 +2921,7 @@ class EditorCanvas:
 
         # 定義排序函數
         if self.sort_mode == "name_asc":
-            # 按名稱升序排序（A~Z）
+            # 按點位名稱升序排序（A~Z）
             def sort_key(rect):
                 return rect.get('name', '').upper()  # 轉大寫以忽略大小寫
             reverse = False
@@ -2727,19 +2968,19 @@ class EditorCanvas:
 
         # 更新 Treeview 表頭
         if self.sort_mode == "name_asc":
-            self.tree.heading('name', text='名稱 ▼')
+            self.tree.heading('name', text='點位名稱 ▼')
             self.tree.heading('desc', text='描述')
             self.tree.heading('temp', text='溫度')
         elif self.sort_mode == "desc_asc":
-            self.tree.heading('name', text='名稱')
+            self.tree.heading('name', text='點位名稱')
             self.tree.heading('desc', text='描述 ▼')
             self.tree.heading('temp', text='溫度')
         elif self.sort_mode == "temp_desc":
-            self.tree.heading('name', text='名稱')
+            self.tree.heading('name', text='點位名稱')
             self.tree.heading('desc', text='描述')
             self.tree.heading('temp', text='溫度 ▼')
         else:
-            self.tree.heading('name', text='名稱')
+            self.tree.heading('name', text='點位名稱')
             self.tree.heading('desc', text='描述')
             self.tree.heading('temp', text='溫度')
 
@@ -2883,13 +3124,13 @@ class EditorCanvas:
         # 根據篩選條件過濾列表
         filtered = []
         for rect in all_rects:
-            # 檢查名稱篩選（支持多值 OR 匹配）
+            # 檢查點位名稱篩選（支持多值 OR 匹配）
             if name_filter:
                 rect_name = rect.get('name', '').upper()
                 name_values = self._parse_multi_values(name_filter)
                 # 檢查是否有任一值匹配（OR 邏輯）
                 if not any(value in rect_name for value in name_values):
-                    continue  # 不符合名稱條件，跳過
+                    continue  # 不符合點位名稱條件，跳過
 
             # 檢查描述篩選（支持多值 OR 匹配）
             if desc_filter:
