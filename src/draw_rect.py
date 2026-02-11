@@ -35,6 +35,26 @@ from rotation_utils import get_rotated_corners, corners_to_flat
 
 OUTLINE_OFFSETS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 
+def calc_name_position_for_rotated(corners, scale, gap=3):
+    """計算旋轉矩形名稱的定位座標（最高頂點正上方置中）。
+
+    找到旋轉後矩形框 Y 值最小的頂點（最高點），
+    將名稱置中於該最高點正上方、離框線約 gap*scale 的位置。
+
+    Args:
+        corners (list[tuple]): 旋轉後的四個頂點座標 [(x,y), ...]
+        scale (float): 縮放比例
+        gap (int): 名稱與框線的間距（預設 3px）
+
+    Returns:
+        tuple: (name_center_x, name_y)
+    """
+    min_y = min(c[1] for c in corners)
+    top_pts = [c for c in corners if abs(c[1] - min_y) < 0.5]
+    name_center_x = sum(c[0] for c in top_pts) / len(top_pts)
+    name_y = min_y - gap * scale
+    return name_center_x, name_y
+
 def _create_outline_texts(canvas, x, y, text, font, anchor="center", color="#000000"):
     """建立 4 個偏移黑色文字，形成描邊效果。回傳 outline_ids 列表。"""
     ids = []
@@ -171,8 +191,16 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
     name_font_scale = (name_font_size / 12.0) * 0.55 * textScale
     temp_font_scale = (temp_font_size / 10.0) * 0.55 * textScale
     
-    # 名稱文字 4 方向描邊
-    name_pos = (left, top - int(4*textScale))
+    # 名稱文字 4 方向描邊（旋轉時定位到最高頂點上方）
+    if angle != 0:
+        corners_n = get_rotated_corners((left + right) / 2, (top + bottom) / 2,
+                                         (right - left) / 2, (bottom - top) / 2, angle)
+        min_y_n = min(c[1] for c in corners_n)
+        top_pts_n = [c for c in corners_n if abs(c[1] - min_y_n) < 0.5]
+        name_pos = (int(sum(c[0] for c in top_pts_n) / len(top_pts_n)),
+                    int(min_y_n) - int(4 * textScale))
+    else:
+        name_pos = (left, top - int(4 * textScale))
     for odx, ody in OUTLINE_OFFSETS:
         cv2.putText(imageA, f'{name}', (name_pos[0] + odx, name_pos[1] + ody), cv2.FONT_HERSHEY_COMPLEX, name_font_scale, shadowColor, 1, cv2.LINE_AA)
     cv2.putText(imageA, f'{name}', name_pos, cv2.FONT_HERSHEY_COMPLEX, name_font_scale, textColor, 1, cv2.LINE_AA)
@@ -332,8 +360,14 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
             canvas.coords(oid, cx + odx, cy - 16 * imageScale + ody)
 
     # 名称文字置中于矩形框上方外侧（anchor="s" 使文字底部對齊指定 Y 座標）
-    name_center_x = (left + right) / 2  # 矩形框水平中心
-    name_y = top - 3 * imageScale
+    angle_name = item.get("angle", 0)
+    if angle_name != 0 and item.get("shape", "rectangle") != "circle":
+        corners_n = get_rotated_corners((left + right) / 2, (top + bottom) / 2,
+                                         (right - left) / 2, (bottom - top) / 2, angle_name)
+        name_center_x, name_y = calc_name_position_for_rotated(corners_n, imageScale)
+    else:
+        name_center_x = (left + right) / 2  # 矩形框水平中心
+        name_y = top - 3 * imageScale
     name_font_tuple = ("Arial", name_font_size_scaled, "bold")
     nameOutlineIds = _create_outline_texts(canvas, name_center_x, name_y, f'{name}', name_font_tuple, anchor="s")
     nameId = canvas.create_text(name_center_x, name_y, text=f'{name}',
@@ -630,10 +664,23 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
         temp_text_x = int(cx + dx - tw / 2)
         temp_text_y = int(cy + dy - th / 2)
 
-        # 对于Layout图，检查文本位置是否在边界内
-        if imageIndex != 0:
+        # 計算名稱文字位置（旋轉時定位到最高頂點上方置中）
+        name_bbox = draw.textbbox((0, 0), name, font=name_font)
+        name_tw = name_bbox[2] - name_bbox[0]
+        if angle != 0:
+            corners_n = get_rotated_corners((left + right) / 2, (top + bottom) / 2,
+                                             (right - left) / 2, (bottom - top) / 2, angle)
+            min_y_n = min(c[1] for c in corners_n)
+            top_pts_n = [c for c in corners_n if abs(c[1] - min_y_n) < 0.5]
+            name_cx = sum(c[0] for c in top_pts_n) / len(top_pts_n)
+            name_text_x = int(name_cx - name_tw / 2)
+            name_text_y = int(min_y_n) - int(name_font_scale) - int(4 * textScale)
+        else:
             name_text_x = left
             name_text_y = top - int(name_font_scale) - int(4 * textScale)
+
+        # 对于Layout图，检查文本位置是否在边界内
+        if imageIndex != 0:
 
             # 检查温度文本是否在边界内
             if 0 <= temp_text_x < img_width and 0 <= temp_text_y < img_height:
@@ -658,11 +705,9 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
                 draw.text((temp_text_x + odx, temp_text_y + ody), temp_text_str, font=temp_font, fill=shadowColor)
             draw.text((temp_text_x, temp_text_y), temp_text_str, font=temp_font, fill=tempColor)
             # 名稱文字 4 方向描邊
-            name_pos_x = left
-            name_pos_y = top - int(name_font_scale) - int(4 * textScale)
             for odx, ody in OUTLINE_OFFSETS:
-                draw.text((name_pos_x + odx, name_pos_y + ody), name, font=name_font, fill=shadowColor)
-            draw.text((name_pos_x, name_pos_y), name, font=name_font, fill=textColor)
+                draw.text((name_text_x + odx, name_text_y + ody), name, font=name_font, fill=shadowColor)
+            draw.text((name_text_x, name_text_y), name, font=name_font, fill=textColor)
 
         # pil_image.show()  # 直接显示 PIL 图像
 

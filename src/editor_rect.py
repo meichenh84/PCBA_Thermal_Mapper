@@ -38,7 +38,7 @@ import numpy as np
 
 from dialog_component_setting import ComponentSettingDialog
 from load_tempA import TempLoader
-from draw_rect import draw_canvas_item, calc_temp_text_offset, OUTLINE_OFFSETS
+from draw_rect import draw_canvas_item, calc_temp_text_offset, calc_name_position_for_rotated, OUTLINE_OFFSETS
 from rotation_utils import (
     get_rotated_corners, get_rotated_anchor_positions,
     corners_to_flat, point_in_polygon, rotate_point
@@ -347,10 +347,16 @@ class RectEditor:
                 else:
                     self.canvas.coords(rectId, left, top, right, bottom)
 
-                # 更新名称标签位置和字體大小
+                # 更新名称标签位置和字體大小（旋轉時定位到最高頂點上方）
                 if nameId:
-                    name_center_x = (left + right) / 2
-                    name_y = top - 3 * self.display_scale
+                    angle = rect.get("angle", 0)
+                    if angle != 0 and rect.get("shape", "rectangle") != "circle":
+                        corners_n = get_rotated_corners((left + right) / 2, (top + bottom) / 2,
+                                                         (right - left) / 2, (bottom - top) / 2, angle)
+                        name_center_x, name_y = calc_name_position_for_rotated(corners_n, self.display_scale)
+                    else:
+                        name_center_x = (left + right) / 2
+                        name_y = top - 3 * self.display_scale
                     self.canvas.coords(nameId, name_center_x, name_y)
                     self.canvas.itemconfig(nameId, font=("Arial", name_font_size_scaled, "bold"))
                     # 同步描邊
@@ -1661,9 +1667,15 @@ class RectEditor:
                 target_rect = r
                 break
 
-        # 更新名称标签位置（置中于矩形框上方）
-        name_center_x = (x1 + x2) / 2
-        name_y = y1 - 3 * font_scale
+        # 更新名称标签位置（旋轉時定位到最高頂點上方）
+        temp_angle = target_rect.get("angle", 0) if target_rect else 0
+        if temp_angle != 0 and (not target_rect or target_rect.get("shape", "rectangle") != "circle"):
+            corners_n = get_rotated_corners((x1 + x2) / 2, (y1 + y2) / 2,
+                                             (x2 - x1) / 2, (y2 - y1) / 2, temp_angle)
+            name_center_x, name_y = calc_name_position_for_rotated(corners_n, font_scale)
+        else:
+            name_center_x = (x1 + x2) / 2
+            name_y = y1 - 3 * font_scale
         self.canvas.coords(nameId, name_center_x, name_y)
         if target_rect:
             self._move_outline(target_rect.get("nameOutlineIds"), name_center_x, name_y)
