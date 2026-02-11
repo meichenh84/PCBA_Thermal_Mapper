@@ -1236,33 +1236,57 @@ class RectEditor:
             self.drag_data["resize"] = True
             self.drag_data["isNew"] = clicked_isNew
         elif clicked_rect:
-            self.drag_data["rectId"] = clicked_rect
-            self.drag_data["nameId"] = clicked_name
-            self.drag_data["triangleId"] = clicked_triangleId
-            self.drag_data["tempTextId"] = clicked_tempTextId
-            self.drag_data["isNew"] = clicked_isNew
-            self.drag_data["x"] = event.x
-            self.drag_data["y"] = event.y
-            self.drag_data["resize"] = False
-            self.drag_data["anchor"] = None
-            self.drag_data["has_moved"] = False  # 初始化移动标记
-            self.canvas.tag_raise(clicked_rect)
-            print(f"✓ on_click: 点击了矩形 {clicked_rect}，准备创建锚点")
-            self.create_anchors(clicked_rect)  # Show anchors for the selected rectangle
-            # 通知外部选中变化
-            if self.on_rect_change_callback:
-                print(f"✓ on_click: 通知外部选中变化，rect_id={clicked_rect}")
-                self.on_rect_change_callback(clicked_rect, "select")
+            # Ctrl+Click 多選模式：逐個加入/移除選取
+            ctrl_held = bool(event.state & 0x4)
+            if ctrl_held and self.multi_select_enabled:
+                # Ctrl+Click：將點擊的元器件加入或移除多選集合
+                if clicked_rect in self.selected_rect_ids:
+                    # 已在選取中 → 移除
+                    self.selected_rect_ids.discard(clicked_rect)
+                else:
+                    # 不在選取中 → 加入（也把目前單選的加入）
+                    if self.drag_data["rectId"] and self.drag_data["rectId"] not in self.selected_rect_ids:
+                        self.selected_rect_ids.add(self.drag_data["rectId"])
+                    self.selected_rect_ids.add(clicked_rect)
+
+                # 清除錨點（多選不顯示錨點）
+                self.delete_anchors()
+                self.drag_data["rectId"] = None
+                self.drag_data["resize"] = False
+                self.drag_data["anchor"] = None
+
+                # 通知外部多選變化
+                if self.on_rect_change_callback:
+                    if len(self.selected_rect_ids) > 0:
+                        self.on_rect_change_callback(list(self.selected_rect_ids), "multi_select")
+                    else:
+                        self.on_rect_change_callback(None, "clear_select")
             else:
-                print(f"⚠️ on_click: on_rect_change_callback为None，无法通知外部选中变化")
-            
+                # 一般點擊：單選
+                self.drag_data["rectId"] = clicked_rect
+                self.drag_data["nameId"] = clicked_name
+                self.drag_data["triangleId"] = clicked_triangleId
+                self.drag_data["tempTextId"] = clicked_tempTextId
+                self.drag_data["isNew"] = clicked_isNew
+                self.drag_data["x"] = event.x
+                self.drag_data["y"] = event.y
+                self.drag_data["resize"] = False
+                self.drag_data["anchor"] = None
+                self.drag_data["has_moved"] = False  # 初始化移动标记
+                self.canvas.tag_raise(clicked_rect)
+                print(f"✓ on_click: 点击了矩形 {clicked_rect}，准备创建锚点")
+                self.create_anchors(clicked_rect)  # Show anchors for the selected rectangle
+                # 通知外部选中变化
+                if self.on_rect_change_callback:
+                    print(f"✓ on_click: 通知外部选中变化，rect_id={clicked_rect}")
+                    self.on_rect_change_callback(clicked_rect, "select")
+                else:
+                    print(f"⚠️ on_click: on_rect_change_callback为None，无法通知外部选中变化")
+
             # 确保焦点回到对话框，以便接收Delete键事件
             if hasattr(self.parent, 'dialog'):
-                print(f"🔍🔍🔍 Canvas点击后设置焦点到对话框")
                 self.parent.dialog.focus_set()
-                print(f"🔍🔍🔍 焦点设置完成，当前焦点: {self.parent.dialog.focus_get()}")
-            else:
-                print(f"⚠️ Canvas点击后无法找到parent.dialog")
+
         else:
             # 点击空白区域：根据多选功能是否启用，决定是启动框选还是清除选择
             if self.multi_select_enabled:
