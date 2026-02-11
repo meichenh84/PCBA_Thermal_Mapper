@@ -242,6 +242,10 @@ class EditorCanvas:
         self.editor_rect.set_background_image(self.bg_image)
         self.editor_rect.on_zoom_change_callback = self.on_zoom_change
 
+        # 快照系統（復原功能）
+        self._initial_snapshot = None  # 初始快照（回到起點用）
+        self._undo_stack = []          # 歷史堆疊（最多 3 筆，回到上一步用）
+
         # 初始化Layout查询器（用于智能识别元器件名称）
         self.layout_query = None
         self.initialize_layout_query()
@@ -276,6 +280,9 @@ class EditorCanvas:
         self.apply_sort()
         # 最后更新列表（apply_sort 內部已經調用了 update_rect_list，這裡可以移除）
         # self.update_rect_list()
+
+        # 儲存初始快照（所有矩形繪製完成後）
+        self._initial_snapshot = self._create_snapshot()
 
     def create_rect_list_panel(self, parent):
         """创建左侧矩形框列表面板"""
@@ -1397,6 +1404,10 @@ class EditorCanvas:
 
     def on_rect_change(self, rect_id=None, change_type=None):
         """矩形框变化时的回调函数"""
+        if change_type == "before_modify":
+            # 移動/縮放前：儲存快照供復原
+            self._push_undo()
+            return
         if change_type == "temp_update" and rect_id:
             # 只更新特定矩形框的温度显示
             self.update_rect_temp_display(rect_id)
@@ -1992,7 +2003,39 @@ class EditorCanvas:
         )
         self.custom_rotation_apply_btn.pack(side=tk.LEFT)
 
-        # 合并按钮 - 固定高度30px
+        # ========== 復原按鈕區域 ==========
+        # 回到起點按鈕
+        self._reset_button = tk.Button(
+            button_container,
+            text="回到起點",
+            font=UIStyle.BUTTON_FONT,
+            width=10,
+            height=1,
+            bg=UIStyle.GRAY,
+            fg=UIStyle.BLACK,
+            relief=UIStyle.BUTTON_RELIEF,
+            bd=UIStyle.BUTTON_BORDER_WIDTH,
+            command=self.on_reset
+        )
+        self._reset_button.grid(row=11, column=0, pady=(8, 3), padx=10, sticky="ew")
+
+        # 回到上一步按鈕
+        self._undo_button = tk.Button(
+            button_container,
+            text="回到上一步 (0/3)",
+            font=UIStyle.BUTTON_FONT,
+            width=10,
+            height=1,
+            bg=UIStyle.GRAY,
+            fg=UIStyle.BLACK,
+            relief=UIStyle.BUTTON_RELIEF,
+            bd=UIStyle.BUTTON_BORDER_WIDTH,
+            command=self.on_undo,
+            state=tk.DISABLED
+        )
+        self._undo_button.grid(row=12, column=0, pady=(0, 3), padx=10, sticky="ew")
+
+        # 合并按钮
         self.merge_button = tk.Button(
             button_container,
             text="合并 ➕",
@@ -2005,22 +2048,22 @@ class EditorCanvas:
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=self.on_merge_rects
         )
-        self.merge_button.grid(row=11, column=0, pady=8, padx=10, sticky="ew")
+        self.merge_button.grid(row=13, column=0, pady=8, padx=10, sticky="ew")
 
-        # 删除按钮 - 固定高度30px
+        # 删除按钮
         self.delete_button = tk.Button(
             button_container,
             text="删除 ❌",
             font=UIStyle.BUTTON_FONT,
             width=10,
-            height=2,  # 调整高度以适应30px
+            height=2,
             bg=UIStyle.DANGER_RED,
             fg=UIStyle.WHITE,
             relief=UIStyle.BUTTON_RELIEF,
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=self.on_delete_rect
         )
-        self.delete_button.grid(row=12, column=0, pady=8, padx=10, sticky="ew")
+        self.delete_button.grid(row=14, column=0, pady=8, padx=10, sticky="ew")
         
         # 初始化按钮状态
         self.update_delete_button_state()
@@ -2122,6 +2165,106 @@ class EditorCanvas:
         # 需要用 _redraw_single_rect 重新建立所有標記
         for rect in self.editor_rect.rectangles:
             self.editor_rect._redraw_single_rect(rect)
+
+    # ========== 快照 / 復原系統 ==========
+
+    def _create_snapshot(self):
+        """建立目前所有矩形框的純資料快照（不含 Canvas ID）。"""
+        import copy
+        canvas_id_keys = {
+            "rectId", "nameId", "triangleId", "tempTextId",
+            "nameOutlineIds", "tempOutlineIds", "triangleOutlineIds",
+            "_font_scale",
+        }
+        return {
+            "rectangles": copy.deepcopy([
+                {k: v for k, v in r.items() if k not in canvas_id_keys}
+                for r in self.editor_rect.rectangles
+            ]),
+            "add_new_count": self.editor_rect.add_new_count,
+            "delete_origin_count": self.editor_rect.delete_origin_count,
+            "modify_origin_set": copy.copy(self.editor_rect.modify_origin_set),
+        }
+
+    def _push_undo(self):
+        """將目前狀態推入復原歷史堆疊（操作前呼叫）。"""
+        snapshot = self._create_snapshot()
+        self._undo_stack.append(snapshot)
+        if len(self._undo_stack) > 3:
+            self._undo_stack.pop(0)
+        self._update_undo_button_state()
+
+    def on_undo(self):
+        """回到上一步：從歷史堆疊彈出最後一筆快照並恢復。"""
+        if not self._undo_stack:
+            return
+        snapshot = self._undo_stack.pop()
+
+        # 恢復矩形資料
+        self.editor_rect.restore_from_snapshot(
+            snapshot["rectangles"],
+            {
+                "add_new_count": snapshot["add_new_count"],
+                "delete_origin_count": snapshot["delete_origin_count"],
+                "modify_origin_set": snapshot["modify_origin_set"],
+            },
+        )
+
+        # 清空選取狀態
+        self.selected_rect_id = None
+        self.selected_rect_ids.clear()
+        self.update_delete_button_state()
+
+        # 刷新 Treeview
+        self.update_rect_list()
+        self._update_undo_button_state()
+        print(f"↩ 回到上一步，剩餘 {len(self._undo_stack)} 步")
+
+    def on_reset(self):
+        """回到起點：恢復為編輯器開啟時的初始狀態。"""
+        from tkinter import messagebox
+        if self._initial_snapshot is None:
+            return
+        result = messagebox.askyesno(
+            "確認回到起點",
+            "將所有元器件恢復為編輯器開啟時的初始狀態。\n\n確定要回到起點嗎？",
+            parent=self.dialog,
+        )
+        if not result:
+            return
+
+        # 恢復初始快照
+        import copy
+        snapshot = copy.deepcopy(self._initial_snapshot)
+        self.editor_rect.restore_from_snapshot(
+            snapshot["rectangles"],
+            {
+                "add_new_count": snapshot["add_new_count"],
+                "delete_origin_count": snapshot["delete_origin_count"],
+                "modify_origin_set": snapshot["modify_origin_set"],
+            },
+        )
+
+        # 清空復原堆疊與選取
+        self._undo_stack.clear()
+        self.selected_rect_id = None
+        self.selected_rect_ids.clear()
+        self.update_delete_button_state()
+
+        # 刷新 Treeview
+        self.update_rect_list()
+        self._update_undo_button_state()
+        print("↩ 已回到起點")
+
+    def _update_undo_button_state(self):
+        """更新復原按鈕的啟用狀態與計數顯示。"""
+        if not hasattr(self, '_undo_button'):
+            return
+        n = len(self._undo_stack)
+        self._undo_button.config(
+            text=f"回到上一步 ({n}/3)",
+            state=tk.NORMAL if n > 0 else tk.DISABLED,
+        )
 
     def on_zoom_change(self):
         """縮放變化時的回調，重新繪製 Canvas"""
@@ -2229,6 +2372,7 @@ class EditorCanvas:
                     break
 
         # 執行批次轉換
+        self._push_undo()
         converted_count = self.editor_rect.convert_shapes_batch(
             selected_ids, target_shape
         )
@@ -2273,6 +2417,7 @@ class EditorCanvas:
             return
 
         # 呼叫 editor_rect 設定方向
+        self._push_undo()
         self.editor_rect.set_temp_text_dir(rect_ids, direction)
 
         # 更新九宮格按鈕高亮
@@ -2386,6 +2531,7 @@ class EditorCanvas:
                     break
 
         # 呼叫 editor_rect 設定旋轉角度（內部會重繪，rectId 會改變）
+        self._push_undo()
         self.editor_rect.set_rotation_angle(rect_ids, angle)
 
         # 更新旋轉按鈕高亮
@@ -2696,6 +2842,7 @@ class EditorCanvas:
             return
         
         # 调用editor_rect的合并方法
+        self._push_undo()
         merged_rect_id = self.editor_rect.merge_rectangles_by_ids(list(self.selected_rect_ids))
         
         if merged_rect_id:
@@ -2757,7 +2904,8 @@ class EditorCanvas:
             # 处理多选删除
             if len(self.selected_rect_ids) > 0:
                 print(f"🔍🔍🔍 开始批量删除 {len(self.selected_rect_ids)} 个矩形框")
-                
+
+                self._push_undo()
                 # 批量删除（內部會觸發 multi_delete 回調，自動更新列表）
                 self.editor_rect.delete_rectangles_by_ids(list(self.selected_rect_ids))
 
@@ -2782,6 +2930,7 @@ class EditorCanvas:
                 return
             
             # 删除选中的矩形框（內部會觸發 delete 回調，自動更新列表）
+            self._push_undo()
             self.editor_rect.delete_rectangle_by_id(self.selected_rect_id)
 
             # 确保焦点回到对话框
@@ -2846,6 +2995,7 @@ class EditorCanvas:
             return
         
         # 更新editor_rect中的矩形框数据
+        self._push_undo()
         for rect in self.editor_rect.rectangles:
             if rect.get('rectId') == rect_id:
                 rect.update(new_rect)
@@ -3180,6 +3330,7 @@ class EditorCanvas:
             return
 
         # 批量刪除
+        self._push_undo()
         self.editor_rect.delete_rectangles_by_ids(to_delete_ids)
 
         # 從 Treeview 移除

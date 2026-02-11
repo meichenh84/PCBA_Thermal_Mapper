@@ -1549,6 +1549,9 @@ class RectEditor:
         # 只有在实际移动或调整大小时才更新坐标
         rectId = self.drag_data["rectId"]
         if rectId and (self.drag_data.get("has_moved", False) or self.drag_data.get("resize", False)):
+            # 通知 editor_canvas 在更新座標前儲存快照（用於復原）
+            if self.on_rect_change_callback:
+                self.on_rect_change_callback(rectId, "before_modify")
             print(f"✓ 矩形框 {rectId} 发生了移动或调整，更新坐标和温度数据")
             self.update_rectangle_coordinate(rectId)
         else:
@@ -1735,7 +1738,50 @@ class RectEditor:
         self.delete_anchors()
         self.reset_drag_data()
 
-    # 还原成1280x960的坐标 
+    def clear_all_canvas_items(self):
+        """清除所有矩形框的 Canvas 物件，並重置相關狀態。
+
+        用於快照恢復前的清理：刪除每個 rect 的 rectId、nameId、
+        triangleId、tempTextId 及其描邊，然後清空 rectangles 列表、
+        錨點和拖曳資料。
+        """
+        for rect in self.rectangles:
+            # 刪除描邊
+            self._delete_outline(rect.get("tempOutlineIds"))
+            self._delete_outline(rect.get("nameOutlineIds"))
+            self._delete_outline(rect.get("triangleOutlineIds"))
+            # 刪除主要 Canvas 物件
+            for key in ("rectId", "nameId", "triangleId", "tempTextId"):
+                cid = rect.get(key)
+                if cid:
+                    self.canvas.delete(cid)
+        self.rectangles.clear()
+        self.delete_anchors()
+        self.reset_drag_data()
+        self.selected_rect_ids.clear()
+
+    def restore_from_snapshot(self, snapshot_rects, counters):
+        """從快照資料恢復所有矩形框。
+
+        先清除現有 Canvas 物件，再根據快照資料重新建立。
+
+        Args:
+            snapshot_rects (list): 快照中的矩形資料列表（不含 Canvas ID）
+            counters (dict): 計數器快照，包含 add_new_count、
+                delete_origin_count、modify_origin_set
+        """
+        self.clear_all_canvas_items()
+
+        # 逐筆重建 Canvas 物件
+        for rect_data in snapshot_rects:
+            self.create_rectangle(rect_data)
+
+        # 恢復計數器
+        self.add_new_count = counters.get("add_new_count", 0)
+        self.delete_origin_count = counters.get("delete_origin_count", 0)
+        self.modify_origin_set = counters.get("modify_origin_set", set())
+
+    # 还原成1280x960的坐标
     def get_mark_rect(self):
          # 直接返回rectangles，不需要缩放转换
          return self.rectangles.copy()
