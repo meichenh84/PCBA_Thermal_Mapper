@@ -78,6 +78,43 @@ class TempLoader:
         print("Initializing tempA...")
         self._load_tempA()
 
+    def _detect_csv_encoding_and_sep(self):
+        """
+        自動偵測 CSV 檔案的編碼與分隔符號。
+
+        偵測邏輯：
+            1. 讀取檔案前 4 bytes 檢查 BOM（Byte Order Mark）
+               - FF FE → UTF-16 LE
+               - FE FF → UTF-16 BE
+               - EF BB BF → UTF-8 with BOM
+               - 其他 → 預設 UTF-8
+            2. 用偵測到的編碼讀取第一行，判斷分隔符號
+               - 包含 Tab (\\t) → sep='\\t'
+               - 否則 → sep=','
+
+        Returns:
+            tuple: (encoding, sep) 例如 ('utf-16', '\\t') 或 ('utf-8', ',')
+        """
+        with open(self._file_path, 'rb') as f:
+            raw = f.read(4)
+
+        # 偵測 BOM 決定編碼
+        if raw[:2] == b'\xff\xfe':
+            encoding = 'utf-16'
+        elif raw[:2] == b'\xfe\xff':
+            encoding = 'utf-16'
+        elif raw[:3] == b'\xef\xbb\xbf':
+            encoding = 'utf-8-sig'
+        else:
+            encoding = 'utf-8'
+
+        # 讀取第一行偵測分隔符號
+        with open(self._file_path, 'r', encoding=encoding, errors='replace') as f:
+            first_line = f.readline()
+
+        sep = '\t' if '\t' in first_line else ','
+        return encoding, sep
+
     def _load_tempA(self):
         """
         根據檔案副檔名選擇對應的方式載入溫度數據。
@@ -85,6 +122,7 @@ class TempLoader:
         支援的檔案格式：
             - .xlsx：使用 pandas.read_excel() 讀取 Excel 檔案
             - .csv：使用 pandas.read_csv() 讀取 CSV 檔案
+                    自動偵測 UTF-8 / UTF-16 編碼，以及 Tab / 逗號分隔符號
 
         載入後的數據會轉換為 NumPy 二維陣列儲存於 self._tempA。
         陣列的 shape 為 (高度, 寬度)，對應熱力圖的像素矩陣。
@@ -93,13 +131,14 @@ class TempLoader:
             ValueError: 當檔案副檔名不是 .xlsx 或 .csv 時拋出。
         """
         file_extension = os.path.splitext(self._file_path)[1].lower()  # 取得檔案副檔名並轉為小寫
-        
+
         if file_extension == '.xlsx':
             self._tempA = pd.read_excel(self._file_path).values  # 從 Excel 載入並轉為 NumPy 陣列
             print("-->>> tempA loaded from Excel, size:", self._tempA.shape)
         elif file_extension == '.csv':
-            self._tempA = pd.read_csv(self._file_path).values  # 從 CSV 載入並轉為 NumPy 陣列
-            print("-->>> tempA loaded from CSV, size:", self._tempA.shape)
+            encoding, sep = self._detect_csv_encoding_and_sep()
+            self._tempA = pd.read_csv(self._file_path, encoding=encoding, sep=sep).values
+            print(f"-->>> tempA loaded from CSV (encoding={encoding}, sep={repr(sep)}), size:", self._tempA.shape)
         else:
             raise ValueError("Unsupported file type. Please use .xlsx or .csv files.")
 

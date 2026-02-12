@@ -80,7 +80,9 @@ class TemperatureConfigManager:
             "current_pcb_file": None,          # 目前選擇的 PCB 圖檔案路徑
             "current_temp_file": None,         # 目前選擇的溫度數據檔案路徑（tempA）
             "current_layout_file": None,       # 目前選擇的 Layout 圖檔案路徑
-            "current_layout_data_file": None   # 目前選擇的 Layout 數據檔案路徑（元器件清單 Excel）
+            "current_layout_data_file": None,  # (已棄用) 舊的 Layout 數據檔案路徑
+            "current_layout_xy_file": None,    # 目前選擇的元器件座標檔案路徑（RefDes, Orient., X, Y）
+            "current_layout_lwt_file": None    # 目前選擇的元器件尺寸檔案路徑（RefDes, L, W, T）
         }
         
         if folder_path:
@@ -315,10 +317,11 @@ class TemperatureConfigManager:
         Args:
             file_type (str): 檔案類型鍵名，必須是以下之一：
                 "current_heat_file", "current_pcb_file", "current_temp_file",
-                "current_layout_file", "current_layout_data_file"
+                "current_layout_file", "current_layout_xy_file", "current_layout_lwt_file",
+                "current_layout_xy_file", "current_layout_lwt_file"
             file_path (str): 檔案的絕對路徑。
         """
-        if file_type in ["current_heat_file", "current_pcb_file", "current_temp_file", "current_layout_file", "current_layout_data_file"]:
+        if file_type in ["current_heat_file", "current_pcb_file", "current_temp_file", "current_layout_file", "current_layout_data_file", "current_layout_xy_file", "current_layout_lwt_file"]:
             self.config_data[file_type] = file_path
             self.save_config()
             print(f"设置文件路径: {file_type} = {file_path}")
@@ -349,14 +352,16 @@ class TemperatureConfigManager:
             "current_pcb_file": self.config_data.get("current_pcb_file"),         # PCB 圖路徑
             "current_temp_file": self.config_data.get("current_temp_file"),       # 溫度數據路徑
             "current_layout_file": self.config_data.get("current_layout_file"),   # Layout 圖路徑
-            "current_layout_data_file": self.config_data.get("current_layout_data_file")  # Layout 數據路徑
+            "current_layout_data_file": self.config_data.get("current_layout_data_file"),  # (已棄用)
+            "current_layout_xy_file": self.config_data.get("current_layout_xy_file"),    # 元器件座標路徑
+            "current_layout_lwt_file": self.config_data.get("current_layout_lwt_file")   # 元器件尺寸路徑
         }
     
     def clear_file_paths(self):
         """
         清空所有檔案路徑配置並儲存。用於重置檔案選擇狀態。
         """
-        for file_type in ["current_heat_file", "current_pcb_file", "current_temp_file", "current_layout_file", "current_layout_data_file"]:
+        for file_type in ["current_heat_file", "current_pcb_file", "current_temp_file", "current_layout_file", "current_layout_data_file", "current_layout_xy_file", "current_layout_lwt_file"]:
             self.config_data[file_type] = None
         self.save_config()
         print("已清空所有文件路径")

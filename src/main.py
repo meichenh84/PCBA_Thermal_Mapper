@@ -74,6 +74,7 @@ import csv                                    # CSV 檔案操作（匯出日誌�
 import copy                                   # 深層複製工具（複製編輯日誌範本）
 from layout_temperature_query_optimized import LayoutTemperatureQueryOptimized  # Layout 溫度查詢最佳化模組
 from temperature_config_manager import TemperatureConfigManager  # 溫度配置管理器（每個資料夾獨立配置）
+from folder_scanner import scan_folder, validate_layout_data     # 資料夾檔案自動分類與驗證
 
 
 # ===== 編輯日誌預設範本 =====
@@ -136,7 +137,7 @@ class ResizableImagesApp:
         point_transformer (PointTransformer): 座標變換器（A圖↔B圖）
         folder_tree (ttk.Treeview): 左側資料夾檔案樹狀列表
         current_folder_path (str): 當前資料夾路徑
-        current_files (dict): 當前使用的各類型檔案 {heat, layout, heatTemp, layoutData}
+        current_files (dict): 當前使用的各類型檔案 {heat, layout, heatTemp, layoutXY, layoutLWT}
     """
     def __init__(self, root):
         """
@@ -202,13 +203,16 @@ class ResizableImagesApp:
         
         # 資料夾選擇相關變數
         self.current_folder_path = None  # 當前工作資料夾的完整路徑
-        self.folder_files = {"heat": [], "layout": [], "heatTemp": [], "layoutData": []}  # 資料夾中各分類的檔案列表
+        self.folder_files = {"heat": [], "layout": [], "heatTemp": [], "layoutXY": [], "layoutLWT": []}  # 資料夾中各分類的檔案列表
         self.current_temp_file_path = None  # 當前使用的溫度數據檔案完整路徑
-        self.current_files = {"heat": None, "layout": None, "heatTemp": None, "layoutData": None}  # 各分類中當前選用的檔案名稱
+        self.current_files = {"heat": None, "layout": None, "heatTemp": None, "layoutXY": None, "layoutLWT": None}  # 各分類中當前選用的檔案名稱
         
         # Layout 數據相關變數
         self.layout_data = None  # 儲存解析後的 Layout 元器件數據（list of dict，含 RefDes、座標、尺寸等）
-        
+        self._xlsx_columns_cache = {}  # xlsx 欄位快取，供 _validate_layout_data() 使用
+        self._tree_tooltip = None  # Treeview tooltip 視窗
+        self._tree_tooltip_item = None  # 當前 tooltip 對應的 item
+
         # 對話框實例（單例模式，避免重複開啟）
         self.setting_dialog = None  # 設定對話框實例 (SettingDialog)
         self.editor_canvas = None   # 溫度標記編輯畫布實例 (EditorCanvas)
@@ -289,8 +293,9 @@ class ResizableImagesApp:
                 self.temp_config.set_file_path("current_pcb_file", self.current_files.get("heat"))
                 self.temp_config.set_file_path("current_layout_file", self.current_files.get("layout"))
                 self.temp_config.set_file_path("current_temp_file", self.current_files.get("heatTemp"))
-                self.temp_config.set_file_path("current_layout_data_file", self.current_files.get("layoutData"))
-                print(f"已保存当前文件选择到temperature_config.json: 热力图={self.current_files.get('heat')}, Layout图={self.current_files.get('layout')}, 温度数据={self.current_files.get('heatTemp')}, layout数据={self.current_files.get('layoutData')}")
+                self.temp_config.set_file_path("current_layout_xy_file", self.current_files.get("layoutXY"))
+                self.temp_config.set_file_path("current_layout_lwt_file", self.current_files.get("layoutLWT"))
+                print(f"已保存当前文件选择到temperature_config.json: 热力图={self.current_files.get('heat')}, Layout图={self.current_files.get('layout')}, 温度数据={self.current_files.get('heatTemp')}, 元器件座標={self.current_files.get('layoutXY')}, 元器件尺寸={self.current_files.get('layoutLWT')}")
             else:
                 print("temp_config未初始化，无法保存文件路径")
     
@@ -311,7 +316,8 @@ class ResizableImagesApp:
             self.temp_config.set_file_path("current_pcb_file", self.current_files.get("heat"))
             self.temp_config.set_file_path("current_temp_file", self.current_files.get("heatTemp"))
             self.temp_config.set_file_path("current_layout_file", self.current_files.get("layout"))
-            self.temp_config.set_file_path("current_layout_data_file", self.current_files.get("layoutData"))
+            self.temp_config.set_file_path("current_layout_xy_file", self.current_files.get("layoutXY"))
+            self.temp_config.set_file_path("current_layout_lwt_file", self.current_files.get("layoutLWT"))
             print(f"update_temp_config_files: 文件路径已更新到temperature_config.json")
         else:
             print(f"update_temp_config_files: 跳过更新，条件不满足")
@@ -327,22 +333,26 @@ class ResizableImagesApp:
                 saved_heat = self.temp_config.get_file_path("current_heat_file")
                 saved_layout = self.temp_config.get_file_path("current_layout_file")
                 saved_temp = self.temp_config.get_file_path("current_temp_file")
-                saved_layout_data = self.temp_config.get_file_path("current_layout_data_file")
+                saved_layout_xy = self.temp_config.get_file_path("current_layout_xy_file")
+                saved_layout_lwt = self.temp_config.get_file_path("current_layout_lwt_file")
             else:
                 # 如果temp_config未初始化，使用默认值
-                saved_heat = saved_layout = saved_temp = saved_layout_data = None
-            
+                saved_heat = saved_layout = saved_temp = None
+                saved_layout_xy = saved_layout_lwt = None
+
             print(f"从配置文件加载的文件路径:")
             print(f"  current_heat_file: {saved_heat}")
             print(f"  current_layout_file: {saved_layout}")
             print(f"  current_temp_file: {saved_temp}")
-            print(f"  current_layout_data_file: {saved_layout_data}")
-            
+            print(f"  current_layout_xy_file: {saved_layout_xy}")
+            print(f"  current_layout_lwt_file: {saved_layout_lwt}")
+
             # 验证文件是否仍然存在，如果不存在则执行默认操作
             self._load_or_default_file("heat", saved_heat, "热力图")
             self._load_or_default_file("layout", saved_layout, "Layout图")
             self._load_or_default_file("heatTemp", saved_temp, "温度数据")
-            self._load_or_default_file("layoutData", saved_layout_data, "Layout数据")
+            self._load_or_default_file("layoutXY", saved_layout_xy, "元器件座標")
+            self._load_or_default_file("layoutLWT", saved_layout_lwt, "元器件尺寸")
             
             print(f"文件选择完成: {self.current_files}")
     
@@ -350,7 +360,7 @@ class ResizableImagesApp:
         """載入指定檔案類型，若配置的檔案不存在則使用預設的第一個可用檔案。
 
         參數：
-            file_type (str): 檔案分類鍵值（"heat", "layout", "heatTemp", "layoutData"）
+            file_type (str): 檔案分類鍵值（"heat", "layout", "heatTemp", "layoutXY", "layoutLWT"）
             saved_file (str): 從配置中讀取的檔案名稱
             display_name (str): 用於日誌輸出的中文顯示名稱
         """
@@ -372,8 +382,10 @@ class ResizableImagesApp:
                     config_key = "current_layout_file"
                 elif file_type == "heatTemp":
                     config_key = "current_temp_file"
-                elif file_type == "layoutData":
-                    config_key = "current_layout_data_file"
+                elif file_type == "layoutXY":
+                    config_key = "current_layout_xy_file"
+                elif file_type == "layoutLWT":
+                    config_key = "current_layout_lwt_file"
                 else:
                     config_key = f"current_{file_type}_file"
                 
@@ -419,8 +431,8 @@ class ResizableImagesApp:
         self.current_temp_file_path = None
         
         # 清空当前文件信息
-        self.current_files = {"heat": None, "layout": None, "heatTemp": None, "layoutData": None}
-        
+        self.current_files = {"heat": None, "layout": None, "heatTemp": None, "layoutXY": None, "layoutLWT": None}
+
         # 清空Layout数据
         self.layout_data = None
         
@@ -463,141 +475,35 @@ class ResizableImagesApp:
     def scan_folder_files(self):
         """掃描當前資料夾中的所有檔案，並根據檔案內容自動分類。
 
-        分類邏輯：
-            - 圖片檔 (.jpg/.jpeg/.png)：判斷為熱力圖或 Layout 圖
-            - 數據檔 (.csv/.xlsx)：判斷為溫度數據或 Layout 數據
-        分類完成後自動載入圖片。
+        委託 folder_scanner.scan_folder() 執行實際的分類邏輯，
+        再將結果寫入 self.folder_files 和 self.current_files。
+        分類完成後驗證 Layout 數據完整性並自動載入圖片。
         """
         if not self.current_folder_path:
             return
-            
-        self.folder_files = {"heat": [], "layout": [], "heatTemp": [], "layoutData": []}
-        
+
         try:
-            # 收集文件信息（文件名和修改时间）
-            file_info = {"heat": [], "layout": [], "heatTemp": [], "layoutData": []}
-            
-            for filename in os.listdir(self.current_folder_path):
-                file_path = os.path.join(self.current_folder_path, filename)
-                if os.path.isfile(file_path):
-                    # 获取文件修改时间
-                    mtime = os.path.getmtime(file_path)
-                    
-                    # 检查文件扩展名
-                    if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-                        # 先判断是否为Layout图，再判断是否为热力图
-                        if self._is_layout_image(file_path):
-                            file_info["layout"].append((filename, mtime))
-                        elif self._is_heat_image(file_path):
-                            file_info["heat"].append((filename, mtime))
-                    elif filename.lower().endswith(('.csv', '.xlsx')):
-                        # 判断是温度数据还是layout数据
-                        if self._is_layout_data_file(file_path):
-                            file_info["layoutData"].append((filename, mtime))
-                        else:
-                            file_info["heatTemp"].append((filename, mtime))
-            
-            # 按修改时间排序（最新的在前）
-            for category in file_info:
-                file_info[category].sort(key=lambda x: x[1], reverse=True)
-                self.folder_files[category] = [filename for filename, _ in file_info[category]]
-                
-                # 设置当前使用的文件为最新的文件
+            # 委託 folder_scanner 執行分類
+            self.folder_files, self._xlsx_columns_cache = scan_folder(self.current_folder_path)
+
+            # 設定當前使用的檔案為最新的檔案
+            for category in self.folder_files:
                 if self.folder_files[category]:
                     self.current_files[category] = self.folder_files[category][0]
-            
-            # 扫描完成后，自动加载可用的图片
+
+            # 驗證 Layout 數據檔案完整性
+            warning_msg = validate_layout_data(self.folder_files, self._xlsx_columns_cache)
+            if warning_msg:
+                self.root.after(200, lambda: messagebox.showwarning("Layout 數據檢查", warning_msg))
+
+            # 掃描完成後，自動載入可用的圖片
             self.auto_load_images()
-            
-            # 添加调试信息
+
+            # 添加調試資訊
             print(f"scan_folder_files: 扫描完成，current_files: {self.current_files}")
         except Exception as e:
             print(f"扫描文件夹时出错: {e}")
-    
-    def _is_heat_image(self, image_path):
-        """判斷指定圖片是否為熱力圖。
 
-        透過分析 HSV 色彩空間的飽和度平均值和色調變異數來判定。
-        熱力圖通常具有較高的色彩飽和度（>80）和較大的色調變化（>1000）。
-
-        參數：
-            image_path (str): 圖片檔案路徑
-
-        回傳：
-            bool: True 表示判定為熱力圖
-        """
-        try:
-            image = cv2_imread_unicode(image_path)
-            if image is None:
-                return False
-
-            # 转换为HSV颜色空间
-            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-            # 计算颜色饱和度
-            saturation = hsv[:, :, 1]
-            avg_saturation = np.mean(saturation)
-
-            # 计算颜色变化
-            color_variance = np.var(hsv[:, :, 0])  # 色调方差
-
-            # 热力图通常有较高的饱和度和颜色变化
-            return avg_saturation > 80 and color_variance > 1000
-        except:
-            return False
-
-    def _is_layout_image(self, image_path):
-        """判斷指定圖片是否為 Layout 圖。
-
-        透過計算灰階影像中黑色像素（亮度<50）的比例來判定。
-        Layout 圖通常有超過 60% 的黑色背景。
-
-        參數：
-            image_path (str): 圖片檔案路徑
-
-        回傳：
-            bool: True 表示判定為 Layout 圖
-        """
-        try:
-            image = cv2_imread_unicode(image_path)
-            if image is None:
-                return False
-
-            # 转换为灰度图
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-            # 计算黑色像素的比例（阈值设为50）
-            black_pixels = np.sum(gray < 50)
-            total_pixels = gray.shape[0] * gray.shape[1]
-            black_ratio = black_pixels / total_pixels
-
-            # 如果黑色像素比例超过60%，认为是Layout图
-            return black_ratio > 0.6
-        except:
-            return False
-    
-    def _is_layout_data_file(self, file_path):
-        """判斷指定檔案是否為 Layout 數據檔案。
-
-        僅檢查 .xlsx 檔案，讀取第一行欄位名稱，若包含 'RefDes' 欄位
-        則判定為 Layout 數據檔案。
-
-        參數：
-            file_path (str): 檔案路徑
-
-        回傳：
-            bool: True 表示判定為 Layout 數據檔案
-        """
-        try:
-            if not file_path.lower().endswith('.xlsx'):
-                return False
-            
-            # 读取Excel文件的第一行，检查是否包含RefDes字段
-            df = pd.read_excel(file_path, nrows=1)
-            return 'RefDes' in df.columns
-        except:
-            return False
-    
     def auto_load_images(self):
         """自動載入各分類中當前選用的檔案。
 
@@ -632,7 +538,7 @@ class ResizableImagesApp:
                 self.load_temperature_file_async(temp_file_path)
             
             # Layout数据异步加载（在子线程中）
-            if self.folder_files.get("layoutData"):
+            if self.folder_files.get("layoutXY") and self.folder_files.get("layoutLWT"):
                 # 自动加载所有layout数据文件
                 self.load_all_layout_data_async()
                 
@@ -660,8 +566,8 @@ class ResizableImagesApp:
             for category, files in self.folder_files.items():
                 if files:
                     # 统一标题长度，让图标对齐
-                    category_names = {"heat": "热力图", "layout": "Layout图", "heatTemp": "温度数据", "layoutData": "layout数据"}
-                    category_spaces = {"heat": 31.7, "layout": 32, "heatTemp": 29, "layoutData": 29}
+                    category_names = {"heat": "熱力圖", "layout": "Layout圖", "heatTemp": "溫度數據", "layoutXY": "元器件座標", "layoutLWT": "元器件尺寸"}
+                    category_spaces = {"heat": 31.7, "layout": 32, "heatTemp": 29, "layoutXY": 27, "layoutLWT": 27}
                     category_name = category_names[category]
                     # 父标题显示选择图标在右侧，使用固定宽度确保图标对齐
                     # 为heat和layout添加额外空格，让图标对齐
@@ -683,6 +589,89 @@ class ResizableImagesApp:
                             display_text = filename  # 文件名不显示图标
                             item = self.folder_tree.insert(category_item, "end", text=display_text, values=(category, filename))
     
+    def _on_tree_motion(self, event):
+        """處理檔案樹狀列表的滑鼠移動事件，顯示 layoutXY / layoutLWT 的欄位說明 tooltip。"""
+        item = self.folder_tree.identify_row(event.y)
+        if not item:
+            self._hide_tree_tooltip()
+            return
+
+        # 取得該項目的 category，只對類別標題（有 category 但沒有 filename）顯示 tooltip
+        values = self.folder_tree.item(item, "values")
+        if not values or not values[0] or values[1]:
+            self._hide_tree_tooltip()
+            return
+
+        category = values[0]
+
+        # 定義需要顯示 tooltip 的類別及內容
+        tooltip_texts = {
+            "heat": (
+                "熱力圖影像檔案\n"
+                "支援格式：.jpg, .jpeg, .png\n"
+                "辨識條件：HSV 飽和度 > 80 且色調變異數 > 1000"
+            ),
+            "layout": (
+                "Layout 佈局圖影像檔案\n"
+                "支援格式：.jpg, .jpeg, .png\n"
+                "辨識條件：黑色像素比例 > 60%"
+            ),
+            "heatTemp": (
+                "熱力圖溫度數據\n"
+                "支援格式：.csv（無表頭，Tab 或逗號分隔）\n"
+                "內容：與熱力圖像素對應的溫度矩陣"
+            ),
+            "layoutXY": (
+                "元器件座標與角度檔案\n"
+                "支援格式：.xlsx\n"
+                "必需欄位：RefDes, Orient., X, Y\n"
+                "可選欄位：PartType, PartDecal, Pins, Layer"
+            ),
+            "layoutLWT": (
+                "元器件描述與長寬高檔案\n"
+                "支援格式：.xlsx\n"
+                "必需欄位：RefDes, L, W, T, 对象描述\n"
+                "可選欄位：PartsName"
+            ),
+        }
+
+        if category not in tooltip_texts:
+            self._hide_tree_tooltip()
+            return
+
+        # 如果已經是同一個 item 的 tooltip，只更新位置
+        if self._tree_tooltip and self._tree_tooltip_item == item:
+            x = event.x_root + 15
+            y = event.y_root + 10
+            self._tree_tooltip.wm_geometry(f"+{x}+{y}")
+            return
+
+        # 隱藏舊的 tooltip，建立新的
+        self._hide_tree_tooltip()
+        self._tree_tooltip_item = item
+
+        tw = tk.Toplevel(self.folder_tree)
+        tw.wm_overrideredirect(True)
+        label = tk.Label(
+            tw, text=tooltip_texts[category],
+            justify=tk.LEFT, background="#FFFFCC", foreground="#000000",
+            relief=tk.SOLID, borderwidth=1, font=("Arial", 9),
+            padx=8, pady=6
+        )
+        label.pack()
+        x = event.x_root + 15
+        y = event.y_root + 10
+        tw.wm_geometry(f"+{x}+{y}")
+        tw.lift()
+        self._tree_tooltip = tw
+
+    def _hide_tree_tooltip(self, event=None):
+        """隱藏檔案樹狀列表的 tooltip。"""
+        if self._tree_tooltip:
+            self._tree_tooltip.destroy()
+            self._tree_tooltip = None
+            self._tree_tooltip_item = None
+
     def update_folder_path_label(self):
         """更新左側面板頂部的「當前資料夾」路徑標籤文字。"""
         if hasattr(self, 'folder_path_label'):
@@ -740,9 +729,9 @@ class ResizableImagesApp:
             category = values[0]
             filename = values[1]
             
-            # 🔥 新增：layoutData类型的文件项不可切换，不触发任何动作
-            if category == "layoutData":
-                print(f"layoutData文件项不可切换: {filename}")
+            # layoutXY/layoutLWT 類型的文件項不可切換，不觸發任何動作
+            if category in ("layoutXY", "layoutLWT"):
+                print(f"{category}文件项不可切换: {filename}")
                 return "break"  # 阻止事件继续传播
             
             # 处理文件切换（单击文件名区域）
@@ -771,9 +760,9 @@ class ResizableImagesApp:
             elif category == "heatTemp":
                 self.load_temperature_file(file_path)
                 print(f"切换到温度数据: {filename}")
-            elif category == "layoutData":
-                self.load_layout_data_async(file_path)
-                print(f"切换到layout数据: {filename}")
+            elif category in ("layoutXY", "layoutLWT"):
+                self.load_all_layout_data_async()
+                print(f"切换到{category}数据: {filename}")
             
             # 刷新文件夹显示，更新加粗标记
             self.update_folder_display()
@@ -784,7 +773,7 @@ class ResizableImagesApp:
         若選擇的檔案不在當前資料夾中，會自動複製過來。不會刪除原檔案。
 
         參數：
-            category (str): 檔案分類（"heat", "layout", "heatTemp", "layoutData"）
+            category (str): 檔案分類（"heat", "layout", "heatTemp", "layoutXY", "layoutLWT"）
         """
         try:
             print(f"select_and_replace_current_file 被调用，category = {category}")
@@ -801,10 +790,14 @@ class ResizableImagesApp:
                 filetypes = [("数据文件", "*.csv *.xlsx"), ("所有文件", "*.*")]
                 title = "选择温度数据文件"
                 print(f"设置温度数据文件过滤器: {filetypes}")
-            elif category == "layoutData":
-                filetypes = [("Excel文件", "*.xlsx"), ("所有文件", "*.*")]
-                title = "选择layout数据文件"
-                print(f"设置layout数据文件过滤器: {filetypes}")
+            elif category == "layoutXY":
+                filetypes = [("Excel文件", "*.xlsx")]
+                title = "選擇元器件座標檔案 (需含 RefDes, Orient., X, Y)"
+                print(f"设置元器件座標文件过滤器: {filetypes}")
+            elif category == "layoutLWT":
+                filetypes = [("Excel文件", "*.xlsx")]
+                title = "選擇元器件尺寸檔案 (需含 RefDes, L, W, T, 对象描述)"
+                print(f"设置元器件尺寸文件过滤器: {filetypes}")
             else:
                 print(f"未知分类: {category}")
                 return
@@ -857,9 +850,9 @@ class ResizableImagesApp:
                 elif category == "heatTemp":
                     self.load_temperature_file(new_file_path)
                     print(f"已加载温度数据: {new_filename}")
-                elif category == "layoutData":
-                    self.load_layout_data_async(new_file_path)
-                    print(f"已加载layout数据: {new_filename}")
+                elif category in ("layoutXY", "layoutLWT"):
+                    self.load_all_layout_data_async()
+                    print(f"已加载{category}数据: {new_filename}")
                 
                 # 显示成功消息
                 show_toast(
@@ -1108,77 +1101,56 @@ class ResizableImagesApp:
         layout_thread.start()
     
     def load_all_layout_data_async(self):
-        """在子執行緒中非同步載入資料夾內所有 Layout 數據檔案。
+        """在子執行緒中非同步載入資料夾內的元器件座標檔和尺寸檔。
 
-        自動識別 C.xlsx（元器件位置）和 C_item.xlsx（元器件尺寸）檔案，
+        直接使用已分類的 folder_files["layoutXY"] 和 folder_files["layoutLWT"]，
         解析後合併為完整的元器件資訊列表。
         """
         def load_all_layout_data():
             try:
                 print(f"开始异步加载所有Layout数据文件...")
-                if not self.folder_files.get("layoutData"):
-                    print("没有找到Layout数据文件")
+                xy_files = self.folder_files.get("layoutXY", [])
+                lwt_files = self.folder_files.get("layoutLWT", [])
+                if not xy_files or not lwt_files:
+                    print("Layout數據不完整：缺少座標檔或尺寸檔")
                     return
-                
-                # 收集所有layout数据文件
-                layout_files = []
-                for layout_file in self.folder_files["layoutData"]:
-                    layout_file_path = os.path.join(self.current_folder_path, layout_file)
-                    layout_files.append(layout_file_path)
-                
-                print(f"找到Layout数据文件: {[os.path.basename(f) for f in layout_files]}")
-                
-                # 解析所有文件并计算C_info
-                self.layout_data = self.parse_all_layout_data(layout_files)
+
+                c_file = os.path.join(self.current_folder_path, xy_files[0])
+                c_item_file = os.path.join(self.current_folder_path, lwt_files[0])
+
+                print(f"元器件座標檔: {xy_files[0]}, 元器件尺寸檔: {lwt_files[0]}")
+
+                # 解析文件并计算C_info
+                self.layout_data = self.parse_all_layout_data(c_file, c_item_file)
                 print(f"异步加载所有Layout数据完成，共{len(self.layout_data) if self.layout_data else 0}个元器件")
-                
+
             except Exception as e:
                 print(f"异步加载所有Layout数据失败: {e}")
                 # 在主线程中显示错误信息
                 self.root.after(0, lambda: messagebox.showerror("错误", f"加载Layout数据文件失败: {e}"))
-        
+
         # 在子线程中加载Layout数据
         layout_thread = threading.Thread(target=load_all_layout_data, daemon=True)
         layout_thread.start()
     
-    def parse_all_layout_data(self, layout_files):
-        """解析所有 Layout 數據檔案，回傳合併後的元器件資訊列表。
+    def parse_all_layout_data(self, c_file, c_item_file):
+        """解析元器件座標檔和尺寸檔，回傳合併後的元器件資訊列表。
 
-        自動判斷哪個是 C 檔（含 Orient./X/Y 欄位）和 C_item 檔（含 L/W/T 欄位），
-        然後根據 RefDes 欄位合併兩個檔案的數據，計算每個元器件的邊界框。
+        根據 RefDes 欄位合併兩個檔案的數據，計算每個元器件的邊界框。
 
         參數：
-            layout_files (list): Layout 數據檔案路徑列表
+            c_file (str): 元器件座標檔路徑（含 RefDes, Orient., X, Y）
+            c_item_file (str): 元器件尺寸檔路徑（含 RefDes, L, W, T, 对象描述）
 
         回傳：
             list 或 None: 元器件資訊列表，每項為 dict 包含
                 {RefDes, left, top, right, bottom, X, Y, L, W, T, Orient.}
         """
         try:
-            c_file = None
-            c_item_file = None
-            
-            # 读取每个layout数据文件，根据字段内容判断类型
-            for file_path in layout_files:
-                try:
-                    df = pd.read_excel(file_path, nrows=1)
-                    columns = df.columns.tolist()
-                    
-                    # 根据字段内容判断哪个是C文件，哪个是C_item文件
-                    if 'Orient.' in columns and 'X' in columns and 'Y' in columns:
-                        c_file = file_path
-                        print(f"识别为C文件: {os.path.basename(file_path)}")
-                    elif 'L' in columns and 'W' in columns and 'T' in columns:
-                        c_item_file = file_path
-                        print(f"识别为C_item文件: {os.path.basename(file_path)}")
-                except Exception as e:
-                    print(f"读取文件 {os.path.basename(file_path)} 时出错: {e}")
-                    continue
-            
             if not c_file or not c_item_file:
                 print(f"未找到合适的Layout数据文件")
                 return None
-            
+
             # 读取C.xlsx文件
             c_df = pd.read_excel(c_file)
             print(f"C文件字段: {c_df.columns.tolist()}")
@@ -1189,7 +1161,7 @@ class ResizableImagesApp:
             
             # 检查必需字段
             required_c_fields = ['RefDes', 'Orient.', 'X', 'Y']
-            required_item_fields = ['RefDes', 'L', 'W', 'T']
+            required_item_fields = ['RefDes', 'L', 'W', 'T', '对象描述']
             
             for field in required_c_fields:
                 if field not in c_df.columns:
@@ -1313,7 +1285,7 @@ class ResizableImagesApp:
     def parse_layout_data(self, file_path):
         """解析 Layout 數據檔案，回傳元器件資訊列表 (C_info)。
 
-        先從已識別的 layoutData 檔案中尋找 C 檔和 C_item 檔，
+        先從已識別的 layoutXY 和 layoutLWT 檔案中取得 C 檔和 C_item 檔，
         若未找到則回退到資料夾掃描模式。
 
         參數：
@@ -1328,28 +1300,16 @@ class ResizableImagesApp:
             c_file = None
             c_item_file = None
             
-            # 从已经识别的layout数据文件中查找
-            if hasattr(self, 'folder_files') and 'layoutData' in self.folder_files:
-                layout_files = self.folder_files['layoutData']
-                print(f"使用已识别的layout数据文件: {layout_files}")
-                
-                # 读取每个layout数据文件，根据字段内容判断类型
-                for filename in layout_files:
-                    file_path_check = os.path.join(folder_path, filename)
-                    try:
-                        df = pd.read_excel(file_path_check, nrows=1)
-                        columns = df.columns.tolist()
-                        
-                        # 根据字段内容判断哪个是C文件，哪个是C_item文件
-                        if 'Orient.' in columns and 'X' in columns and 'Y' in columns:
-                            c_file = file_path_check
-                            print(f"识别为C文件: {filename}")
-                        elif 'L' in columns and 'W' in columns and 'T' in columns:
-                            c_item_file = file_path_check
-                            print(f"识别为C_item文件: {filename}")
-                    except Exception as e:
-                        print(f"读取文件 {filename} 时出错: {e}")
-                        continue
+            # 從已分類的 layoutXY / layoutLWT 取得檔案
+            if hasattr(self, 'folder_files'):
+                xy_files = self.folder_files.get('layoutXY', [])
+                lwt_files = self.folder_files.get('layoutLWT', [])
+                if xy_files:
+                    c_file = os.path.join(folder_path, xy_files[0])
+                    print(f"使用已分類的元器件座標檔: {xy_files[0]}")
+                if lwt_files:
+                    c_item_file = os.path.join(folder_path, lwt_files[0])
+                    print(f"使用已分類的元器件尺寸檔: {lwt_files[0]}")
             
             # 如果还是没有找到，回退到原来的查找方式
             if not c_file or not c_item_file:
@@ -1374,7 +1334,7 @@ class ResizableImagesApp:
             
             # 检查必需字段
             required_c_fields = ['RefDes', 'Orient.', 'X', 'Y']
-            required_item_fields = ['RefDes', 'L', 'W', 'T']
+            required_item_fields = ['RefDes', 'L', 'W', 'T', '对象描述']
             
             for field in required_c_fields:
                 if field not in c_df.columns:
@@ -2912,6 +2872,12 @@ class ResizableImagesApp:
         
         # 绑定单击事件
         self.folder_tree.bind("<Button-1>", self.on_file_click)
+
+        # 綁定 Tooltip 事件
+        self._tree_tooltip = None  # Tooltip Toplevel 視窗
+        self._tree_tooltip_item = None  # 當前顯示 tooltip 的 item
+        self.folder_tree.bind("<Motion>", self._on_tree_motion)
+        self.folder_tree.bind("<Leave>", self._hide_tree_tooltip)
         
         # 去除滚动条，让内容占满整个区域
         # folder_scrollbar = ttk.Scrollbar(self.folder_frame, orient="vertical", command=self.folder_tree.yview)
