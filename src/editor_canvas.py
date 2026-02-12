@@ -110,7 +110,7 @@ class EditorCanvas:
             
         dialog = tk.Toplevel(parent_window)
         dialog.title("Edit Temperature")
-        dialog.geometry("1500x768")  # 增加宽度以容纳左侧列表
+        dialog.state('zoomed')  # 直接以全螢幕方式開啟
         dialog.bind("<Configure>", self.on_resize)
         dialog.protocol("WM_DELETE_WINDOW", self.on_window_close)
 
@@ -271,13 +271,15 @@ class EditorCanvas:
             self.editor_rect.zoom_scale = 0
             self.editor_rect.canvas_offset_x = 0
             self.editor_rect.canvas_offset_y = 0
-        # 首先更新背景图像，确保canvas尺寸正确
-        self.update_bg_image()
-        # 然后设置显示缩放比例
-        self.update_editor_display_scale()
-        # 計算縮放的 fit 比例
+        # 先建立所有標記（必須在 update_bg_image 之前，讓 on_zoom_change 能正確重繪）
         if hasattr(self, 'editor_rect') and self.editor_rect:
-            self.editor_rect.calculate_fit_scale()
+            self.editor_rect.init_marks()
+        # 強制 update_bg_image 執行（避免 <Configure> 事件已設定 last_window_width 導致跳過）
+        self.last_window_width = -1
+        # 更新背景圖像並設定正確的縮放比例
+        # 放大模式：update_bg_image → calculate_fit_scale → on_zoom_change（重繪所有標記）
+        # 非放大模式：update_bg_image → update_editor_display_scale → redraw_all_rectangles
+        self.update_bg_image()
         # 同步多选模式状态到 editor_rect
         if hasattr(self, 'editor_rect') and self.editor_rect:
             self.editor_rect.multi_select_enabled = self.multi_select_enabled
@@ -1621,10 +1623,13 @@ class EditorCanvas:
         
         # 檢查是否啟用了放大模式
         if hasattr(self, 'magnifier_enabled') and self.magnifier_enabled and hasattr(self, 'editor_rect') and self.editor_rect:
+            # 記住舊的 min_zoom，判斷使用者是否處於 fit 顯示狀態
+            old_min_zoom = self.editor_rect.min_zoom
+            was_at_fit = abs(self.editor_rect.zoom_scale - old_min_zoom) < 0.01
             # 放大模式：以實際 canvas 尺寸重新計算 fit_scale
             self.editor_rect.calculate_fit_scale(new_width, new_height)
-            # 如果當前縮放小於新的 min_zoom，調整縮放
-            if self.editor_rect.zoom_scale < self.editor_rect.min_zoom:
+            # 如果使用者原本在 fit 顯示或縮放小於新的 min_zoom，重置為 fit
+            if was_at_fit or self.editor_rect.zoom_scale < self.editor_rect.min_zoom:
                 self.editor_rect.zoom_scale = self.editor_rect.min_zoom
                 self.editor_rect.canvas_offset_x = 0
                 self.editor_rect.canvas_offset_y = 0
@@ -1664,13 +1669,41 @@ class EditorCanvas:
         button_container.grid(row=1, column=0, sticky="nsew", pady=10)
         
         # 配置按钮容器的grid属性，按钮固定高度，不拉伸
-        for r in range(15):
+        for r in range(16):
             button_container.grid_rowconfigure(r, weight=0)
         button_container.grid_columnconfigure(0, weight=1)  # 单列，占满宽度
 
-        # ========== Row 0: 回到起點 + ⓘ ==========
+        # ========== Row 0: 保存並關閉 + ⓘ ==========
+        save_close_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        save_close_frame.grid(row=0, column=0, pady=(0, 8), padx=10, sticky="ew")
+        self._save_close_button = tk.Button(
+            save_close_frame,
+            text="保存並關閉",
+            font=UIStyle.BUTTON_FONT,
+            height=1,
+            bg=UIStyle.SUCCESS_GREEN,
+            fg=UIStyle.WHITE,
+            relief=UIStyle.BUTTON_RELIEF,
+            bd=UIStyle.BUTTON_BORDER_WIDTH,
+            command=self.on_window_close
+        )
+        self._save_close_button.pack(side='left', expand=True, fill='x')
+        save_close_info_label = tk.Label(
+            save_close_frame, text="ⓘ", font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE, fg=UIStyle.PRIMARY_BLUE, cursor="hand2"
+        )
+        save_close_info_label.pack(side='left', padx=(4, 0))
+        Tooltip(
+            save_close_info_label,
+            "保存並關閉功能：\n"
+            "• 保存目前所有編輯結果\n"
+            "• 關閉編輯器並返回主介面\n"
+            "• 主介面的熱力圖會即時更新"
+        )
+
+        # ========== Row 1: 回到起點 + ⓘ ==========
         reset_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        reset_frame.grid(row=0, column=0, pady=(0, 3), padx=10, sticky="ew")
+        reset_frame.grid(row=1, column=0, pady=(0, 3), padx=10, sticky="ew")
         self._reset_button = tk.Button(
             reset_frame,
             text="回到起點",
@@ -1695,9 +1728,9 @@ class EditorCanvas:
             "• 此操作會清除所有修改紀錄"
         )
 
-        # ========== Row 1: 回到上一步 + ⓘ ==========
+        # ========== Row 2: 回到上一步 + ⓘ ==========
         undo_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        undo_frame.grid(row=1, column=0, pady=(0, 3), padx=10, sticky="ew")
+        undo_frame.grid(row=2, column=0, pady=(0, 3), padx=10, sticky="ew")
         self._undo_button = tk.Button(
             undo_frame,
             text="回到上一步 (0/3)",
@@ -1723,9 +1756,9 @@ class EditorCanvas:
             "• 快捷鍵：Ctrl+Z"
         )
 
-        # ========== Row 2: 合併 + ⓘ ==========
+        # ========== Row 3: 合併 + ⓘ ==========
         merge_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        merge_frame.grid(row=2, column=0, pady=(0, 3), padx=10, sticky="ew")
+        merge_frame.grid(row=3, column=0, pady=(0, 3), padx=10, sticky="ew")
         self.merge_button = tk.Button(
             merge_frame,
             text="合并 ➕",
@@ -1750,9 +1783,9 @@ class EditorCanvas:
             "• 需先選取 2 個以上元器件"
         )
 
-        # ========== Row 3: 刪除 + ⓘ ==========
+        # ========== Row 4: 刪除 + ⓘ ==========
         delete_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        delete_frame.grid(row=3, column=0, pady=(0, 8), padx=10, sticky="ew")
+        delete_frame.grid(row=4, column=0, pady=(0, 8), padx=10, sticky="ew")
         self.delete_button = tk.Button(
             delete_frame,
             text="删除 ❌",
@@ -1777,9 +1810,9 @@ class EditorCanvas:
             "• 快捷鍵：Delete / BackSpace"
         )
 
-        # ========== Row 4: 形狀轉換標籤 + ⓘ ==========
+        # ========== Row 5: 形狀轉換標籤 + ⓘ ==========
         shape_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        shape_label_frame.grid(row=4, column=0, pady=(5, 2), padx=10, sticky="w")
+        shape_label_frame.grid(row=5, column=0, pady=(5, 2), padx=10, sticky="w")
 
         shape_label = tk.Label(
             shape_label_frame,
@@ -1810,7 +1843,7 @@ class EditorCanvas:
             delay=200
         )
 
-        # ========== Row 5: 轉為矩形 ==========
+        # ========== Row 6: 轉為矩形 ==========
         self.convert_to_rect_button = tk.Button(
             button_container,
             text="轉為矩形 ⬜",
@@ -1823,9 +1856,9 @@ class EditorCanvas:
             command=lambda: self.on_convert_shape("rectangle"),
             state=tk.DISABLED
         )
-        self.convert_to_rect_button.grid(row=5, column=0, pady=3, padx=10, sticky="ew")
+        self.convert_to_rect_button.grid(row=6, column=0, pady=3, padx=10, sticky="ew")
 
-        # ========== Row 6: 轉為圓形 ==========
+        # ========== Row 7: 轉為圓形 ==========
         self.convert_to_circle_button = tk.Button(
             button_container,
             text="轉為圓形 ⚪",
@@ -1838,11 +1871,11 @@ class EditorCanvas:
             command=lambda: self.on_convert_shape("circle"),
             state=tk.DISABLED
         )
-        self.convert_to_circle_button.grid(row=6, column=0, pady=3, padx=10, sticky="ew")
+        self.convert_to_circle_button.grid(row=7, column=0, pady=3, padx=10, sticky="ew")
 
-        # ========== Row 7: 溫度位置標籤 + ⓘ ==========
+        # ========== Row 8: 溫度位置標籤 + ⓘ ==========
         temp_dir_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        temp_dir_label_frame.grid(row=7, column=0, pady=(8, 2), padx=10, sticky="w")
+        temp_dir_label_frame.grid(row=8, column=0, pady=(8, 2), padx=10, sticky="w")
 
         temp_dir_label = tk.Label(
             temp_dir_label_frame,
@@ -1872,9 +1905,9 @@ class EditorCanvas:
             delay=200
         )
 
-        # ========== Row 8: 九宮格 ==========
+        # ========== Row 9: 九宮格 ==========
         grid_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        grid_frame.grid(row=8, column=0, pady=(2, 5), padx=10)
+        grid_frame.grid(row=9, column=0, pady=(2, 5), padx=10)
 
         dir_map = [
             ("↖", "TL", 0, 0), ("↑", "T", 0, 1), ("↗", "TR", 0, 2),
@@ -1907,9 +1940,9 @@ class EditorCanvas:
                 btn.grid(row=r, column=c, padx=1, pady=1)
                 self.temp_dir_buttons[code] = btn
 
-        # ========== Row 9: 旋轉角度標籤 + ⓘ ==========
+        # ========== Row 10: 旋轉角度標籤 + ⓘ ==========
         rotation_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        rotation_label_frame.grid(row=9, column=0, pady=(8, 2), padx=10, sticky="w")
+        rotation_label_frame.grid(row=10, column=0, pady=(8, 2), padx=10, sticky="w")
 
         rotation_label = tk.Label(
             rotation_label_frame,
@@ -1940,9 +1973,9 @@ class EditorCanvas:
             delay=200
         )
 
-        # ========== Row 10: 預設角度按鈕 ==========
+        # ========== Row 11: 預設角度按鈕 ==========
         rotation_btn_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        rotation_btn_frame.grid(row=10, column=0, pady=(2, 2), padx=10, sticky="ew")
+        rotation_btn_frame.grid(row=11, column=0, pady=(2, 2), padx=10, sticky="ew")
 
         self.rotation_buttons = {}
         self.current_rotation_angle = 0
@@ -1963,9 +1996,9 @@ class EditorCanvas:
             btn.pack(side=tk.LEFT, padx=1)
             self.rotation_buttons[a] = btn
 
-        # ========== Row 11: 自訂角度輸入 ==========
+        # ========== Row 12: 自訂角度輸入 ==========
         custom_rotation_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        custom_rotation_frame.grid(row=11, column=0, pady=(2, 5), padx=10, sticky="ew")
+        custom_rotation_frame.grid(row=12, column=0, pady=(2, 5), padx=10, sticky="ew")
 
         self.custom_rotation_entry = tk.Entry(
             custom_rotation_frame,
@@ -1996,9 +2029,9 @@ class EditorCanvas:
         )
         self.custom_rotation_apply_btn.pack(side=tk.LEFT)
 
-        # ========== Row 12: 放大模式 + ⓘ ==========
+        # ========== Row 13: 放大模式 + ⓘ ==========
         magnifier_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        magnifier_frame.grid(row=12, column=0, pady=(8, 8), padx=10, sticky="ew")
+        magnifier_frame.grid(row=13, column=0, pady=(8, 8), padx=10, sticky="ew")
 
         self.magnifier_var = tk.BooleanVar(value=True)
         self.magnifier_checkbox = tk.Checkbutton(
@@ -2033,9 +2066,9 @@ class EditorCanvas:
             "• 取消勾選自動恢復預設顯示"
         )
 
-        # ========== Row 13: 即時溫度 + ⓘ ==========
+        # ========== Row 14: 即時溫度 + ⓘ ==========
         realtime_temp_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        realtime_temp_frame.grid(row=13, column=0, pady=(0, 8), padx=10, sticky="ew")
+        realtime_temp_frame.grid(row=14, column=0, pady=(0, 8), padx=10, sticky="ew")
 
         self.realtime_temp_var = tk.BooleanVar(value=True)
         self.realtime_temp_checkbox = tk.Checkbutton(
@@ -2071,9 +2104,9 @@ class EditorCanvas:
             "移出熱力圖範圍後會自動隱藏"
         )
 
-        # ========== Row 14: 多選模式 + ⓘ ==========
+        # ========== Row 15: 多選模式 + ⓘ ==========
         multi_select_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        multi_select_frame.grid(row=14, column=0, pady=(0, 8), padx=10, sticky="ew")
+        multi_select_frame.grid(row=15, column=0, pady=(0, 8), padx=10, sticky="ew")
 
         self.multi_select_var = tk.BooleanVar(value=True)
         self.multi_select_checkbox = tk.Checkbutton(
@@ -2332,10 +2365,13 @@ class EditorCanvas:
 
     def _show_filter_confirm_dialog(self):
         """篩選條件生效時，詢問使用者是否刪除其他。
-        Returns: True 表示已處理（攔截後續操作），False 表示無篩選條件。
+        Returns:
+            None: 無篩選條件（可直接繼續操作）
+            True: 使用者選擇「是」（已刪除其他，可繼續操作）
+            False: 使用者選擇「否」（已取消篩選，應中止操作）
         """
         if not self._has_active_filter():
-            return False
+            return None
 
         from tkinter import messagebox
         filtered_count = len(self.filtered_rectangles) if hasattr(self, 'filtered_rectangles') else 0
@@ -2372,6 +2408,7 @@ class EditorCanvas:
             self.update_rect_list()
             self.update_canvas_visibility()
             print(f"✓ 篩選保留後刪除：已刪除 {len(to_delete_ids)} 筆")
+            return True
         else:
             # 否：取消篩選，清空輸入框，恢復顯示所有元器件
             self.filter_name_entry.set("")
@@ -2380,11 +2417,11 @@ class EditorCanvas:
             self.apply_filters()
             self.update_rect_list()
             self.update_canvas_visibility()
-        return True
+            return False
 
     def _on_right_click_with_filter_check(self, event):
         """右鍵點擊時檢查是否有篩選條件生效，若有則詢問使用者處理方式"""
-        if self._show_filter_confirm_dialog():
+        if self._show_filter_confirm_dialog() is not None:
             return
         self.editor_rect.on_right_click_start(event)
 
@@ -2393,7 +2430,7 @@ class EditorCanvas:
         # 只在放大鏡模式啟用時才需要攔截（非放大鏡模式滾輪不觸發縮放）
         if not (hasattr(self, 'editor_rect') and self.editor_rect and self.editor_rect.magnifier_mode_enabled):
             return self.editor_rect.on_mouse_wheel(event) if hasattr(self, 'editor_rect') and self.editor_rect else None
-        if self._show_filter_confirm_dialog():
+        if self._show_filter_confirm_dialog() is not None:
             return "break"
         return self.editor_rect.on_mouse_wheel(event)
 

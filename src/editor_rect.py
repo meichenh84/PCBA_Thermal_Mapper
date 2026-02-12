@@ -154,7 +154,8 @@ class RectEditor:
         self.canvas.bind("<B3-Motion>", self.on_right_click_drag)
         self.canvas.bind("<ButtonRelease-3>", self.on_right_click_end)
 
-        self.canvas.after(100, self.init_marks)
+        # init_marks 由 EditorCanvas.delayed_initialization() 在正確的 display_scale 設定後呼叫
+        # self.canvas.after(100, self.init_marks)
 
     # 不再需要缩放坐标，直接使用原图像坐标
 
