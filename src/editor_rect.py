@@ -192,7 +192,8 @@ class RectEditor:
         temp_h = temp_bbox[3] - temp_bbox[1]
         direction = rect.get("temp_text_dir", "T")
         tri_half = max(7, int(8 * display_scale)) / 2
-        dx, dy = calc_temp_text_offset(direction, tri_half, temp_w, temp_h)
+        gap = max(3, int(7 * display_scale))
+        dx, dy = calc_temp_text_offset(direction, tri_half, temp_w, temp_h, gap=gap)
         self.canvas.coords(tempTextId, display_cx + dx, display_cy + dy)
         self._move_outline(rect.get("tempOutlineIds"), display_cx + dx, display_cy + dy)
 

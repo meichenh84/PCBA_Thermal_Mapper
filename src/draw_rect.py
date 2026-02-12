@@ -217,7 +217,8 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
     temp_text = f'{max_temp}'
     (tw, th), _ = cv2.getTextSize(temp_text, cv2.FONT_HERSHEY_COMPLEX, temp_font_scale, 1)
     tri_half = size / 2
-    dx, dy = calc_temp_text_offset(direction, tri_half, tw, th)
+    gap = int(7 * textScale)
+    dx, dy = calc_temp_text_offset(direction, tri_half, tw, th, gap=gap)
     # cv2 putText 使用左下角錨點，需從中心偏移轉換
     temp_x = int(cx + dx - tw / 2)
     temp_y = int(cy + dy + th / 2)
@@ -355,7 +356,8 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
         temp_w = temp_bbox[2] - temp_bbox[0]
         temp_h = temp_bbox[3] - temp_bbox[1]
         tri_half = size / 2
-        dx, dy = calc_temp_text_offset(direction, tri_half, temp_w, temp_h)
+        gap = max(3, int(7 * font_scale))
+        dx, dy = calc_temp_text_offset(direction, tri_half, temp_w, temp_h, gap=gap)
         canvas.coords(tempTextId, cx + dx, cy + dy)
         # 同步移動描邊文字
         for oid, (odx, ody) in zip(tempOutlineIds, OUTLINE_OFFSETS):
@@ -444,7 +446,8 @@ def update_canvas_item(canvas, item, imageScale=1):
         temp_w = temp_bbox[2] - temp_bbox[0]
         temp_h = temp_bbox[3] - temp_bbox[1]
         tri_half = size / 2
-        dx, dy = calc_temp_text_offset(direction, tri_half, temp_w, temp_h)
+        gap = max(3, int(7 * imageScale))
+        dx, dy = calc_temp_text_offset(direction, tri_half, temp_w, temp_h, gap=gap)
         canvas.coords(tempTextId, cx + dx, cy + dy)
     else:
         canvas.coords(tempTextId, cx, cy - 16 * imageScale)
@@ -676,7 +679,8 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
         tw = temp_bbox[2] - temp_bbox[0]
         th = temp_bbox[3] - temp_bbox[1]
         tri_half = size / 2
-        dx, dy = calc_temp_text_offset(direction, tri_half, tw, th, gap=3)
+        gap = int(7 * textScale)
+        dx, dy = calc_temp_text_offset(direction, tri_half, tw, th, gap=gap)
         # 從中心偏移轉換為 PIL 左上角座標
         temp_text_x = int(cx + dx - tw / 2)
         temp_text_y = int(cy + dy - th / 2)
