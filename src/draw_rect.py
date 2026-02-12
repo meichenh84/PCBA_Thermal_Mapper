@@ -150,9 +150,16 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
     cx = int(cx * imageScale)
     cy = int(cy * imageScale)
 
-    # 繪製矩形框（支援旋轉）
+    # 繪製框（支援圓形和旋轉）
+    shape = item.get("shape", "rectangle")
     angle = item.get("angle", 0)
-    if angle != 0:
+    if shape == "circle":
+        center_x = int((left + right) / 2)
+        center_y = int((top + bottom) / 2)
+        axis_x = int((right - left) / 2)
+        axis_y = int((bottom - top) / 2)
+        cv2.ellipse(imageA, (center_x, center_y), (axis_x, axis_y), 0, 0, 360, rectColor, 1, cv2.LINE_AA)
+    elif angle != 0:
         geo_cx = (left + right) / 2
         geo_cy = (top + bottom) / 2
         half_w = (right - left) / 2
@@ -161,7 +168,7 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
         pts = np.array(corners, np.int32).reshape((-1, 1, 2))
         cv2.polylines(imageA, [pts], isClosed=True, color=rectColor, thickness=1, lineType=cv2.LINE_AA)
     else:
-        cv2.rectangle(imageA, (left, top), (right, bottom), rectColor, 1, cv2.LINE_AA)  # 绿色框
+        cv2.rectangle(imageA, (left, top), (right, bottom), rectColor, 1, cv2.LINE_AA)
     # 计算三角形的三个顶点
     center = (cx, cy)
     # 顶点1 (尖角)
@@ -580,9 +587,16 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
             cx = max(0, min(cx, img_width - 1))
             cy = max(0, min(cy, img_height - 1))
 
-        # 绘制矩形框（支援旋轉）
+        # 繪製框（支援圓形和旋轉）
+        shape = item.get("shape", "rectangle")
         angle = item.get("angle", 0)
-        if angle != 0:
+        if shape == "circle":
+            center_x = int((left + right) / 2)
+            center_y = int((top + bottom) / 2)
+            axis_x = int((right - left) / 2)
+            axis_y = int((bottom - top) / 2)
+            cv2.ellipse(imageA, (center_x, center_y), (axis_x, axis_y), 0, 0, 360, rectColor, 1, cv2.LINE_AA)
+        elif angle != 0:
             geo_cx_draw = (left + right) / 2
             geo_cy_draw = (top + bottom) / 2
             half_w_draw = (right - left) / 2
