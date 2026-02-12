@@ -246,6 +246,10 @@ class EditorCanvas:
         self.editor_rect.set_background_image(self.bg_image)
         self.editor_rect.on_zoom_change_callback = self.on_zoom_change
 
+        # 重新綁定右鍵與滾輪事件：攔截篩選條件生效時的操作
+        self.canvas.bind("<Button-3>", self._on_right_click_with_filter_check)
+        self.canvas.bind("<MouseWheel>", self._on_mousewheel_with_filter_check)
+
         # 快照系統（復原功能）
         self._initial_snapshot = None  # 初始快照（回到起點用）
         self._undo_stack = []          # 歷史堆疊（最多 3 筆，回到上一步用）
@@ -2254,7 +2258,13 @@ class EditorCanvas:
         self.selected_rect_ids.clear()
         self.update_delete_button_state()
 
-        # 刷新 Treeview
+        # 清空篩選條件並恢復灰色提示詞
+        self.filter_name_entry.set("")
+        self.filter_desc_entry.set("")
+        self.filter_temp_entry.set("")
+
+        # 刷新篩選狀態與 Treeview
+        self.apply_filters()
         self.update_rect_list()
         self._update_undo_button_state()
         print(f"↩ 回到上一步，剩餘 {len(self._undo_stack)} 步")
@@ -2290,7 +2300,13 @@ class EditorCanvas:
         self.selected_rect_ids.clear()
         self.update_delete_button_state()
 
-        # 刷新 Treeview
+        # 清空篩選條件並恢復灰色提示詞
+        self.filter_name_entry.set("")
+        self.filter_desc_entry.set("")
+        self.filter_temp_entry.set("")
+
+        # 刷新篩選狀態與 Treeview
+        self.apply_filters()
         self.update_rect_list()
         self._update_undo_button_state()
         print("↩ 已回到起點")
@@ -2304,6 +2320,82 @@ class EditorCanvas:
             text=f"回到上一步 ({n}/3)",
             state=tk.NORMAL if n > 0 else tk.DISABLED,
         )
+
+    def _has_active_filter(self):
+        """檢查是否有篩選條件正在生效"""
+        if hasattr(self, 'filter_name_entry') and hasattr(self, 'filter_desc_entry') and hasattr(self, 'filter_temp_entry'):
+            name_filter = self.filter_name_entry.get().strip()
+            desc_filter = self.filter_desc_entry.get().strip()
+            temp_filter = self.filter_temp_entry.get().strip()
+            return bool(name_filter or desc_filter or temp_filter)
+        return False
+
+    def _show_filter_confirm_dialog(self):
+        """篩選條件生效時，詢問使用者是否刪除其他。
+        Returns: True 表示已處理（攔截後續操作），False 表示無篩選條件。
+        """
+        if not self._has_active_filter():
+            return False
+
+        from tkinter import messagebox
+        filtered_count = len(self.filtered_rectangles) if hasattr(self, 'filtered_rectangles') else 0
+        total_count = len(self.editor_rect.rectangles) if hasattr(self, 'editor_rect') and self.editor_rect else 0
+        delete_count = total_count - filtered_count
+
+        result = messagebox.askyesno(
+            "篩選保留",
+            f"目前有篩選條件正在生效。\n\n"
+            f"篩選保留 {filtered_count} 筆，其餘 {delete_count} 筆。\n\n"
+            f"是否要刪除篩選結果以外的元器件？\n\n"
+            f"• 是：刪除不符合篩選條件的 {delete_count} 筆元器件\n"
+            f"• 否：取消篩選，恢復顯示所有元器件",
+            parent=self.dialog,
+        )
+        if result:
+            # 是：執行刪除其他
+            self._push_undo()
+            all_rects = self.editor_rect.rectangles
+            filtered = self.filtered_rectangles if hasattr(self, 'filtered_rectangles') else all_rects
+            filtered_ids = set(r.get('rectId') for r in filtered if r.get('rectId'))
+            to_delete_ids = [r.get('rectId') for r in all_rects if r.get('rectId') and r.get('rectId') not in filtered_ids]
+            if to_delete_ids:
+                self.editor_rect.delete_rectangles_by_ids(to_delete_ids)
+                for rect_id in to_delete_ids:
+                    self.remove_list_item_by_id(rect_id)
+                self.selected_rect_id = None
+                self.selected_rect_ids.clear()
+                self.update_delete_button_state()
+            self.filter_name_entry.set("")
+            self.filter_desc_entry.set("")
+            self.filter_temp_entry.set("")
+            self.apply_filters()
+            self.update_rect_list()
+            self.update_canvas_visibility()
+            print(f"✓ 篩選保留後刪除：已刪除 {len(to_delete_ids)} 筆")
+        else:
+            # 否：取消篩選，清空輸入框，恢復顯示所有元器件
+            self.filter_name_entry.set("")
+            self.filter_desc_entry.set("")
+            self.filter_temp_entry.set("")
+            self.apply_filters()
+            self.update_rect_list()
+            self.update_canvas_visibility()
+        return True
+
+    def _on_right_click_with_filter_check(self, event):
+        """右鍵點擊時檢查是否有篩選條件生效，若有則詢問使用者處理方式"""
+        if self._show_filter_confirm_dialog():
+            return
+        self.editor_rect.on_right_click_start(event)
+
+    def _on_mousewheel_with_filter_check(self, event):
+        """滾輪縮放時檢查是否有篩選條件生效，若有則詢問使用者處理方式"""
+        # 只在放大鏡模式啟用時才需要攔截（非放大鏡模式滾輪不觸發縮放）
+        if not (hasattr(self, 'editor_rect') and self.editor_rect and self.editor_rect.magnifier_mode_enabled):
+            return self.editor_rect.on_mouse_wheel(event) if hasattr(self, 'editor_rect') and self.editor_rect else None
+        if self._show_filter_confirm_dialog():
+            return "break"
+        return self.editor_rect.on_mouse_wheel(event)
 
     def on_zoom_change(self):
         """縮放變化時的回調，重新繪製 Canvas"""
@@ -3578,7 +3670,7 @@ class EditorCanvas:
             c_padding_bottom = pcb_config.get('c_padding_bottom', 0) # Layout图下padding
             
             # 获取温度数据
-            temp_data = self.parent.tempALoader.get_temp_data() if hasattr(self.parent.tempALoader, 'get_temp_data') else None
+            temp_data = self.parent.tempALoader.get_tempA() if hasattr(self.parent, 'tempALoader') and self.parent.tempALoader else None
             
             # 获取Layout图像（如果有的话）
             layout_image = getattr(self.parent, 'imageB', None)

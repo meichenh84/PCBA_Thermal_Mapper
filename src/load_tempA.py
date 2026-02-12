@@ -137,7 +137,7 @@ class TempLoader:
             print("-->>> tempA loaded from Excel, size:", self._tempA.shape)
         elif file_extension == '.csv':
             encoding, sep = self._detect_csv_encoding_and_sep()
-            self._tempA = pd.read_csv(self._file_path, encoding=encoding, sep=sep).values
+            self._tempA = pd.read_csv(self._file_path, encoding=encoding, sep=sep, header=None).values
             print(f"-->>> tempA loaded from CSV (encoding={encoding}, sep={repr(sep)}), size:", self._tempA.shape)
         else:
             raise ValueError("Unsupported file type. Please use .xlsx or .csv files.")

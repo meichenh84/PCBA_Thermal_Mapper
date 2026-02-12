@@ -538,21 +538,24 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
     name_font_size = config.get("heat_name_font_size", 12)
     temp_font_size = config.get("heat_temp_font_size", 10)
 
-    # 转换十六进制颜色为RGB元组
+    # 轉換十六進制顏色
     def hex_to_rgb(hex_color):
+        """回傳 (R, G, B)，供 PIL 繪製文字使用。"""
         hex_color = hex_color.lstrip('#')
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
-    rectColor = hex_to_rgb(rect_color_hex)
-    textColor = hex_to_rgb(name_color_hex)
-    tempColor = hex_to_rgb(temp_color_hex)
-    shadowColor = (0, 0, 0)
+    def hex_to_bgr(hex_color):
+        """回傳 (B, G, R)，供 OpenCV 繪製圖形使用。"""
+        r, g, b = hex_to_rgb(hex_color)
+        return (b, g, r)
 
-    try:
-        font = ImageFont.truetype("font/msyh.ttc", int(20 * textScale))
-        print("Font loaded successfully.")
-    except IOError as e:
-        font = ImageFont.load_default()
+    # OpenCV 繪圖用 BGR（矩形框、三角形、描邊）
+    rectColor = hex_to_bgr(rect_color_hex)
+    tempColor = hex_to_bgr(temp_color_hex)
+    shadowColor = (0, 0, 0)
+    # PIL 繪文字用 RGB（元器件名稱、溫度數值）
+    textColor = hex_to_rgb(name_color_hex)
+    tempTextColor = hex_to_rgb(temp_color_hex)
 
     # 获取图像尺寸
     img_height, img_width = imageA.shape[:2]
@@ -640,9 +643,9 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
         pil_image = Image.fromarray(cv2.cvtColor(imageA, cv2.COLOR_BGR2RGB))
         draw = ImageDraw.Draw(pil_image)
 
-        # 使用配置的字体大小
-        name_font_scale = (name_font_size / 12.0) * 20 * textScale
-        temp_font_scale = (temp_font_size / 10.0) * 20 * textScale
+        # 使用配置的字型大小（與 EditorCanvas 一致，直接用原始影像座標）
+        name_font_scale = name_font_size
+        temp_font_scale = temp_font_size
         
         # 创建字体对象
         try:
@@ -659,7 +662,7 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
         tw = temp_bbox[2] - temp_bbox[0]
         th = temp_bbox[3] - temp_bbox[1]
         tri_half = size / 2
-        dx, dy = calc_temp_text_offset(direction, tri_half, tw, th)
+        dx, dy = calc_temp_text_offset(direction, tri_half, tw, th, gap=3)
         # 從中心偏移轉換為 PIL 左上角座標
         temp_text_x = int(cx + dx - tw / 2)
         temp_text_y = int(cy + dy - th / 2)
@@ -687,7 +690,7 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
                 # 溫度文字 4 方向描邊
                 for odx, ody in OUTLINE_OFFSETS:
                     draw.text((temp_text_x + odx, temp_text_y + ody), temp_text_str, font=temp_font, fill=shadowColor)
-                draw.text((temp_text_x, temp_text_y), temp_text_str, font=temp_font, fill=tempColor)
+                draw.text((temp_text_x, temp_text_y), temp_text_str, font=temp_font, fill=tempTextColor)
             else:
                 print(f"警告：温度文本 {name} 超出Layout图边界，跳过绘制")
 
@@ -703,7 +706,7 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
             # 热力图直接绘制文本 — 溫度文字 4 方向描邊
             for odx, ody in OUTLINE_OFFSETS:
                 draw.text((temp_text_x + odx, temp_text_y + ody), temp_text_str, font=temp_font, fill=shadowColor)
-            draw.text((temp_text_x, temp_text_y), temp_text_str, font=temp_font, fill=tempColor)
+            draw.text((temp_text_x, temp_text_y), temp_text_str, font=temp_font, fill=tempTextColor)
             # 名稱文字 4 方向描邊
             for odx, ody in OUTLINE_OFFSETS:
                 draw.text((name_text_x + odx, name_text_y + ody), name, font=name_font, fill=shadowColor)

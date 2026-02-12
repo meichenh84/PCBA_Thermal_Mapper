@@ -1030,10 +1030,37 @@ class ResizableImagesApp:
             from tkinter import messagebox
             messagebox.showerror("错误", f"选择文件失败: {e}")
     
+    def _validate_image_temp_dimensions(self):
+        """比對熱力圖影像與溫度數據的解析度尺寸是否一致。
+
+        當兩者都已載入時，比較熱力圖的像素尺寸與溫度矩陣的行列數。
+        若不一致則彈出警告對話框，提示使用者溫度座標對應可能不正確。
+        """
+        if self.imageA is None:
+            return
+        if not hasattr(self, 'tempALoader') or self.tempALoader is None:
+            return
+        temp_data = self.tempALoader.get_tempA()
+        if temp_data is None:
+            return
+
+        img_w, img_h = self.imageA.size        # PIL: (width, height)
+        temp_h, temp_w = temp_data.shape        # NumPy: (rows, cols) = (height, width)
+
+        if img_w != temp_w or img_h != temp_h:
+            msg = (
+                f"熱力圖影像與溫度數據的解析度不一致：\n\n"
+                f"  熱力圖影像：{img_w} × {img_h}\n"
+                f"  溫度數據：    {temp_w} × {temp_h}\n\n"
+                f"溫度座標對應可能會不正確，請確認檔案是否匹配。"
+            )
+            messagebox.showwarning("解析度不一致", msg)
+
     def load_temperature_file(self, file_path):
         """同步載入溫度數據檔案（CSV 或 XLSX 格式）。
 
         建立 TempLoader 實例並設定全域溫度檔案路徑。
+        載入後會自動比對熱力圖影像的解析度是否一致。
 
         參數：
             file_path (str): 溫度數據檔案的完整路徑
@@ -1045,11 +1072,12 @@ class ResizableImagesApp:
                 # 更新TempLoader的文件路径
                 self.tempALoader = TempLoader(file_path)
                 print(f"已加载温度数据文件: {file_path}")
+                self._validate_image_temp_dimensions()
             else:
                 print(f"不支持的文件格式: {file_path}")
         except Exception as e:
             messagebox.showerror("错误", f"加载温度数据文件失败: {e}")
-    
+
     def load_temperature_file_async(self, file_path):
         """在子執行緒中非同步載入溫度數據檔案，避免阻塞 UI。
 
@@ -1065,6 +1093,8 @@ class ResizableImagesApp:
                     # 更新TempLoader的文件路径
                     self.tempALoader = TempLoader(file_path)
                     print(f"异步加载温度数据完成: {file_path}")
+                    # 在主執行緒中比對解析度
+                    self.root.after(0, self._validate_image_temp_dimensions)
                 else:
                     print(f"不支持的文件格式: {file_path}")
             except Exception as e:
@@ -2512,7 +2542,7 @@ class ResizableImagesApp:
             imageA_input = cv2.cvtColor(np.array(self.imageA), cv2.COLOR_RGB2BGR)
             imageA_output = draw_numpy_image_item(imageA_input, self.mark_rect_A)
             image_path = os.path.join(output_dir, "A.jpg")
-            Image.fromarray(cv2.cvtColor(imageA_output, cv2.COLOR_BGR2RGB)).save(image_path)
+            Image.fromarray(cv2.cvtColor(imageA_output, cv2.COLOR_BGR2RGB)).save(image_path, quality=100)
 
             #输出日志
             self.edit_log["final_mark"][1] = len(self.mark_rect_A)
@@ -2616,6 +2646,8 @@ class ResizableImagesApp:
                 # 切换热力图后，清空对应打点，避免误判有点位
                 self.points_A = []
                 print(f"成功加载热力图: {path}")
+                # 比對熱力圖與溫度數據的解析度
+                self._validate_image_temp_dimensions()
             elif index == 1:
                 self.imageB = Image.open(path)
                 # 直接使用原图，不再强制缩放
