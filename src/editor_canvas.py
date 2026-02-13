@@ -1716,7 +1716,7 @@ class EditorCanvas:
 
         # ========== Row 0: 保存並關閉 + ⓘ ==========
         save_close_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        save_close_frame.grid(row=0, column=0, pady=(0, 8), padx=10, sticky="ew")
+        save_close_frame.grid(row=0, column=0, pady=(0, 3), padx=10, sticky="ew")
         self._save_close_button = tk.Button(
             save_close_frame,
             text="保存並關閉",
@@ -1751,10 +1751,11 @@ class EditorCanvas:
             font=UIStyle.BUTTON_FONT,
             height=1,
             bg=UIStyle.GRAY,
-            fg=UIStyle.BLACK,
+            fg=UIStyle.DARK_GRAY,
             relief=UIStyle.BUTTON_RELIEF,
             bd=UIStyle.BUTTON_BORDER_WIDTH,
-            command=self.on_reset
+            command=self.on_reset,
+            state=tk.DISABLED
         )
         self._reset_button.pack(side='left', expand=True, fill='x')
         reset_info_label = tk.Label(
@@ -1805,11 +1806,12 @@ class EditorCanvas:
             text="合并 ➕",
             font=UIStyle.BUTTON_FONT,
             height=1,
-            bg=UIStyle.PRIMARY_BLUE,
-            fg=UIStyle.WHITE,
+            bg=UIStyle.GRAY,
+            fg=UIStyle.DARK_GRAY,
             relief=UIStyle.BUTTON_RELIEF,
             bd=UIStyle.BUTTON_BORDER_WIDTH,
-            command=self.on_merge_rects
+            command=self.on_merge_rects,
+            state=tk.DISABLED
         )
         self.merge_button.pack(side='left', expand=True, fill='x')
         merge_info_label = tk.Label(
@@ -1826,17 +1828,18 @@ class EditorCanvas:
 
         # ========== Row 4: 刪除 + ⓘ ==========
         delete_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        delete_frame.grid(row=4, column=0, pady=(0, 8), padx=10, sticky="ew")
+        delete_frame.grid(row=4, column=0, pady=(0, 3), padx=10, sticky="ew")
         self.delete_button = tk.Button(
             delete_frame,
             text="删除 ❌",
             font=UIStyle.BUTTON_FONT,
             height=1,
-            bg=UIStyle.DANGER_RED,
-            fg=UIStyle.WHITE,
+            bg=UIStyle.GRAY,
+            fg=UIStyle.DARK_GRAY,
             relief=UIStyle.BUTTON_RELIEF,
             bd=UIStyle.BUTTON_BORDER_WIDTH,
-            command=self.on_delete_rect
+            command=self.on_delete_rect,
+            state=tk.DISABLED
         )
         self.delete_button.pack(side='left', expand=True, fill='x')
         delete_info_label = tk.Label(
@@ -1853,7 +1856,7 @@ class EditorCanvas:
 
         # ========== Row 5: 形狀轉換標籤 + ⓘ ==========
         shape_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        shape_label_frame.grid(row=5, column=0, pady=(5, 2), padx=10, sticky="w")
+        shape_label_frame.grid(row=5, column=0, pady=(8, 2), padx=10, sticky="w")
 
         shape_label = tk.Label(
             shape_label_frame,
@@ -1884,35 +1887,37 @@ class EditorCanvas:
             delay=200
         )
 
-        # ========== Row 6: 轉為矩形 ==========
+        # ========== Row 6: 轉為矩形 + 轉為圓形（同一列） ==========
+        shape_btn_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        shape_btn_frame.grid(row=6, column=0, pady=(0, 3), padx=10, sticky="ew")
+
         self.convert_to_rect_button = tk.Button(
-            button_container,
+            shape_btn_frame,
             text="轉為矩形 ⬜",
             font=UIStyle.BUTTON_FONT,
-            height=2,
-            bg=UIStyle.SUCCESS_GREEN,
-            fg=UIStyle.WHITE,
+            height=1,
+            bg=UIStyle.GRAY,
+            fg=UIStyle.DARK_GRAY,
             relief=UIStyle.BUTTON_RELIEF,
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=lambda: self.on_convert_shape("rectangle"),
             state=tk.DISABLED
         )
-        self.convert_to_rect_button.grid(row=6, column=0, pady=3, padx=10, sticky="ew")
+        self.convert_to_rect_button.pack(side='left', expand=True, fill='x', padx=(0, 2))
 
-        # ========== Row 7: 轉為圓形 ==========
         self.convert_to_circle_button = tk.Button(
-            button_container,
+            shape_btn_frame,
             text="轉為圓形 ⚪",
             font=UIStyle.BUTTON_FONT,
-            height=2,
-            bg=UIStyle.WARNING_ORANGE,
-            fg=UIStyle.WHITE,
+            height=1,
+            bg=UIStyle.GRAY,
+            fg=UIStyle.DARK_GRAY,
             relief=UIStyle.BUTTON_RELIEF,
             bd=UIStyle.BUTTON_BORDER_WIDTH,
             command=lambda: self.on_convert_shape("circle"),
             state=tk.DISABLED
         )
-        self.convert_to_circle_button.grid(row=7, column=0, pady=3, padx=10, sticky="ew")
+        self.convert_to_circle_button.pack(side='left', expand=True, fill='x', padx=(2, 0))
 
         # ========== Row 8: 溫度位置標籤 + ⓘ ==========
         temp_dir_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
@@ -2640,6 +2645,7 @@ class EditorCanvas:
         if len(self._undo_stack) > 3:
             self._undo_stack.pop(0)
         self._update_undo_button_state()
+        self._update_reset_button_state()
 
     def on_undo(self):
         """回到上一步：從歷史堆疊彈出最後一筆快照並恢復。"""
@@ -2713,17 +2719,47 @@ class EditorCanvas:
         self.apply_filters()
         self.update_rect_list()
         self._update_undo_button_state()
+        self._update_reset_button_state()
         print("↩ 已回到起點")
 
     def _update_undo_button_state(self):
-        """更新復原按鈕的啟用狀態與計數顯示。"""
+        """更新復原按鈕的啟用狀態、計數顯示與顏色。"""
         if not hasattr(self, '_undo_button'):
             return
         n = len(self._undo_stack)
-        self._undo_button.config(
-            text=f"回到上一步 ({n}/3)",
-            state=tk.NORMAL if n > 0 else tk.DISABLED,
-        )
+        if n > 0:
+            self._undo_button.config(
+                text=f"回到上一步 ({n}/3)",
+                state=tk.NORMAL,
+                bg=UIStyle.SUCCESS_GREEN,
+                fg=UIStyle.WHITE,
+            )
+        else:
+            self._undo_button.config(
+                text=f"回到上一步 ({n}/3)",
+                state=tk.DISABLED,
+                bg=UIStyle.GRAY,
+                fg=UIStyle.BLACK,
+            )
+
+    def _update_reset_button_state(self):
+        """更新回到起點按鈕的啟用狀態：有編輯動作時綠色，無編輯或已重置時灰色。"""
+        if not hasattr(self, '_reset_button'):
+            return
+        # 有 undo 歷史 代表有過編輯動作
+        has_edits = len(self._undo_stack) > 0
+        if has_edits:
+            self._reset_button.config(
+                state=tk.NORMAL,
+                bg=UIStyle.SUCCESS_GREEN,
+                fg=UIStyle.WHITE,
+            )
+        else:
+            self._reset_button.config(
+                state=tk.DISABLED,
+                bg=UIStyle.GRAY,
+                fg=UIStyle.DARK_GRAY,
+            )
 
     def _has_active_filter(self):
         """檢查是否有篩選條件正在生效"""
@@ -2928,18 +2964,21 @@ class EditorCanvas:
         self._update_rotation_state_for_selection()
 
     def update_shape_buttons_state(self):
-        """更新形狀轉換按鈕的啟用/禁用狀態"""
+        """更新形狀轉換按鈕的啟用/禁用狀態與顏色"""
         has_selection = (
             (self.selected_rect_id is not None) or
             (len(self.selected_rect_ids) > 0)
         )
 
-        state = tk.NORMAL if has_selection else tk.DISABLED
+        if has_selection:
+            btn_state, bg, fg = tk.NORMAL, UIStyle.SUCCESS_GREEN, UIStyle.WHITE
+        else:
+            btn_state, bg, fg = tk.DISABLED, UIStyle.GRAY, UIStyle.DARK_GRAY
 
         if hasattr(self, 'convert_to_rect_button'):
-            self.convert_to_rect_button.config(state=state)
+            self.convert_to_rect_button.config(state=btn_state, bg=bg, fg=fg)
         if hasattr(self, 'convert_to_circle_button'):
-            self.convert_to_circle_button.config(state=state)
+            self.convert_to_circle_button.config(state=btn_state, bg=bg, fg=fg)
 
     # ========== 九宮格溫度位置控制 ==========
 
@@ -3836,8 +3875,8 @@ class EditorCanvas:
             # 支持单选和多选两种模式
             has_selection = (self.selected_rect_id is not None) or (len(self.selected_rect_ids) > 0)
             if has_selection:
-                # 有选中的矩形框，按钮可用（红色）
-                self.delete_button.config(state='normal', bg=UIStyle.DANGER_RED, fg=UIStyle.WHITE)
+                # 有选中的矩形框，按钮可用（绿色）
+                self.delete_button.config(state='normal', bg=UIStyle.SUCCESS_GREEN, fg=UIStyle.WHITE)
             else:
                 # 无选中的矩形框，按钮灰色不可用
                 self.delete_button.config(state='disabled', bg=UIStyle.GRAY, fg=UIStyle.DARK_GRAY)
@@ -3852,8 +3891,8 @@ class EditorCanvas:
         if hasattr(self, 'merge_button'):
             # 只有选中多于1个矩形框时才可用
             if len(self.selected_rect_ids) > 1:
-                # 有多个选中的矩形框，按钮可用（蓝色）
-                self.merge_button.config(state='normal', bg=UIStyle.PRIMARY_BLUE, fg=UIStyle.WHITE)
+                # 有多个选中的矩形框，按钮可用（绿色）
+                self.merge_button.config(state='normal', bg=UIStyle.SUCCESS_GREEN, fg=UIStyle.WHITE)
             else:
                 # 选中≤1个矩形框，按钮灰色不可用
                 self.merge_button.config(state='disabled', bg=UIStyle.GRAY, fg=UIStyle.DARK_GRAY)
@@ -3924,7 +3963,7 @@ class EditorCanvas:
         if not hasattr(self, 'delete_others_btn'):
             return
         if has_filter and filtered_count < total_count:
-            self.delete_others_btn.config(state='normal', bg=UIStyle.DANGER_RED, fg=UIStyle.WHITE)
+            self.delete_others_btn.config(state='normal', bg=UIStyle.SUCCESS_GREEN, fg=UIStyle.WHITE)
         else:
             self.delete_others_btn.config(state='disabled', bg=UIStyle.GRAY, fg=UIStyle.DARK_GRAY)
 
