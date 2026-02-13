@@ -213,6 +213,7 @@ class ResizableImagesApp:
         # Layout 數據相關變數
         self.layout_data = None  # 儲存解析後的 Layout 元器件數據（list of dict，含 RefDes、座標、尺寸等）
         self._xlsx_columns_cache = {}  # xlsx 欄位快取，供 _validate_layout_data() 使用
+        self._category_warnings = set()  # 有驗證問題的分類名稱集合（用於顯示 ❗ 標記）
         self._tree_tooltip = None  # Treeview tooltip 視窗
         self._tree_tooltip_item = None  # 當前 tooltip 對應的 item
 
@@ -438,7 +439,8 @@ class ResizableImagesApp:
 
         # 清空Layout数据
         self.layout_data = None
-        
+        self._category_warnings = set()
+
         print("已清空内存中的旧数据，准备加载新文件夹数据")
     
     
@@ -494,9 +496,17 @@ class ResizableImagesApp:
                 if self.folder_files[category]:
                     self.current_files[category] = self.folder_files[category][0]
 
-            # 驗證 Layout 數據檔案完整性
+            # 驗證 Layout 數據檔案完整性，並記錄有問題的分類
+            self._category_warnings = set()
             warning_msg = validate_layout_data(self.folder_files, self._xlsx_columns_cache)
             if warning_msg:
+                # 判斷哪個分類有問題
+                has_xy = len(self.folder_files.get("layoutXY", [])) > 0
+                has_lwt = len(self.folder_files.get("layoutLWT", [])) > 0
+                if has_xy and not has_lwt:
+                    self._category_warnings.add("layoutXY")
+                elif has_lwt and not has_xy:
+                    self._category_warnings.add("layoutLWT")
                 self.root.after(200, lambda: messagebox.showwarning("Layout 數據檢查", warning_msg))
 
             # 掃描完成後，自動載入可用的圖片
@@ -577,11 +587,12 @@ class ResizableImagesApp:
                 if files:
                     # 统一标题长度，让图标对齐
                     category_names = {"heat": "熱力圖", "layout": "Layout圖", "heatTemp": "溫度數據", "layoutXY": "元器件座標", "layoutLWT": "元器件尺寸", "testReport": "測試報告"}
-                    category_spaces = {"heat": 31.7, "layout": 32, "heatTemp": 29, "layoutXY": 27, "layoutLWT": 27, "testReport": 27}
+                    category_spaces = {"heat": 32, "layout": 32, "heatTemp": 29, "layoutXY": 27, "layoutLWT": 27, "testReport": 27}
                     category_name = category_names[category]
-                    # 父标题显示选择图标在右侧，使用固定宽度确保图标对齐
-                    # 为heat和layout添加额外空格，让图标对齐
-                    base_text = f"{category_name} ({len(files)})"
+                    # 根據驗證結果顯示 ✅ 或 ❗ 標記
+                    warned = hasattr(self, '_category_warnings') and category in self._category_warnings
+                    status_icon = " ❗" if warned else " ✅"
+                    base_text = f"{category_name} ({len(files)}){status_icon}"
                     display_text = f"{base_text:<{category_spaces[category]}}📁"
                     category_item = self.folder_tree.insert("", "end", text=display_text, values=(category, ""))
                     
@@ -1063,6 +1074,9 @@ class ResizableImagesApp:
         temp_h, temp_w = temp_data.shape        # NumPy: (rows, cols) = (height, width)
 
         if img_w != temp_w or img_h != temp_h:
+            self._category_warnings.add("heat")
+            self._category_warnings.add("heatTemp")
+            self.update_folder_display()
             msg = (
                 f"熱力圖影像與溫度數據的解析度不一致：\n\n"
                 f"  熱力圖影像：{img_w} × {img_h}\n"
@@ -1070,6 +1084,11 @@ class ResizableImagesApp:
                 f"溫度座標對應可能會不正確，請確認檔案是否匹配。"
             )
             messagebox.showwarning("解析度不一致", msg)
+        else:
+            # 解析度一致時，移除之前可能存在的警告
+            self._category_warnings.discard("heat")
+            self._category_warnings.discard("heatTemp")
+            self.update_folder_display()
 
     def load_temperature_file(self, file_path):
         """同步載入溫度數據檔案（CSV 或 XLSX 格式）。
