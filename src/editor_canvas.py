@@ -3830,6 +3830,13 @@ class EditorCanvas:
         print(f">>> 右键选单已禁用（字体设置请使用主界面的「设置」按钮）")
 
     def on_window_close(self):
+        # 篩選條件生效時，詢問使用者是否刪除其他
+        if self._has_active_filter():
+            result = self._show_filter_confirm_dialog()
+            if result is False:
+                # 使用者選「否」→ 已取消篩選，中止關閉讓使用者重新檢視
+                return
+
         # 检查editor_rect属性是否存在
         if hasattr(self, 'editor_rect') and self.editor_rect is not None:
             # 关闭前先按器件名称排序
