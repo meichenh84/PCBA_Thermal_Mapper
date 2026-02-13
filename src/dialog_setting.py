@@ -85,7 +85,7 @@ class SettingDialog:
         y = self.settings_button.winfo_rooty() + self.settings_button.winfo_height() + 5  # 按钮下方的位置
 
         # 设置对话框的位置和大小
-        self.dialog.geometry(f"500x600+{x}+{y}")
+        self.dialog.geometry(f"500x660+{x}+{y}")
 
         # 创建主框架
         main_frame = tk.Frame(self.dialog)
@@ -114,6 +114,8 @@ class SettingDialog:
         self.create_color_setting(heat_frame, "选中矩形框锚点颜色", "heat_anchor_color", "#FF0000", 6)
         # 选中矩形框锚点半径
         self.create_font_setting(heat_frame, "选中矩形框锚点半径(px)", "heat_anchor_radius", 4, 7)
+        # 矩形框线粗细
+        self.create_width_setting(heat_frame, "矩形框线粗细(px)", "heat_rect_width", 2, 8)
 
         # Layout图标记设置
         layout_frame = ttk.LabelFrame(main_frame, text="Layout图标记", padding=8)
@@ -129,6 +131,8 @@ class SettingDialog:
         self.create_color_setting(layout_frame, "最高温度颜色", "layout_temp_color", "#FF0000", 3)
         # 最高温度字体大小
         self.create_font_setting(layout_frame, "最高温度字体大小(px)", "layout_temp_font_size", 10, 4)
+        # 矩形框线粗细
+        self.create_width_setting(layout_frame, "矩形框线粗细(px)", "layout_rect_width", 2, 5)
 
         # 确认按钮
         button_frame = tk.Frame(main_frame)
@@ -157,13 +161,15 @@ class SettingDialog:
             "heat_selected_color": self.config.get("heat_selected_color", "#4A90E2"),
             "heat_anchor_color": self.config.get("heat_anchor_color", "#FF0000"),
             "heat_anchor_radius": self.config.get("heat_anchor_radius", 4),
-            
+            "heat_rect_width": self.config.get("heat_rect_width", 2),
+
             # Layout图标记
             "layout_rect_color": self.config.get("layout_rect_color", "#BCBCBC"),
             "layout_name_color": self.config.get("layout_name_color", "#FFFFFF"),
             "layout_name_font_size": self.config.get("layout_name_font_size", 12),
             "layout_temp_color": self.config.get("layout_temp_color", "#FF0000"),
             "layout_temp_font_size": self.config.get("layout_temp_font_size", 10),
+            "layout_rect_width": self.config.get("layout_rect_width", 2),
         }
 
     def create_color_setting(self, parent, label_text, config_key, default_color, row):
@@ -256,6 +262,40 @@ class SettingDialog:
 
         # 绑定输入框变化事件
         value_entry.bind('<KeyRelease>', lambda e: update_font_value())
+
+    def create_width_setting(self, parent, label_text, config_key, default_value, row):
+        """建立框線粗細設定控件（標籤 + 下拉選單 1~5）。
+
+        Args:
+            parent (tk.Widget): 父元件
+            label_text (str): 設定項目名稱
+            config_key (str): 配置鍵名（如 "heat_rect_width"）
+            default_value (int): 預設粗細值
+            row (int): Grid 行號
+        """
+        frame = tk.Frame(parent)
+        frame.grid(row=row, column=0, sticky="ew", padx=5, pady=2)
+        parent.grid_columnconfigure(0, weight=1)
+
+        # 标签
+        label = tk.Label(frame, text=label_text, width=20, anchor="w")
+        label.pack(side=tk.LEFT, padx=(0, 10))
+
+        # 下拉选单
+        current_value = self.color_settings.get(config_key, default_value)
+        width_var = tk.StringVar(value=str(int(current_value)))
+        width_combo = ttk.Combobox(frame, textvariable=width_var, values=["1", "2", "3", "4", "5"],
+                                   width=7, state="readonly")
+        width_combo.pack(side=tk.LEFT, padx=(0, 5))
+
+        def on_width_change(event=None):
+            try:
+                value = int(width_var.get())
+                self.color_settings[config_key] = value
+            except ValueError:
+                pass
+
+        width_combo.bind('<<ComboboxSelected>>', on_width_change)
 
     def on_confirm(self):
         """確認按鈕點擊事件。儲存所有設定至 config.json 並通知主介面刷新。"""

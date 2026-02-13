@@ -137,6 +137,7 @@ class GlobalConfig:
             "heat_name_font_size": 28,              # 熱力圖 - 元器件名稱字型大小
             "heat_temp_color": "#FF0000",           # 熱力圖 - 最高溫度顏色
             "heat_temp_font_size": 14,              # 熱力圖 - 最高溫度字型大小
+            "heat_rect_width": 2,                   # 熱力圖 - 矩形框線粗細 (1~5)
             "heat_selected_color": "#4A90E2",       # 熱力圖 - 選中矩形框顏色
             "heat_anchor_color": "#FF0000",         # 熱力圖 - 選中矩形框錨點顏色
             "heat_anchor_radius": 4,                # 熱力圖 - 選中矩形框錨點半徑
@@ -147,6 +148,7 @@ class GlobalConfig:
             "layout_name_font_size": 28,            # Layout 圖 - 元器件名稱字型大小
             "layout_temp_color": "#FF0000",         # Layout 圖 - 最高溫度顏色
             "layout_temp_font_size": 14,            # Layout 圖 - 最高溫度字型大小
+            "layout_rect_width": 2,                 # Layout 圖 - 矩形框線粗細 (1~5)
         }
 
     def update(self, newObj):

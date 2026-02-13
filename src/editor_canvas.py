@@ -1219,18 +1219,19 @@ class EditorCanvas:
     def set_all_rects_unselected(self):
         """将所有矩形设置为未选中状态（灰色边框）"""
         if hasattr(self, 'editor_rect') and self.editor_rect:
-            # 从配置中读取矩形框颜色
+            # 从配置中读取矩形框颜色和粗细
             from config import GlobalConfig
             config = GlobalConfig()
             rect_color = config.get("heat_rect_color", "#BCBCBC")
-            
+            rect_width = config.get("heat_rect_width", 2)
+
             # 遍历所有矩形，确保都设置为未选中状态（修复多个蓝色框问题）
             for rect in self.editor_rect.rectangles:
                 rect_id = rect.get('rectId')
                 if rect_id:
                     try:
-                        # 设置为配置的矩形框颜色，宽度2
-                        self.canvas.itemconfig(rect_id, outline=rect_color, width=2)
+                        # 设置为配置的矩形框颜色和粗细
+                        self.canvas.itemconfig(rect_id, outline=rect_color, width=rect_width)
                     except tk.TclError:
                         # 如果矩形不存在，忽略错误
                         continue
@@ -1253,14 +1254,15 @@ class EditorCanvas:
                         self.editor_rect.drag_data["tempTextId"] = rect.get("tempTextId")
                         break
             
-            # 从配置中读取选中矩形框颜色
+            # 从配置中读取选中矩形框颜色和粗细
             from config import GlobalConfig
             config = GlobalConfig()
             selected_color = config.get("heat_selected_color", "#4A90E2")
-            
+            rect_width = config.get("heat_rect_width", 2)
+
             # 设置选中矩形为配置的选中颜色边框
-            self.canvas.itemconfig(rect_id, outline=selected_color, width=2)
-            
+            self.canvas.itemconfig(rect_id, outline=selected_color, width=rect_width)
+
             # 不重新创建锚点，因为RectEditor已经创建了
             # 将矩形框移到最前面
             self.canvas.tag_raise(rect_id)
@@ -1289,14 +1291,15 @@ class EditorCanvas:
                     self.editor_rect.drag_data["tempTextId"] = rect.get("tempTextId")
                     break
             
-            # 从配置中读取选中矩形框颜色
+            # 从配置中读取选中矩形框颜色和粗细
             from config import GlobalConfig
             config = GlobalConfig()
             selected_color = config.get("heat_selected_color", "#4A90E2")
-            
+            rect_width = config.get("heat_rect_width", 2)
+
             # 设置选中矩形为配置的选中颜色边框
-            self.canvas.itemconfig(rect_id, outline=selected_color, width=2)
-            
+            self.canvas.itemconfig(rect_id, outline=selected_color, width=rect_width)
+
             # 为选中的矩形创建锚点（传递rect_id，create_anchors会从canvas获取坐标）
             self.editor_rect.create_anchors(rect_id)
             # 将矩形框移到最前面
@@ -1314,14 +1317,15 @@ class EditorCanvas:
         # 清除所有錨點（多選模式不顯示錨點）
         self.editor_rect.delete_anchors()
 
-        # 從配置中讀取選中顏色
+        # 從配置中讀取選中顏色和粗細
         from config import GlobalConfig
         config = GlobalConfig()
         selected_color = config.get("heat_selected_color", "#4A90E2")
+        rect_width = config.get("heat_rect_width", 2)
 
         # 高亮所有選中的矩形框
         for rect_id in rect_ids:
-            self.canvas.itemconfig(rect_id, outline=selected_color, width=2)
+            self.canvas.itemconfig(rect_id, outline=selected_color, width=rect_width)
             # 將矩形框移到最前面
             self.canvas.tag_raise(rect_id)
 
@@ -1547,10 +1551,11 @@ class EditorCanvas:
         self.selected_rect_ids = set(rect_ids)
         self.selected_rect_id = None  # 多選時清空單選ID
 
-        # 從配置中讀取選中顏色
+        # 從配置中讀取選中顏色和粗細
         from config import GlobalConfig
         config = GlobalConfig()
         selected_color = config.get("heat_selected_color", "#4A90E2")
+        rect_width = config.get("heat_rect_width", 2)
 
         # 🔥 修復：使用 Treeview API 高亮所有選中的列表項
         # rect_ids 是 Canvas rectId 列表，需要轉換為列表索引
@@ -1572,7 +1577,7 @@ class EditorCanvas:
         if hasattr(self, 'editor_rect') and self.editor_rect:
             self.set_all_rects_unselected()
             for rect_id in self.selected_rect_ids:
-                self.canvas.itemconfig(rect_id, outline=selected_color, width=2)
+                self.canvas.itemconfig(rect_id, outline=selected_color, width=rect_width)
 
         # 更新刪除按鈕狀態
         self.update_delete_button_state()

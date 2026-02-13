@@ -122,11 +122,13 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
         rect_color_hex = config.get("heat_rect_color", "#BCBCBC")
         name_color_hex = config.get("heat_name_color", "#FFFFFF")
         temp_color_hex = config.get("heat_temp_color", "#FF0000")
+        rectWidth = config.get("heat_rect_width", 2)
     else:
         # Layout图标记
         rect_color_hex = config.get("layout_rect_color", "#BCBCBC")
         name_color_hex = config.get("layout_name_color", "#FFFFFF")
         temp_color_hex = config.get("layout_temp_color", "#FF0000")
+        rectWidth = config.get("layout_rect_width", 2)
 
     # 两个canvas统一使用热力图的字体大小配置，确保文字大小完全一致
     name_font_size = config.get("heat_name_font_size", 12)
@@ -158,7 +160,7 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
         center_y = int((top + bottom) / 2)
         axis_x = int((right - left) / 2)
         axis_y = int((bottom - top) / 2)
-        cv2.ellipse(imageA, (center_x, center_y), (axis_x, axis_y), 0, 0, 360, rectColor, 1, cv2.LINE_AA)
+        cv2.ellipse(imageA, (center_x, center_y), (axis_x, axis_y), 0, 0, 360, rectColor, rectWidth, cv2.LINE_AA)
     elif angle != 0:
         geo_cx = (left + right) / 2
         geo_cy = (top + bottom) / 2
@@ -166,9 +168,9 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
         half_h = (bottom - top) / 2
         corners = get_rotated_corners(geo_cx, geo_cy, half_w, half_h, angle)
         pts = np.array(corners, np.int32).reshape((-1, 1, 2))
-        cv2.polylines(imageA, [pts], isClosed=True, color=rectColor, thickness=1, lineType=cv2.LINE_AA)
+        cv2.polylines(imageA, [pts], isClosed=True, color=rectColor, thickness=rectWidth, lineType=cv2.LINE_AA)
     else:
-        cv2.rectangle(imageA, (left, top), (right, bottom), rectColor, 1, cv2.LINE_AA)
+        cv2.rectangle(imageA, (left, top), (right, bottom), rectColor, rectWidth, cv2.LINE_AA)
     # 计算三角形的三个顶点
     center = (cx, cy)
     # 顶点1 (尖角)
@@ -299,23 +301,25 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
         rectColor = config.get("heat_rect_color", "#BCBCBC")
         textColor = config.get("heat_name_color", "#FFFFFF")
         tempColor = config.get("heat_temp_color", "#FF0000")
+        rectWidth = config.get("heat_rect_width", 2)
     else:
         # Layout图标记
         rectColor = config.get("layout_rect_color", "#BCBCBC")
         textColor = config.get("layout_name_color", "#FFFFFF")
         tempColor = config.get("layout_temp_color", "#FF0000")
+        rectWidth = config.get("layout_rect_width", 2)
 
     # 两个canvas统一使用热力图的字体大小配置，确保文字大小完全一致
     name_font_size = config.get("heat_name_font_size", 12)
     temp_font_size = config.get("heat_temp_font_size", 10)
-    
+
     shadowColor = "#000000"  # 黑色
 
     # 绘制形状（矩形或圆形，支援旋轉）
     shape = item.get("shape", "rectangle")  # 預設為矩形
     angle = item.get("angle", 0)
     if shape == "circle":
-        rectId = canvas.create_oval(left, top, right, bottom, outline=rectColor, width=2)
+        rectId = canvas.create_oval(left, top, right, bottom, outline=rectColor, width=rectWidth)
     elif angle != 0:
         # 旋轉矩形：用 create_polygon 替代 create_rectangle
         geo_cx = (left + right) / 2
@@ -324,9 +328,9 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
         half_h = (bottom - top) / 2
         corners = get_rotated_corners(geo_cx, geo_cy, half_w, half_h, angle)
         flat = corners_to_flat(corners)
-        rectId = canvas.create_polygon(flat, outline=rectColor, fill='', width=2)
+        rectId = canvas.create_polygon(flat, outline=rectColor, fill='', width=rectWidth)
     else:
-        rectId = canvas.create_rectangle(left, top, right, bottom, outline=rectColor, width=2)
+        rectId = canvas.create_rectangle(left, top, right, bottom, outline=rectColor, width=rectWidth)
 
     # 计算三角形的三个顶点
     point1 = (cx, cy - size // 2)  # 顶点1 (尖角)
@@ -538,11 +542,13 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
         rect_color_hex = config.get("heat_rect_color", "#BCBCBC")
         name_color_hex = config.get("heat_name_color", "#FFFFFF")
         temp_color_hex = config.get("heat_temp_color", "#FF0000")
+        rectWidth = config.get("heat_rect_width", 2)
     else:
         # Layout图标记
         rect_color_hex = config.get("layout_rect_color", "#BCBCBC")
         name_color_hex = config.get("layout_name_color", "#FFFFFF")
         temp_color_hex = config.get("layout_temp_color", "#FF0000")
+        rectWidth = config.get("layout_rect_width", 2)
 
     # 两个canvas统一使用热力图的字体大小配置，确保文字大小完全一致
     name_font_size = config.get("heat_name_font_size", 12)
@@ -598,7 +604,7 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
             center_y = int((top + bottom) / 2)
             axis_x = int((right - left) / 2)
             axis_y = int((bottom - top) / 2)
-            cv2.ellipse(imageA, (center_x, center_y), (axis_x, axis_y), 0, 0, 360, rectColor, 1, cv2.LINE_AA)
+            cv2.ellipse(imageA, (center_x, center_y), (axis_x, axis_y), 0, 0, 360, rectColor, rectWidth, cv2.LINE_AA)
         elif angle != 0:
             geo_cx_draw = (left + right) / 2
             geo_cy_draw = (top + bottom) / 2
@@ -606,9 +612,9 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
             half_h_draw = (bottom - top) / 2
             rot_corners = get_rotated_corners(geo_cx_draw, geo_cy_draw, half_w_draw, half_h_draw, angle)
             rot_pts = np.array(rot_corners, np.int32).reshape((-1, 1, 2))
-            cv2.polylines(imageA, [rot_pts], isClosed=True, color=rectColor, thickness=1, lineType=cv2.LINE_AA)
+            cv2.polylines(imageA, [rot_pts], isClosed=True, color=rectColor, thickness=rectWidth, lineType=cv2.LINE_AA)
         else:
-            cv2.rectangle(imageA, (left, top), (right, bottom), rectColor, 1, cv2.LINE_AA)
+            cv2.rectangle(imageA, (left, top), (right, bottom), rectColor, rectWidth, cv2.LINE_AA)
 
         # 计算三角形的三个顶点
         center = (cx, cy)
