@@ -122,9 +122,9 @@ class EditorCanvas:
         self.last_selected_index = None  # 記錄最後一次選中的項目索引（用於 Shift + 點擊範圍選擇）
 
         # 功能開關變量
-        self.realtime_temp_enabled = True  # 即時溫度顯示模式（默認開啟）
+        self.realtime_temp_enabled = True  # 溫度座標顯示模式（默認開啟）
         self.magnifier_enabled = True  # 放大模式（默認開啟）
-        self.temp_label_id = None  # 即時溫度標籤ID
+        self.temp_label_id = None  # 溫度座標標籤ID
 
         # 排序相关变量
         self.sort_mode = "name_asc"  # 排序模式: "name_asc"=名称升序(默认), "temp_desc"=温度降序, "desc_asc"=描述升序
@@ -283,7 +283,7 @@ class EditorCanvas:
         # 同步多选模式状态到 editor_rect
         if hasattr(self, 'editor_rect') and self.editor_rect:
             self.editor_rect.multi_select_enabled = self.multi_select_enabled
-        # 即時溫度預設開啟時，綁定滑鼠移動事件
+        # 溫度座標預設開啟時，綁定滑鼠移動事件
         if self.realtime_temp_enabled and hasattr(self, 'dialog') and self.dialog:
             self.dialog.bind('<Motion>', self.on_canvas_motion_show_temp, add='+')
         # 應用預設排序（點位名稱 A~Z）
@@ -2066,14 +2066,14 @@ class EditorCanvas:
             "• 取消勾選自動恢復預設顯示"
         )
 
-        # ========== Row 14: 即時溫度 + ⓘ ==========
+        # ========== Row 14: 溫度座標 + ⓘ ==========
         realtime_temp_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
         realtime_temp_frame.grid(row=14, column=0, pady=(0, 8), padx=10, sticky="ew")
 
         self.realtime_temp_var = tk.BooleanVar(value=True)
         self.realtime_temp_checkbox = tk.Checkbutton(
             realtime_temp_frame,
-            text="即時溫度",
+            text="溫度座標",
             variable=self.realtime_temp_var,
             font=UIStyle.BUTTON_FONT,
             bg=UIStyle.VERY_LIGHT_BLUE,
@@ -2096,11 +2096,15 @@ class EditorCanvas:
         realtime_temp_info_label.pack(side='left', padx=(2, 0))
         Tooltip(
             realtime_temp_info_label,
-            "即時溫度功能說明：\n"
+            "溫度座標功能說明：\n"
             "勾選後，將滑鼠移動到熱力圖上\n"
-            "即可在游標旁邊顯示該位置的溫度值\n"
-            "（黃色背景 + 紅色文字）\n\n"
-            "溫度標籤會自動跟隨游標移動\n"
+            "即可在游標旁邊顯示該位置的溫度與座標\n"
+            "格式：溫度(X, Y)\n\n"
+            "座標根據溫度篩選設定的起始座標方向計算\n"
+            "例如：設定「左下」則左下角為 (0, 0)\n"
+            "X 向右遞增、Y 向上遞增\n\n"
+            "標籤會自動跟隨游標移動\n"
+            "靠近邊界時自動翻轉顯示方向\n"
             "移出熱力圖範圍後會自動隱藏"
         )
 
@@ -2168,15 +2172,15 @@ class EditorCanvas:
         print(f"✓ 多选模式已{status}")
 
     def toggle_realtime_temp_mode(self):
-        """切換即時溫度顯示模式"""
+        """切換溫度座標顯示模式"""
         self.realtime_temp_enabled = self.realtime_temp_var.get()
 
         if self.realtime_temp_enabled:
-            # 啟用即時溫度顯示 - 綁定滑鼠移動事件到整個對話框
+            # 啟用溫度座標顯示 - 綁定滑鼠移動事件到整個對話框
             if hasattr(self, 'dialog') and self.dialog:
                 self.dialog.bind('<Motion>', self.on_canvas_motion_show_temp, add='+')
         else:
-            # 關閉即時溫度顯示 - 解除綁定
+            # 關閉溫度座標顯示 - 解除綁定
             if hasattr(self, 'dialog') and self.dialog:
                 try:
                     self.dialog.unbind('<Motion>')
@@ -2839,8 +2843,62 @@ class EditorCanvas:
         else:
             self._update_rotation_button_highlight(None)
 
+    def _get_pcb_params(self):
+        """取得 PCB 物理尺寸與座標原點設定。
+        Returns: (p_w, p_h, p_origin)
+        """
+        if hasattr(self, '_pcb_params_cache'):
+            return self._pcb_params_cache
+
+        p_w, p_h, p_origin = 100.0, 80.0, "左下"
+        if hasattr(self, 'parent') and hasattr(self.parent, 'get_pcb_config'):
+            pcb_config = self.parent.get_pcb_config()
+            p_w = pcb_config.get('p_w', 100.0)
+            p_h = pcb_config.get('p_h', 80.0)
+            p_origin = pcb_config.get('p_origin', '左下')
+        elif hasattr(self, 'parent') and hasattr(self.parent, 'temp_config') and self.parent.temp_config:
+            config = self.parent.temp_config
+            p_w = config.get('p_w', 100.0)
+            p_h = config.get('p_h', 80.0)
+            p_origin = config.get('p_origin', '左下')
+
+        self._pcb_params_cache = (p_w, p_h, p_origin)
+        return self._pcb_params_cache
+
+    def _pixel_to_physical_coord(self, img_x, img_y):
+        """將熱力圖像素座標轉換為資料座標。
+        座標值直接對應溫度資料的儲存格位置（像素座標）。
+        根據 temp_config 的 p_origin 設定決定座標系方向。
+        Returns: (x, y) or None
+        """
+        if not hasattr(self, 'bg_image') or not self.bg_image:
+            return None
+        img_width, img_height = self.bg_image.size
+        if img_width == 0 or img_height == 0:
+            return None
+
+        _, _, p_origin = self._get_pcb_params()
+
+        if p_origin == "左下":
+            x = img_x
+            y = img_height - img_y
+        elif p_origin == "左上":
+            x = img_x
+            y = img_y
+        elif p_origin == "右下":
+            x = img_width - img_x
+            y = img_height - img_y
+        elif p_origin == "右上":
+            x = img_width - img_x
+            y = img_y
+        else:
+            x = img_x
+            y = img_height - img_y
+
+        return (x, y)
+
     def on_canvas_motion_show_temp(self, event):
-        """滑鼠移動時顯示即時溫度"""
+        """滑鼠移動時顯示溫度座標"""
         if not hasattr(self, 'realtime_temp_enabled') or not self.realtime_temp_enabled:
             return
 
@@ -2910,8 +2968,9 @@ class EditorCanvas:
             temperature = self.get_temperature_at_position(img_x, img_y)
 
             if temperature is not None:
-                # 顯示溫度標籤
-                self.show_temp_label(canvas_x, canvas_y, temperature)
+                # 計算物理座標並顯示溫度座標標籤
+                coord = self._pixel_to_physical_coord(img_x, img_y)
+                self.show_temp_label(canvas_x, canvas_y, temperature, coord)
             else:
                 # 無法獲取溫度，隱藏標籤
                 if hasattr(self, 'temp_label_id') and self.temp_label_id:
@@ -2945,37 +3004,53 @@ class EditorCanvas:
 
         return None
 
-    def show_temp_label(self, canvas_x, canvas_y, temperature):
-        """在游標附近顯示溫度標籤"""
+    def show_temp_label(self, canvas_x, canvas_y, temperature, coord=None):
+        """在游標附近顯示溫度座標標籤。
+        coord: (x_mm, y_mm) 物理座標，可為 None
+        """
         try:
             # 清除舊的標籤和背景
             if hasattr(self, 'temp_label_id') and self.temp_label_id:
                 self.canvas.delete(self.temp_label_id)
             self.canvas.delete('temp_label_bg')  # 清除所有舊的背景
 
-            # 創建新的溫度標籤
-            temp_text = f"{temperature:.1f}°C"
-            offset_x = 15  # 標籤相對游標的 X 偏移
-            offset_y = -25  # 標籤相對游標的 Y 偏移
+            # 組合顯示文字
+            if coord:
+                temp_text = f"{temperature:.1f}°C({coord[0]}, {coord[1]})"
+            else:
+                temp_text = f"{temperature:.1f}°C"
 
-            # 先創建白色背景框（估算大小）
+            # 估算標籤大小
             text_width = len(temp_text) * 8  # 估算文字寬度
             text_height = 18
             padding = 5
+            total_w = text_width + padding * 2
+            total_h = text_height + padding * 2
 
-            # 計算標籤位置
+            # 預設偏移：右上方
+            offset_x = 15
+            offset_y = -25
             label_x = canvas_x + offset_x
             label_y = canvas_y + offset_y
 
+            # 邊界翻轉：右邊超出 → 改左側
+            canvas_width = self.canvas.winfo_width()
+            if label_x + total_w > canvas_width:
+                label_x = canvas_x - offset_x - text_width
+
+            # 邊界翻轉：上方超出 → 改下方
+            if label_y - padding < 0:
+                label_y = canvas_y + 15
+
             # 創建背景框
-            bg_rect = self.canvas.create_rectangle(
+            self.canvas.create_rectangle(
                 label_x - padding,
                 label_y - padding,
                 label_x + text_width + padding,
                 label_y + text_height + padding,
-                fill="yellow",  # 改用黃色背景更明顯
+                fill="yellow",
                 outline="red",
-                width=3,  # 加粗邊框
+                width=3,
                 tags="temp_label_bg"
             )
 
@@ -2984,7 +3059,7 @@ class EditorCanvas:
                 label_x + text_width // 2,
                 label_y + text_height // 2,
                 text=temp_text,
-                font=("Arial", 12, "bold"),  # 加大字體
+                font=("Arial", 12, "bold"),
                 fill="red",
                 tags="temp_label"
             )
