@@ -697,7 +697,7 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
             name_text_x = int(name_cx - name_tw / 2)
             name_text_y = int(min_y_n) - int(name_font_scale) - int(4 * textScale)
         else:
-            name_text_x = left
+            name_text_x = int((left + right) / 2 - name_tw / 2)
             name_text_y = top - int(name_font_scale) - int(4 * textScale)
 
         # 对于Layout图，检查文本位置是否在边界内

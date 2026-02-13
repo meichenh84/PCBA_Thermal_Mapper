@@ -3,12 +3,13 @@
 資料夾檔案自動分類與驗證模組 (folder_scanner.py)
 =============================================================================
 用途：
-    掃描指定資料夾中的所有檔案，根據檔案內容自動分類為五種類型：
-      - heat      : 熱力圖影像（.jpg/.jpeg/.png，HSV 高飽和度 + 高色調變異）
-      - layout    : Layout 佈局圖影像（.jpg/.jpeg/.png，黑色像素比例 > 60%）
-      - heatTemp  : 溫度數據（.csv，無表頭溫度矩陣）
-      - layoutXY  : 元器件座標檔（.xlsx，含 RefDes, Orient., X, Y）
-      - layoutLWT : 元器件尺寸檔（.xlsx，含 RefDes, L, W, T, 对象描述）
+    掃描指定資料夾中的所有檔案，根據檔案內容自動分類為六種類型：
+      - heat       : 熱力圖影像（.jpg/.jpeg/.png，HSV 高飽和度 + 高色調變異）
+      - layout     : Layout 佈局圖影像（.jpg/.jpeg/.png，黑色像素比例 > 60%）
+      - heatTemp   : 溫度數據（.csv，無表頭溫度矩陣）
+      - layoutXY   : 元器件座標檔（.xlsx，含 RefDes, Orient., X, Y）
+      - layoutLWT  : 元器件尺寸檔（.xlsx，含 RefDes, L, W, T, 对象描述）
+      - testReport : 測試報告（.xlsx，含 HIGH 字眼的 sheet）
 
     同時提供驗證功能，檢查 Layout 數據檔案是否成對存在。
 
@@ -27,6 +28,7 @@ import os
 import cv2
 import numpy as np
 import pandas as pd
+import openpyxl
 
 
 # =============================================================================
@@ -119,6 +121,34 @@ def is_layout_image(image_path):
 
 
 # =============================================================================
+# 測試報告偵測函式
+# =============================================================================
+
+def is_test_report_xlsx(file_path):
+    """判斷指定 .xlsx 檔案是否為測試報告。
+
+    透過檢查檔案中的所有 sheet 名稱，若任一 sheet 名稱轉大寫後含有
+    "HIGH" 字串，則判定為測試報告。
+
+    參數：
+        file_path (str): .xlsx 檔案的完整路徑
+
+    回傳：
+        bool: True 表示判定為測試報告
+    """
+    try:
+        wb = openpyxl.load_workbook(file_path, read_only=True)
+        sheet_names = wb.sheetnames
+        wb.close()
+        for name in sheet_names:
+            if "HIGH" in name.upper():
+                return True
+        return False
+    except Exception:
+        return False
+
+
+# =============================================================================
 # Excel 檔案分類函式
 # =============================================================================
 
@@ -180,18 +210,18 @@ def scan_folder(folder_path):
         tuple: (folder_files, xlsx_columns_cache)
             - folder_files (dict): 各分類的檔案名稱列表
               {"heat": [...], "layout": [...], "heatTemp": [...],
-               "layoutXY": [...], "layoutLWT": [...]}
+               "layoutXY": [...], "layoutLWT": [...], "testReport": [...]}
             - xlsx_columns_cache (dict): 各 xlsx 檔案的欄位名稱快取
               {"filename.xlsx": ["col1", "col2", ...], ...}
     """
-    folder_files = {"heat": [], "layout": [], "heatTemp": [], "layoutXY": [], "layoutLWT": []}
+    folder_files = {"heat": [], "layout": [], "heatTemp": [], "layoutXY": [], "layoutLWT": [], "testReport": []}
     xlsx_columns_cache = {}
 
     if not folder_path or not os.path.isdir(folder_path):
         return folder_files, xlsx_columns_cache
 
     # 收集檔案資訊（檔案名稱和修改時間）
-    file_info = {"heat": [], "layout": [], "heatTemp": [], "layoutXY": [], "layoutLWT": []}
+    file_info = {"heat": [], "layout": [], "heatTemp": [], "layoutXY": [], "layoutLWT": [], "testReport": []}
 
     for filename in os.listdir(folder_path):
         file_path = os.path.join(folder_path, filename)
@@ -218,6 +248,8 @@ def scan_folder(folder_path):
                     file_info["layoutXY"].append((filename, mtime))
                 elif xlsx_type == 'layoutLWT':
                     file_info["layoutLWT"].append((filename, mtime))
+                elif is_test_report_xlsx(file_path):
+                    file_info["testReport"].append((filename, mtime))
                 else:
                     file_info["heatTemp"].append((filename, mtime))
             else:

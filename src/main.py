@@ -75,6 +75,9 @@ import copy                                   # 深層複製工具（複製編�
 from layout_temperature_query_optimized import LayoutTemperatureQueryOptimized  # Layout 溫度查詢最佳化模組
 from temperature_config_manager import TemperatureConfigManager  # 溫度配置管理器（每個資料夾獨立配置）
 from folder_scanner import scan_folder, validate_layout_data     # 資料夾檔案自動分類與驗證
+from dialog_export_report import ExportReportDialog              # 測試報告 Sheet 名稱選擇對話框
+import tempfile                                                  # 暫存檔案（寫入測試報告用）
+from openpyxl.drawing.image import Image as XlImage              # Excel 插入圖片
 
 
 # ===== 編輯日誌預設範本 =====
@@ -203,9 +206,9 @@ class ResizableImagesApp:
         
         # 資料夾選擇相關變數
         self.current_folder_path = None  # 當前工作資料夾的完整路徑
-        self.folder_files = {"heat": [], "layout": [], "heatTemp": [], "layoutXY": [], "layoutLWT": []}  # 資料夾中各分類的檔案列表
+        self.folder_files = {"heat": [], "layout": [], "heatTemp": [], "layoutXY": [], "layoutLWT": [], "testReport": []}  # 資料夾中各分類的檔案列表
         self.current_temp_file_path = None  # 當前使用的溫度數據檔案完整路徑
-        self.current_files = {"heat": None, "layout": None, "heatTemp": None, "layoutXY": None, "layoutLWT": None}  # 各分類中當前選用的檔案名稱
+        self.current_files = {"heat": None, "layout": None, "heatTemp": None, "layoutXY": None, "layoutLWT": None, "testReport": None}  # 各分類中當前選用的檔案名稱
         
         # Layout 數據相關變數
         self.layout_data = None  # 儲存解析後的 Layout 元器件數據（list of dict，含 RefDes、座標、尺寸等）
@@ -431,7 +434,7 @@ class ResizableImagesApp:
         self.current_temp_file_path = None
         
         # 清空当前文件信息
-        self.current_files = {"heat": None, "layout": None, "heatTemp": None, "layoutXY": None, "layoutLWT": None}
+        self.current_files = {"heat": None, "layout": None, "heatTemp": None, "layoutXY": None, "layoutLWT": None, "testReport": None}
 
         # 清空Layout数据
         self.layout_data = None
@@ -498,6 +501,13 @@ class ResizableImagesApp:
 
             # 掃描完成後，自動載入可用的圖片
             self.auto_load_images()
+
+            # 根據是否偵測到測試報告來啟用/停用按鈕
+            if hasattr(self, 'test_report_button'):
+                if self.folder_files.get("testReport"):
+                    self.test_report_button.config(state=tk.NORMAL)
+                else:
+                    self.test_report_button.config(state=tk.DISABLED)
 
             # 添加調試資訊
             print(f"scan_folder_files: 扫描完成，current_files: {self.current_files}")
@@ -566,8 +576,8 @@ class ResizableImagesApp:
             for category, files in self.folder_files.items():
                 if files:
                     # 统一标题长度，让图标对齐
-                    category_names = {"heat": "熱力圖", "layout": "Layout圖", "heatTemp": "溫度數據", "layoutXY": "元器件座標", "layoutLWT": "元器件尺寸"}
-                    category_spaces = {"heat": 31.7, "layout": 32, "heatTemp": 29, "layoutXY": 27, "layoutLWT": 27}
+                    category_names = {"heat": "熱力圖", "layout": "Layout圖", "heatTemp": "溫度數據", "layoutXY": "元器件座標", "layoutLWT": "元器件尺寸", "testReport": "測試報告"}
+                    category_spaces = {"heat": 31.7, "layout": 32, "heatTemp": 29, "layoutXY": 27, "layoutLWT": 27, "testReport": 27}
                     category_name = category_names[category]
                     # 父标题显示选择图标在右侧，使用固定宽度确保图标对齐
                     # 为heat和layout添加额外空格，让图标对齐
@@ -632,6 +642,11 @@ class ResizableImagesApp:
                 "支援格式：.xlsx\n"
                 "必需欄位：RefDes, L, W, T, 对象描述\n"
                 "可選欄位：PartsName"
+            ),
+            "testReport": (
+                "測試報告檔案\n"
+                "支援格式：.xlsx\n"
+                "辨識條件：含有 HIGH 字眼的 Sheet"
             ),
         }
 
@@ -2528,11 +2543,12 @@ class ResizableImagesApp:
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "温度报告"
-            # 添加标题行
-            ws.append(["目标", "最高温度"])
+            # 添加标题行（比照 EditorCanvas Treeview 三欄）
+            ws.append(["點位名稱", "描述", "溫度"])
             # 将 rect_arr 中的数据写入到 Excel 文件
             for item in self.mark_rect_A:
-                ws.append([item["name"], item["max_temp"]])
+                max_temp = item.get("max_temp", 0)
+                ws.append([item.get("name", ""), item.get("description", ""), f"{max_temp:.1f}°C"])
                
             # 保存Excel文件到当前文件夹的output目录，如果文件被占用则自动重命名
             excel_path = self.get_available_excel_path(output_dir, "report.xlsx")
@@ -2606,6 +2622,126 @@ class ResizableImagesApp:
                 return os.path.join(output_dir, timestamp_filename)
 
         # print("xx--> export_excel")
+
+    def write_test_report(self):
+        """開啟 Sheet 名稱選擇對話框，將熱力圖影像和元器件列表寫入測試報告 .xlsx。"""
+        # 檢查是否有標記數據
+        if not self.mark_rect_A:
+            show_toast(
+                title='寫入失敗',
+                message="請先進行'溫度過濾'，找出溫度區域",
+                duration=5000,
+                toast_type='error'
+            )
+            return
+
+        # 檢查測試報告檔案
+        test_report_file = self.current_files.get("testReport")
+        if not test_report_file or not self.current_folder_path:
+            show_toast(
+                title='寫入失敗',
+                message="未偵測到測試報告檔案",
+                duration=5000,
+                toast_type='error'
+            )
+            return
+
+        # 開啟 Sheet 名稱選擇對話框
+        dialog = ExportReportDialog(self.root, self.test_report_button, self._do_write_test_report)
+        dialog.open()
+
+    def _do_write_test_report(self, sheet_name):
+        """實際執行寫入測試報告的邏輯（由對話框 callback 呼叫）。
+
+        Args:
+            sheet_name (str): 使用者選擇的 Sheet 名稱
+        """
+        test_report_file = self.current_files.get("testReport")
+        report_path = os.path.join(self.current_folder_path, test_report_file)
+
+        try:
+            wb = openpyxl.load_workbook(report_path)
+
+            # 若 sheet 名稱重複，加上數字後綴
+            final_name = sheet_name
+            existing_names = wb.sheetnames
+            if final_name in existing_names:
+                counter = 1
+                while f"{sheet_name}_{counter}" in existing_names:
+                    counter += 1
+                final_name = f"{sheet_name}_{counter}"
+
+            ws = wb.create_sheet(title=final_name)
+
+            # 寫入表頭於 A1（完全比照 EditorCanvas 左側 Treeview 的欄位）
+            from openpyxl.styles import Font
+            bold_font = Font(bold=True)
+            ws.cell(row=1, column=1, value="點位名稱").font = bold_font
+            ws.cell(row=1, column=2, value="描述").font = bold_font
+            ws.cell(row=1, column=3, value="溫度").font = bold_font
+
+            # 寫入元器件資料（格式與 EditorCanvas Treeview 一致）
+            for i, item in enumerate(self.mark_rect_A):
+                row = 2 + i
+                ws.cell(row=row, column=1, value=item.get("name", ""))
+                ws.cell(row=row, column=2, value=item.get("description", ""))
+                max_temp = item.get("max_temp", 0)
+                ws.cell(row=row, column=3, value=f"{max_temp:.1f}°C")
+
+            # 調整欄寬
+            ws.column_dimensions['A'].width = 18
+            ws.column_dimensions['B'].width = 30
+            ws.column_dimensions['C'].width = 16
+
+            # 生成帶標記的熱力圖影像並暫存為 jpg，固定放在 E1
+            imageA_input = cv2.cvtColor(np.array(self.imageA), cv2.COLOR_RGB2BGR)
+            imageA_output = draw_numpy_image_item(imageA_input, self.mark_rect_A)
+            temp_dir = tempfile.mkdtemp()
+            temp_img_path = os.path.join(temp_dir, "thermal_report.jpg")
+            Image.fromarray(cv2.cvtColor(imageA_output, cv2.COLOR_BGR2RGB)).save(temp_img_path, quality=100)
+
+            img = XlImage(temp_img_path)
+            # 限制影像寬度，保持比例
+            max_width = 800
+            if img.width > max_width:
+                ratio = max_width / img.width
+                img.width = max_width
+                img.height = int(img.height * ratio)
+            ws.add_image(img, "E1")
+
+            wb.save(report_path)
+
+            # 清理暫存檔案
+            try:
+                os.remove(temp_img_path)
+                os.rmdir(temp_dir)
+            except Exception:
+                pass
+
+            show_toast(
+                title='寫入成功',
+                message=f"已將數據寫入測試報告 Sheet「{final_name}」",
+                duration=5000,
+                toast_type='success'
+            )
+        except PermissionError:
+            show_toast(
+                title='寫入失敗',
+                message="測試報告檔案已被其他程式開啟，請先關閉後再試",
+                duration=5000,
+                toast_type='error'
+            )
+        except Exception as e:
+            print(f"寫入測試報告時出錯: {e}")
+            import traceback
+            traceback.print_exc()
+            show_toast(
+                title='寫入失敗',
+                message=f"寫入測試報告時發生錯誤: {e}",
+                duration=5000,
+                toast_type='error'
+            )
+
     def open_settings_dialog(self):
         # 使用单例模式，只创建一个SettingDialog实例
         if self.setting_dialog is None:
@@ -2825,12 +2961,16 @@ class ResizableImagesApp:
                                              width=10, bg=UIStyle.PRIMARY_BLUE, fg=UIStyle.WHITE, 
                                              relief=UIStyle.BUTTON_RELIEF, borderwidth=UIStyle.BUTTON_BORDER_WIDTH,
                                              font=UIStyle.BUTTON_FONT)
-        self.export_button = tk.Button(self.top_buttons_frame, text="导出", command=self.export_excel, 
-                                     width=10, bg=UIStyle.DARK_BLUE, fg=UIStyle.WHITE, 
+        self.export_button = tk.Button(self.top_buttons_frame, text="导出", command=self.export_excel,
+                                     width=10, bg=UIStyle.DARK_BLUE, fg=UIStyle.WHITE,
                                      relief=UIStyle.BUTTON_RELIEF, borderwidth=UIStyle.BUTTON_BORDER_WIDTH,
                                      font=UIStyle.BUTTON_FONT)
-        self.settings_button = tk.Button(self.top_buttons_frame, text="设置", command=self.open_settings_dialog, 
-                                       width=10, bg=UIStyle.GRAY, fg=UIStyle.WHITE, 
+        self.test_report_button = tk.Button(self.top_buttons_frame, text="寫入測試報告", command=self.write_test_report,
+                                           width=14, bg=UIStyle.DARK_BLUE, fg=UIStyle.WHITE,
+                                           relief=UIStyle.BUTTON_RELIEF, borderwidth=UIStyle.BUTTON_BORDER_WIDTH,
+                                           font=UIStyle.BUTTON_FONT, state=tk.DISABLED)
+        self.settings_button = tk.Button(self.top_buttons_frame, text="设置", command=self.open_settings_dialog,
+                                       width=10, bg=UIStyle.GRAY, fg=UIStyle.WHITE,
                                        relief=UIStyle.BUTTON_RELIEF, borderwidth=UIStyle.BUTTON_BORDER_WIDTH,
                                        font=UIStyle.BUTTON_FONT)
 
@@ -2838,7 +2978,8 @@ class ResizableImagesApp:
         self.align_button.grid(row=0, column=1, padx=8, pady=16)
         self.template_filter_button.grid(row=0, column=2, padx=8, pady=16)
         self.export_button.grid(row=0, column=3, padx=8, pady=16)
-        self.settings_button.grid(row=0, column=4, padx=8, pady=16)
+        self.test_report_button.grid(row=0, column=4, padx=8, pady=16)
+        self.settings_button.grid(row=0, column=5, padx=8, pady=16)
 
         # 创建文件夹选择区域（固定宽度220像素，不可扩展）
         self.folder_container = tk.Frame(root, bg=UIStyle.VERY_LIGHT_BLUE, relief=tk.SUNKEN, bd=1, width=230)
