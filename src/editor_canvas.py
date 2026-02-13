@@ -2881,19 +2881,19 @@ class EditorCanvas:
 
         if p_origin == "左下":
             x = img_x
-            y = img_height - img_y
+            y = img_height - 1 - img_y
         elif p_origin == "左上":
             x = img_x
             y = img_y
         elif p_origin == "右下":
-            x = img_width - img_x
-            y = img_height - img_y
+            x = img_width - 1 - img_x
+            y = img_height - 1 - img_y
         elif p_origin == "右上":
-            x = img_width - img_x
+            x = img_width - 1 - img_x
             y = img_y
         else:
             x = img_x
-            y = img_height - img_y
+            y = img_height - 1 - img_y
 
         return (x, y)
 
