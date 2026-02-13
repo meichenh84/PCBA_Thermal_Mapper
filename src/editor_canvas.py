@@ -291,8 +291,49 @@ class EditorCanvas:
         # 最后更新列表（apply_sort 內部已經調用了 update_rect_list，這裡可以移除）
         # self.update_rect_list()
 
+        # 計算排除元器件列表（未通過溫度篩選的元器件）
+        self._compute_excluded_components()
+
         # 儲存初始快照（所有矩形繪製完成後）
         self._initial_snapshot = self._create_snapshot()
+
+    def _compute_excluded_components(self):
+        """計算目前不在左側列表中的元器件，預先轉換為熱力圖像素座標與 Layout 圖中心座標"""
+        self.excluded_components = []
+        if not self.layout_query or not hasattr(self.parent, 'layout_data') or not self.parent.layout_data:
+            return
+
+        # 目前左側列表中的元器件名稱（以 editor_rect.rectangles 為準）
+        included_names = set()
+        if hasattr(self, 'editor_rect') and self.editor_rect:
+            included_names = {r.get('name', '') for r in self.editor_rect.rectangles}
+        else:
+            included_names = {r.get('name', '') for r in self.mark_rect}
+
+        for comp in self.parent.layout_data:
+            refdes = comp['RefDes']
+            if refdes in included_names:
+                continue
+
+            # PCB座標 → Layout圖座標 → 熱力圖座標
+            cr1 = self.layout_query.convert_pcb_to_layout(comp['left'], comp['top'], comp['right'], comp['bottom'])
+            if cr1 is None:
+                continue
+            ar1 = self.layout_query.convert_layout_to_thermal(*cr1)
+            if ar1 is None:
+                continue
+
+            ar1_left, ar1_top, ar1_right, ar1_bottom = [int(v) for v in ar1]
+            self.excluded_components.append({
+                'RefDes': refdes,
+                'X': comp.get('X', 0), 'Y': comp.get('Y', 0),
+                'L': comp.get('L', 0), 'W': comp.get('W', 0), 'T': comp.get('T', 0),
+                'Description': comp.get('Description', ''),
+                'ar1_left': ar1_left, 'ar1_top': ar1_top,
+                'ar1_right': ar1_right, 'ar1_bottom': ar1_bottom,
+            })
+
+        print(f"可加回元器件數量: {len(self.excluded_components)}")
 
     def create_rect_list_panel(self, parent):
         """创建左侧矩形框列表面板"""
@@ -1669,7 +1710,7 @@ class EditorCanvas:
         button_container.grid(row=1, column=0, sticky="nsew", pady=10)
         
         # 配置按钮容器的grid属性，按钮固定高度，不拉伸
-        for r in range(16):
+        for r in range(18):
             button_container.grid_rowconfigure(r, weight=0)
         button_container.grid_columnconfigure(0, weight=1)  # 单列，占满宽度
 
@@ -2145,10 +2186,91 @@ class EditorCanvas:
             "• 選取多個後可批次轉換形狀或刪除"
         )
         
+        # ========== Row 16: 加回元器件 + ⓘ ==========
+        add_back_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        add_back_frame.grid(row=16, column=0, pady=(0, 8), padx=10, sticky="ew")
+
+        self.add_back_var = tk.BooleanVar(value=False)
+        self.add_back_checkbox = tk.Checkbutton(
+            add_back_frame,
+            text="加回元器件",
+            variable=self.add_back_var,
+            font=UIStyle.BUTTON_FONT,
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.BLACK,
+            activebackground=UIStyle.VERY_LIGHT_BLUE,
+            activeforeground=UIStyle.BLACK,
+            selectcolor=UIStyle.WHITE,
+            command=self.toggle_add_back_mode
+        )
+        self.add_back_checkbox.pack(side='left')
+
+        add_back_info_label = tk.Label(
+            add_back_frame,
+            text="ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
+        )
+        add_back_info_label.pack(side='left', padx=(2, 0))
+        Tooltip(
+            add_back_info_label,
+            "加回元器件說明：\n"
+            "• 勾選後，移動游標至熱力圖上\n"
+            "• 若座標落在未通過篩選的元器件範圍內\n"
+            "  資訊框會顯示該元器件的資訊\n"
+            "• 雙擊可將該元器件加回熱力圖和列表"
+        )
+
+        # ========== Row 17: 加回元器件資訊框 ==========
+        self.add_back_info_frame = tk.LabelFrame(
+            button_container,
+            text="可加回元器件資訊(雙擊加回)",
+            font=("Arial", 9, "bold"),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.DARK_BLUE,
+        )
+        self.add_back_info_frame.grid(row=17, column=0, pady=(0, 8), padx=10, sticky="ew")
+
+        # 元器件名稱（大字、藍色）
+        self.add_back_name_label = tk.Label(
+            self.add_back_info_frame,
+            text="",
+            font=("Arial", 11, "bold"),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.DARK_BLUE,
+            anchor='w',
+        )
+        self.add_back_name_label.pack(fill='x', padx=6, pady=(6, 2))
+
+        # 分隔線
+        self.add_back_sep = tk.Frame(self.add_back_info_frame, height=1, bg=UIStyle.GRAY)
+        self.add_back_sep.pack(fill='x', padx=6, pady=2)
+
+        # 詳細資訊（多行）
+        self.add_back_detail_label = tk.Label(
+            self.add_back_info_frame,
+            text="移動游標至熱力圖\n查看可加回的元器件",
+            font=UIStyle.LABEL_FONT,
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.DARK_GRAY,
+            justify='left',
+            anchor='nw',
+            wraplength=160,
+        )
+        self.add_back_detail_label.pack(fill='x', padx=6, pady=(2, 6))
+
+        # 預設隱藏資訊框
+        self.add_back_info_frame.grid_remove()
+
+        # 初始化加回元器件狀態
+        self._current_hover_component = None
+
         # 初始化按钮状态
         self.update_delete_button_state()
         self.update_merge_button_state()
-        
+
         # 键盘事件已在__init__中绑定，这里不需要重复绑定
     
     def toggle_multi_select_mode(self):
@@ -2170,6 +2292,250 @@ class EditorCanvas:
         
         status = "启用" if self.multi_select_enabled else "禁用"
         print(f"✓ 多选模式已{status}")
+
+    def toggle_add_back_mode(self):
+        """切換「加回元器件」模式"""
+        if self.add_back_var.get():
+            # 每次啟用時重新計算（反映刪除/新增後的最新列表狀態）
+            self._compute_excluded_components()
+            self.add_back_info_frame.grid()
+            self.canvas.bind('<Motion>', self._on_canvas_motion_add_back)
+            self.canvas.bind('<Double-Button-1>', self._on_canvas_double_click_add_back)
+            self._current_hover_component = None
+            print("✓ 加回元器件模式已啟用")
+        else:
+            self.add_back_info_frame.grid_remove()
+            self.canvas.unbind('<Motion>')
+            self.canvas.unbind('<Double-Button-1>')
+            self._clear_add_back_preview()
+            self._current_hover_component = None
+            self._reset_add_back_info()
+            print("✓ 加回元器件模式已關閉")
+
+    def _canvas_to_image_coords(self, canvas_x, canvas_y):
+        """將 Canvas 座標轉換為熱力圖像素座標（共用邏輯）
+
+        Returns:
+            tuple|None: (img_x, img_y) 或 None（超出範圍）
+        """
+        if not hasattr(self, 'editor_rect') or not self.editor_rect:
+            return None
+        if not hasattr(self.editor_rect, 'display_scale'):
+            return None
+
+        if (hasattr(self.editor_rect, 'magnifier_mode_enabled') and
+                self.editor_rect.magnifier_mode_enabled and
+                abs(self.editor_rect.zoom_scale - 1.0) > 0.001):
+            img_x = int((canvas_x - self.editor_rect.canvas_offset_x) / self.editor_rect.zoom_scale)
+            img_y = int((canvas_y - self.editor_rect.canvas_offset_y) / self.editor_rect.zoom_scale)
+        else:
+            img_x = int(canvas_x / self.editor_rect.display_scale)
+            img_y = int(canvas_y / self.editor_rect.display_scale)
+
+        # 檢查是否在圖像範圍內
+        if hasattr(self.editor_rect, 'original_img') and self.editor_rect.original_img:
+            img_width, img_height = self.editor_rect.original_img.size
+            if img_x < 0 or img_x >= img_width or img_y < 0 or img_y >= img_height:
+                return None
+
+        return (img_x, img_y)
+
+    def _on_canvas_motion_add_back(self, event):
+        """滑鼠移動時檢測排除元器件並顯示資訊"""
+        try:
+            canvas_x = event.x
+            canvas_y = event.y
+
+            result = self._canvas_to_image_coords(canvas_x, canvas_y)
+            if result is None:
+                if self._current_hover_component is not None:
+                    self._clear_add_back_preview()
+                    self._current_hover_component = None
+                    self._reset_add_back_info()
+                return
+
+            img_x, img_y = result
+
+            # 遍歷排除元器件，檢查座標是否在 bounding box 內
+            matched = None
+            if hasattr(self, 'excluded_components'):
+                for comp in self.excluded_components:
+                    if (comp['ar1_left'] <= img_x <= comp['ar1_right'] and
+                            comp['ar1_top'] <= img_y <= comp['ar1_bottom']):
+                        matched = comp
+                        break
+
+            if matched:
+                # 避免重複更新相同的元器件
+                if self._current_hover_component is not matched:
+                    self._current_hover_component = matched
+                    # 更新資訊框 — 名稱
+                    self.add_back_name_label.config(text=matched['RefDes'])
+                    # 更新資訊框 — 詳細資訊
+                    desc = matched['Description']
+                    detail_lines = [
+                        f"Layout元器件中心:",
+                        f"({matched['X']}, {matched['Y']})",
+                        f"長: {matched['L']}",
+                        f"寬: {matched['W']}",
+                        f"高: {matched['T']}",
+                    ]
+                    if desc:
+                        detail_lines.append(f"描述:")
+                        detail_lines.append(f"{desc}")
+                    self.add_back_detail_label.config(
+                        text="\n".join(detail_lines), fg=UIStyle.BLACK)
+
+                    # 繪製虛線預覽框
+                    self._draw_add_back_preview(matched)
+            else:
+                if self._current_hover_component is not None:
+                    self._clear_add_back_preview()
+                    self._current_hover_component = None
+                    self._reset_add_back_info()
+
+        except Exception as e:
+            print(f"加回元器件 motion 錯誤: {e}")
+
+    def _draw_add_back_preview(self, comp):
+        """在 Canvas 上繪製虛線預覽框"""
+        self.canvas.delete('add_back_preview')
+
+        # 圖像座標 → Canvas 座標
+        if (hasattr(self.editor_rect, 'magnifier_mode_enabled') and
+                self.editor_rect.magnifier_mode_enabled and
+                abs(self.editor_rect.zoom_scale - 1.0) > 0.001):
+            scale = self.editor_rect.zoom_scale
+            offset_x = self.editor_rect.canvas_offset_x
+            offset_y = self.editor_rect.canvas_offset_y
+        else:
+            scale = self.editor_rect.display_scale
+            offset_x = 0
+            offset_y = 0
+
+        cx1 = comp['ar1_left'] * scale + offset_x
+        cy1 = comp['ar1_top'] * scale + offset_y
+        cx2 = comp['ar1_right'] * scale + offset_x
+        cy2 = comp['ar1_bottom'] * scale + offset_y
+
+        self.canvas.create_rectangle(
+            cx1, cy1, cx2, cy2,
+            outline='lime', width=2, dash=(6, 4),
+            tags='add_back_preview'
+        )
+
+    def _on_canvas_double_click_add_back(self, event):
+        """雙擊加回元器件"""
+        if self._current_hover_component is None:
+            return
+
+        comp = self._current_hover_component
+
+        try:
+            # 儲存 undo 快照
+            self._push_undo()
+
+            # 從 temp_data 取得 bounding box 區域的最高溫及座標
+            max_temp_value = 0.0
+            max_temp_cx = (comp['ar1_left'] + comp['ar1_right']) // 2
+            max_temp_cy = (comp['ar1_top'] + comp['ar1_bottom']) // 2
+
+            if hasattr(self.parent, 'tempALoader') and self.parent.tempALoader:
+                temp_data = self.parent.tempALoader.get_tempA()
+                if temp_data is not None:
+                    y1 = max(0, comp['ar1_top'])
+                    y2 = min(temp_data.shape[0], comp['ar1_bottom'] + 1)
+                    x1 = max(0, comp['ar1_left'])
+                    x2 = min(temp_data.shape[1], comp['ar1_right'] + 1)
+                    if y2 > y1 and x2 > x1:
+                        region = temp_data[y1:y2, x1:x2]
+                        import numpy as np
+                        max_idx = np.unravel_index(np.argmax(region), region.shape)
+                        max_temp_value = float(region[max_idx])
+                        max_temp_cy = y1 + max_idx[0]
+                        max_temp_cx = x1 + max_idx[1]
+
+            # 構建 newRect
+            newRect = {
+                "x1": comp['ar1_left'], "y1": comp['ar1_top'],
+                "x2": comp['ar1_right'], "y2": comp['ar1_bottom'],
+                "cx": max_temp_cx, "cy": max_temp_cy,
+                "max_temp": max_temp_value,
+                "name": comp['RefDes'],
+                "description": comp['Description'],
+                "add_new": True,
+            }
+
+            # 建立矩形並加入列表
+            self.editor_rect.add_rect(newRect)
+            self.update_rect_list()
+
+            # 從排除列表移除
+            self.excluded_components.remove(comp)
+
+            # 清除預覽
+            self._clear_add_back_preview()
+            self._current_hover_component = None
+
+            # 更新資訊框
+            self.add_back_name_label.config(text=f"已加回: {comp['RefDes']}")
+            self.add_back_detail_label.config(
+                text=f"最高溫: {max_temp_value:.1f}°C",
+                fg=UIStyle.SUCCESS_GREEN,
+            )
+
+            print(f"✓ 已加回元器件: {comp['RefDes']}（最高溫 {max_temp_value:.1f}°C）")
+
+        except Exception as e:
+            print(f"加回元器件失敗: {e}")
+
+    def _clear_add_back_preview(self):
+        """清除 Canvas 上的加回元器件虛線預覽框"""
+        if hasattr(self, 'canvas') and self.canvas:
+            self.canvas.delete('add_back_preview')
+
+    def _reset_add_back_info(self):
+        """重設資訊框為預設提示狀態"""
+        self.add_back_name_label.config(text="")
+        self.add_back_detail_label.config(
+            text="移動游標至熱力圖\n查看可加回的元器件",
+            fg=UIStyle.DARK_GRAY,
+        )
+
+    def _add_deleted_to_excluded(self, deleted_names):
+        """將被刪除的元器件加入排除列表（若存在於 layout_data 中）"""
+        if not deleted_names:
+            return
+        if not self.layout_query or not hasattr(self.parent, 'layout_data') or not self.parent.layout_data:
+            return
+        if not hasattr(self, 'excluded_components'):
+            self.excluded_components = []
+
+        # 已在排除列表中的名稱（避免重複）
+        existing_names = {c['RefDes'] for c in self.excluded_components}
+
+        for comp in self.parent.layout_data:
+            refdes = comp['RefDes']
+            if refdes not in deleted_names or refdes in existing_names:
+                continue
+
+            cr1 = self.layout_query.convert_pcb_to_layout(comp['left'], comp['top'], comp['right'], comp['bottom'])
+            if cr1 is None:
+                continue
+            ar1 = self.layout_query.convert_layout_to_thermal(*cr1)
+            if ar1 is None:
+                continue
+
+            ar1_left, ar1_top, ar1_right, ar1_bottom = [int(v) for v in ar1]
+            self.excluded_components.append({
+                'RefDes': refdes,
+                'X': comp.get('X', 0), 'Y': comp.get('Y', 0),
+                'L': comp.get('L', 0), 'W': comp.get('W', 0), 'T': comp.get('T', 0),
+                'Description': comp.get('Description', ''),
+                'ar1_left': ar1_left, 'ar1_top': ar1_top,
+                'ar1_right': ar1_right, 'ar1_bottom': ar1_bottom,
+            })
+            print(f"  已加入排除列表: {refdes}")
 
     def toggle_realtime_temp_mode(self):
         """切換溫度座標顯示模式"""
@@ -3148,33 +3514,48 @@ class EditorCanvas:
             if len(self.selected_rect_ids) > 0:
                 print(f"🔍🔍🔍 开始批量删除 {len(self.selected_rect_ids)} 个矩形框")
 
+                # 記錄被刪除的元器件名稱（刪除前）
+                deleted_names = set()
+                for rect in self.editor_rect.rectangles:
+                    if rect.get('rectId') in self.selected_rect_ids:
+                        deleted_names.add(rect.get('name', ''))
+
                 self._push_undo()
                 # 批量删除（內部會觸發 multi_delete 回調，自動更新列表）
                 self.editor_rect.delete_rectangles_by_ids(list(self.selected_rect_ids))
 
+                # 若加回元器件模式開啟，將被刪除的元器件加入排除列表
+                self._add_deleted_to_excluded(deleted_names)
+
                 # 确保焦点回到对话框
                 self.dialog.focus_set()
                 return
-            
+
             # 处理单选删除
             print(f"🔍🔍🔍 开始删除矩形框 {self.selected_rect_id}")
-            
+
             # 检查矩形框是否存在
             rect_exists = False
+            deleted_name = ''
             for rect in self.editor_rect.rectangles:
                 if rect.get('rectId') == self.selected_rect_id:
                     rect_exists = True
+                    deleted_name = rect.get('name', '')
                     print(f"🔍🔍🔍 找到要删除的矩形框: {rect}")
                     break
-            
+
             if not rect_exists:
                 print(f"⚠️⚠️⚠️ 矩形框 {self.selected_rect_id} 不存在于editor_rect.rectangles中")
                 print(f"⚠️⚠️⚠️ 当前所有矩形框: {[r.get('rectId') for r in self.editor_rect.rectangles]}")
                 return
-            
+
             # 删除选中的矩形框（內部會觸發 delete 回調，自動更新列表）
             self._push_undo()
             self.editor_rect.delete_rectangle_by_id(self.selected_rect_id)
+
+            # 若加回元器件模式開啟，將被刪除的元器件加入排除列表
+            if deleted_name:
+                self._add_deleted_to_excluded({deleted_name})
 
             # 确保焦点回到对话框
             self.dialog.focus_set()
@@ -3572,9 +3953,18 @@ class EditorCanvas:
         if not result:
             return
 
+        # 記錄被刪除的元器件名稱（刪除前）
+        deleted_names = set()
+        for rect in all_rects:
+            if rect.get('rectId') in set(to_delete_ids):
+                deleted_names.add(rect.get('name', ''))
+
         # 批量刪除
         self._push_undo()
         self.editor_rect.delete_rectangles_by_ids(to_delete_ids)
+
+        # 若加回元器件模式開啟，將被刪除的元器件加入排除列表
+        self._add_deleted_to_excluded(deleted_names)
 
         # 從 Treeview 移除
         for rect_id in to_delete_ids:
