@@ -1798,9 +1798,19 @@ class EditorCanvas:
             "• 快捷鍵：Ctrl+Z"
         )
 
-        # ========== Row 3: 合併 + ⓘ ==========
+        # ========== Row 3: 已選取 N 個 提示標籤 ==========
+        self.selection_count_label = tk.Label(
+            button_container,
+            text="",
+            font=("Arial", 9, "bold"),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE
+        )
+        self.selection_count_label.grid(row=3, column=0, pady=(2, 2), padx=10, sticky="w")
+
+        # ========== Row 4: 合併 + ⓘ ==========
         merge_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        merge_frame.grid(row=3, column=0, pady=(0, 3), padx=10, sticky="ew")
+        merge_frame.grid(row=4, column=0, pady=(0, 3), padx=10, sticky="ew")
         self.merge_button = tk.Button(
             merge_frame,
             text="合并 ➕",
@@ -1826,9 +1836,9 @@ class EditorCanvas:
             "• 需先選取 2 個以上元器件"
         )
 
-        # ========== Row 4: 刪除 + ⓘ ==========
+        # ========== Row 5: 刪除 + ⓘ ==========
         delete_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        delete_frame.grid(row=4, column=0, pady=(0, 3), padx=10, sticky="ew")
+        delete_frame.grid(row=5, column=0, pady=(0, 3), padx=10, sticky="ew")
         self.delete_button = tk.Button(
             delete_frame,
             text="删除 ❌",
@@ -1854,9 +1864,9 @@ class EditorCanvas:
             "• 快捷鍵：Delete / BackSpace"
         )
 
-        # ========== Row 5: 形狀轉換標籤 + ⓘ ==========
+        # ========== Row 6: 形狀轉換標籤 + ⓘ ==========
         shape_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        shape_label_frame.grid(row=5, column=0, pady=(8, 2), padx=10, sticky="w")
+        shape_label_frame.grid(row=6, column=0, pady=(8, 2), padx=10, sticky="w")
 
         shape_label = tk.Label(
             shape_label_frame,
@@ -1887,9 +1897,9 @@ class EditorCanvas:
             delay=200
         )
 
-        # ========== Row 6: 轉為矩形 + 轉為圓形（同一列） ==========
+        # ========== Row 7: 轉為矩形 + 轉為圓形（同一列） ==========
         shape_btn_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        shape_btn_frame.grid(row=6, column=0, pady=(0, 3), padx=10, sticky="ew")
+        shape_btn_frame.grid(row=7, column=0, pady=(0, 3), padx=10, sticky="ew")
 
         self.convert_to_rect_button = tk.Button(
             shape_btn_frame,
@@ -1919,9 +1929,9 @@ class EditorCanvas:
         )
         self.convert_to_circle_button.pack(side='left', expand=True, fill='x', padx=(2, 0))
 
-        # ========== Row 8: 溫度位置標籤 + ⓘ ==========
+        # ========== Row 9: 溫度位置標籤 + ⓘ ==========
         temp_dir_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        temp_dir_label_frame.grid(row=8, column=0, pady=(8, 2), padx=10, sticky="w")
+        temp_dir_label_frame.grid(row=9, column=0, pady=(8, 2), padx=10, sticky="w")
 
         temp_dir_label = tk.Label(
             temp_dir_label_frame,
@@ -1951,9 +1961,9 @@ class EditorCanvas:
             delay=200
         )
 
-        # ========== Row 9: 九宮格 ==========
+        # ========== Row 10: 九宮格 ==========
         grid_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        grid_frame.grid(row=9, column=0, pady=(2, 5), padx=10)
+        grid_frame.grid(row=10, column=0, pady=(2, 5), padx=10)
 
         dir_map = [
             ("↖", "TL", 0, 0), ("↑", "T", 0, 1), ("↗", "TR", 0, 2),
@@ -1986,9 +1996,9 @@ class EditorCanvas:
                 btn.grid(row=r, column=c, padx=1, pady=1)
                 self.temp_dir_buttons[code] = btn
 
-        # ========== Row 10: 旋轉角度標籤 + ⓘ ==========
+        # ========== Row 11: 旋轉角度標籤 + ⓘ ==========
         rotation_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        rotation_label_frame.grid(row=10, column=0, pady=(8, 2), padx=10, sticky="w")
+        rotation_label_frame.grid(row=11, column=0, pady=(8, 2), padx=10, sticky="w")
 
         rotation_label = tk.Label(
             rotation_label_frame,
@@ -2019,9 +2029,9 @@ class EditorCanvas:
             delay=200
         )
 
-        # ========== Row 11: 預設角度按鈕 ==========
+        # ========== Row 12: 預設角度按鈕 ==========
         rotation_btn_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        rotation_btn_frame.grid(row=11, column=0, pady=(2, 2), padx=10, sticky="ew")
+        rotation_btn_frame.grid(row=12, column=0, pady=(2, 2), padx=10, sticky="ew")
 
         self.rotation_buttons = {}
         self.current_rotation_angle = 0
@@ -2042,9 +2052,9 @@ class EditorCanvas:
             btn.pack(side=tk.LEFT, padx=1)
             self.rotation_buttons[a] = btn
 
-        # ========== Row 12: 自訂角度輸入 ==========
+        # ========== Row 13: 自訂角度輸入 ==========
         custom_rotation_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        custom_rotation_frame.grid(row=12, column=0, pady=(2, 5), padx=10, sticky="ew")
+        custom_rotation_frame.grid(row=13, column=0, pady=(2, 5), padx=10, sticky="ew")
 
         self.custom_rotation_entry = tk.Entry(
             custom_rotation_frame,
@@ -2075,9 +2085,9 @@ class EditorCanvas:
         )
         self.custom_rotation_apply_btn.pack(side=tk.LEFT)
 
-        # ========== Row 13: 放大模式 + ⓘ ==========
+        # ========== Row 14: 放大模式 + ⓘ ==========
         magnifier_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        magnifier_frame.grid(row=13, column=0, pady=(8, 8), padx=10, sticky="ew")
+        magnifier_frame.grid(row=14, column=0, pady=(8, 8), padx=10, sticky="ew")
 
         self.magnifier_var = tk.BooleanVar(value=True)
         self.magnifier_checkbox = tk.Checkbutton(
@@ -2112,9 +2122,9 @@ class EditorCanvas:
             "• 取消勾選自動恢復預設顯示"
         )
 
-        # ========== Row 14: 溫度座標 + ⓘ ==========
+        # ========== Row 15: 溫度座標 + ⓘ ==========
         realtime_temp_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        realtime_temp_frame.grid(row=14, column=0, pady=(0, 8), padx=10, sticky="ew")
+        realtime_temp_frame.grid(row=15, column=0, pady=(0, 8), padx=10, sticky="ew")
 
         self.realtime_temp_var = tk.BooleanVar(value=True)
         self.realtime_temp_checkbox = tk.Checkbutton(
@@ -2154,9 +2164,9 @@ class EditorCanvas:
             "移出熱力圖範圍後會自動隱藏"
         )
 
-        # ========== Row 15: 多選模式 + ⓘ ==========
+        # ========== Row 16: 多選模式 + ⓘ ==========
         multi_select_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        multi_select_frame.grid(row=15, column=0, pady=(0, 8), padx=10, sticky="ew")
+        multi_select_frame.grid(row=16, column=0, pady=(0, 8), padx=10, sticky="ew")
 
         self.multi_select_var = tk.BooleanVar(value=True)
         self.multi_select_checkbox = tk.Checkbutton(
@@ -2191,9 +2201,9 @@ class EditorCanvas:
             "• 選取多個後可批次轉換形狀或刪除"
         )
         
-        # ========== Row 16: 加回元器件 + ⓘ ==========
+        # ========== Row 17: 加回元器件 + ⓘ ==========
         add_back_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        add_back_frame.grid(row=16, column=0, pady=(0, 8), padx=10, sticky="ew")
+        add_back_frame.grid(row=17, column=0, pady=(0, 8), padx=10, sticky="ew")
 
         self.add_back_var = tk.BooleanVar(value=False)
         self.add_back_checkbox = tk.Checkbutton(
@@ -2229,7 +2239,7 @@ class EditorCanvas:
             "• 雙擊即可加回熱力圖和列表"
         )
 
-        # ========== Row 17: 加回元器件資訊框 ==========
+        # ========== Row 18: 加回元器件資訊框 ==========
         self.add_back_info_frame = tk.LabelFrame(
             button_container,
             text="可加回元器件資訊(雙擊加回)",
@@ -2237,7 +2247,7 @@ class EditorCanvas:
             bg=UIStyle.VERY_LIGHT_BLUE,
             fg=UIStyle.DARK_BLUE,
         )
-        self.add_back_info_frame.grid(row=17, column=0, pady=(0, 8), padx=10, sticky="ew")
+        self.add_back_info_frame.grid(row=18, column=0, pady=(0, 8), padx=10, sticky="ew")
 
         # 元器件名稱（大字、藍色）
         self.add_back_name_label = tk.Label(
@@ -3881,6 +3891,8 @@ class EditorCanvas:
                 # 无选中的矩形框，按钮灰色不可用
                 self.delete_button.config(state='disabled', bg=UIStyle.GRAY, fg=UIStyle.DARK_GRAY)
 
+        # 更新已選取數量提示
+        self.update_selection_count_label()
         # 同时更新合并按钮、形狀轉換按鈕和溫度位置按鈕狀態
         self.update_merge_button_state()
         self.update_shape_buttons_state()
@@ -3896,6 +3908,19 @@ class EditorCanvas:
             else:
                 # 选中≤1个矩形框，按钮灰色不可用
                 self.merge_button.config(state='disabled', bg=UIStyle.GRAY, fg=UIStyle.DARK_GRAY)
+
+    def update_selection_count_label(self):
+        """更新已選取數量提示標籤"""
+        if not hasattr(self, 'selection_count_label'):
+            return
+        # 計算選取數量（多選 + 單選）
+        count = len(self.selected_rect_ids)
+        if count == 0 and self.selected_rect_id is not None:
+            count = 1
+        if count > 0:
+            self.selection_count_label.config(text=f"已選取 {count} 個")
+        else:
+            self.selection_count_label.config(text="")
 
     def on_filter_changed(self, event=None):
         """篩選條件變化時的回調"""
