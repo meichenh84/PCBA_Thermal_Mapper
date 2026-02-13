@@ -82,6 +82,7 @@ class RectEditor:
         self.temp_file_path = temp_file_path
         self.on_rect_change_callback = on_rect_change_callback  # 矩形框变化回调
         self.display_scale = 1.0  # 当前显示缩放比例
+        self._base_font_scale = 1.0  # 放大模式下的基礎字體縮放比例（由 on_zoom_change 設定）
         self.drag_threshold = 3  # 拖拽阈值，小于此值不触发拖拽
         # Create canvas if not passed as argument
         # if canvas:
@@ -170,6 +171,7 @@ class RectEditor:
     def update_display_scale(self, display_scale):
         """更新显示缩放比例，用于正确绘制矩形框"""
         self.display_scale = display_scale
+        self._base_font_scale = display_scale
         # 重新绘制所有矩形框
         self.redraw_all_rectangles()
     
@@ -251,9 +253,9 @@ class RectEditor:
                 if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
                     display_cx = cx * self.zoom_scale + self.canvas_offset_x
                     display_cy = cy * self.zoom_scale + self.canvas_offset_y
-                    # 🔥 使用 font_scale=1.0，與三角形和文字的實際大小一致
+                    # 🔥 使用基礎縮放比例，與 on_zoom_change 一致
                     # 不可使用 zoom_scale，否則 tri_half 會隨放大倍率變大導致文字離三角形太遠
-                    display_scale = 1.0
+                    display_scale = self._base_font_scale
                 else:
                     display_scale = self.display_scale if self.display_scale > 0 else 1.0
                     display_cx = cx * display_scale
@@ -715,8 +717,8 @@ class RectEditor:
             # 縮放模式：使用 zoom_scale 和 offset
             scale = self.zoom_scale
             offset = (self.canvas_offset_x, self.canvas_offset_y)
-            # 🔥 放大模式下，字體大小保持不變（不隨著縮放而放大）
-            font_scale_override = 1.0
+            # 🔥 放大模式下，字體使用基礎縮放比例（與 on_zoom_change 一致）
+            font_scale_override = self._base_font_scale
         else:
             # 非縮放模式：使用 display_scale
             scale = self.display_scale
@@ -854,8 +856,8 @@ class RectEditor:
             # 縮放模式：使用 zoom_scale 和 offset
             scale = self.zoom_scale
             offset = (self.canvas_offset_x, self.canvas_offset_y)
-            # 🔥 放大模式下，字體大小保持不變（不隨著縮放而放大）
-            font_scale_override = 1.0
+            # 🔥 放大模式下，字體使用基礎縮放比例（與 on_zoom_change 一致）
+            font_scale_override = self._base_font_scale
         else:
             # 非縮放模式：使用 display_scale
             scale = self.display_scale
@@ -1044,8 +1046,8 @@ class RectEditor:
                             display_x2 = x2 * self.zoom_scale + self.canvas_offset_x
                             display_y2 = y2 * self.zoom_scale + self.canvas_offset_y
                             display_scale = self.zoom_scale
-                            # 🔥 放大模式下，三角形和文字大小保持不變
-                            font_scale = 1.0
+                            # 🔥 放大模式下，使用基礎縮放比例
+                            font_scale = self._base_font_scale
                         else:
                             # 非縮放模式：使用 display_scale
                             display_cx = cx * self.display_scale if self.display_scale > 0 else cx
@@ -1695,8 +1697,8 @@ class RectEditor:
             orig_y2 = (y2 - self.canvas_offset_y) / self.zoom_scale
 
             display_scale = self.zoom_scale
-            # 🔥 放大模式下，三角形和文字大小保持不變
-            font_scale = 1.0
+            # 🔥 放大模式下，使用基礎縮放比例
+            font_scale = self._base_font_scale
         else:
             # 非縮放模式：使用 display_scale 轉換
             if self.display_scale > 0:

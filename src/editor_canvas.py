@@ -2887,6 +2887,8 @@ class EditorCanvas:
 
         # 重新繪製所有矩形/圓形框（使用 draw_canvas_item）
         from draw_rect import draw_canvas_item
+        base_scale = self.current_display_scale if hasattr(self, 'current_display_scale') else 1.0
+        self.editor_rect._base_font_scale = base_scale
         for rect in self.editor_rect.rectangles:
             # 應用縮放變換到座標
             transformed_rect = rect.copy()
@@ -2899,7 +2901,6 @@ class EditorCanvas:
 
             # 使用 draw_canvas_item 繪製（它會處理形狀類型）
             # font_scale 使用基礎顯示縮放比例，使文字大小不隨放大倍率變化
-            base_scale = self.current_display_scale if hasattr(self, 'current_display_scale') else 1.0
             rectId, triangleId, tempTextId, nameId = draw_canvas_item(
                 self.canvas,
                 transformed_rect,
