@@ -582,33 +582,35 @@ class ResizableImagesApp:
             for item in self.folder_tree.get_children():
                 self.folder_tree.delete(item)
             
-            # 添加分类和文件
-            for category, files in self.folder_files.items():
+            # 固定六個分類，永遠全部顯示
+            all_categories = ["heat", "layout", "heatTemp", "layoutXY", "layoutLWT", "testReport"]
+            category_names = {"heat": "熱力圖", "layout": "Layout圖", "heatTemp": "溫度數據", "layoutXY": "元器件座標", "layoutLWT": "元器件尺寸", "testReport": "測試報告"}
+            category_spaces = {"heat": 32, "layout": 32, "heatTemp": 29, "layoutXY": 27, "layoutLWT": 27, "testReport": 27}
+
+            for category in all_categories:
+                files = self.folder_files.get(category, [])
+                category_name = category_names[category]
+                # 沒有檔案 → ❗；有驗證警告 → ❗；否則 → ✅
+                warned = hasattr(self, '_category_warnings') and category in self._category_warnings
+                has_warning = (not files) or warned
+                status_icon = " ❗" if has_warning else " ✅"
+                base_text = f"{category_name} ({len(files)}){status_icon}"
+                display_text = f"{base_text:<{category_spaces[category]}}📁"
+                category_item = self.folder_tree.insert("", "end", text=display_text, values=(category, ""))
+
+                # 自动展开所有分类
+                self.folder_tree.item(category_item, open=True)
+
                 if files:
-                    # 统一标题长度，让图标对齐
-                    category_names = {"heat": "熱力圖", "layout": "Layout圖", "heatTemp": "溫度數據", "layoutXY": "元器件座標", "layoutLWT": "元器件尺寸", "testReport": "測試報告"}
-                    category_spaces = {"heat": 32, "layout": 32, "heatTemp": 29, "layoutXY": 27, "layoutLWT": 27, "testReport": 27}
-                    category_name = category_names[category]
-                    # 根據驗證結果顯示 ✅ 或 ❗ 標記
-                    warned = hasattr(self, '_category_warnings') and category in self._category_warnings
-                    status_icon = " ❗" if warned else " ✅"
-                    base_text = f"{category_name} ({len(files)}){status_icon}"
-                    display_text = f"{base_text:<{category_spaces[category]}}📁"
-                    category_item = self.folder_tree.insert("", "end", text=display_text, values=(category, ""))
-                    
-                    # 自动展开所有分类
-                    self.folder_tree.item(category_item, open=True)
-                    
                     for filename in files:
-                        # 如果这是当前使用的文件，用加粗标记
-                        if filename == self.current_files[category]:
-                            display_text = filename  # 文件名不显示图标
-                            item = self.folder_tree.insert(category_item, "end", text=display_text, values=(category, filename))
-                            # 设置加粗样式
+                        if filename == self.current_files.get(category):
+                            item = self.folder_tree.insert(category_item, "end", text=filename, values=(category, filename))
                             self.folder_tree.item(item, tags=("bold",))
                         else:
-                            display_text = filename  # 文件名不显示图标
-                            item = self.folder_tree.insert(category_item, "end", text=display_text, values=(category, filename))
+                            self.folder_tree.insert(category_item, "end", text=filename, values=(category, filename))
+                else:
+                    # 無檔案時顯示「無」
+                    self.folder_tree.insert(category_item, "end", text="無", values=(category, ""))
     
     def _on_tree_motion(self, event):
         """處理檔案樹狀列表的滑鼠移動事件，顯示 layoutXY / layoutLWT 的欄位說明 tooltip。"""
