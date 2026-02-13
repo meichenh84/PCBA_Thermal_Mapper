@@ -1410,17 +1410,40 @@ class RectEditor:
             else:
                 scale = self.display_scale if self.display_scale > 0 else 1.0
                 ox, oy = 0, 0
-            disp_cx = (x1_o + x2_o) / 2 * scale + ox
-            disp_cy = (y1_o + y2_o) / 2 * scale + oy
+            old_cx = (x1_o + x2_o) / 2 * scale + ox
+            old_cy = (y1_o + y2_o) / 2 * scale + oy
 
             # 逆旋轉滑鼠座標
-            local_mx, local_my = rotate_point(event.x, event.y, disp_cx, disp_cy, -angle)
+            local_mx, local_my = rotate_point(event.x, event.y, old_cx, old_cy, -angle)
 
             # 在本地座標系中的未旋轉邊界
             local_x1 = x1_o * scale + ox
             local_y1 = y1_o * scale + oy
             local_x2 = x2_o * scale + ox
             local_y2 = y2_o * scale + oy
+
+            # 記錄固定點的 local 座標（resize 前，對邊不受影響）
+            mid_x = (local_x1 + local_x2) / 2
+            mid_y = (local_y1 + local_y2) / 2
+            if anchor == 0:    # TL → 固定 BR
+                fix_x, fix_y = local_x2, local_y2
+            elif anchor == 1:  # TR → 固定 BL
+                fix_x, fix_y = local_x1, local_y2
+            elif anchor == 2:  # BL → 固定 TR
+                fix_x, fix_y = local_x2, local_y1
+            elif anchor == 3:  # BR → 固定 TL
+                fix_x, fix_y = local_x1, local_y1
+            elif anchor == 4:  # L-mid → 固定右邊中點
+                fix_x, fix_y = local_x2, mid_y
+            elif anchor == 5:  # R-mid → 固定左邊中點
+                fix_x, fix_y = local_x1, mid_y
+            elif anchor == 6:  # T-mid → 固定下邊中點
+                fix_x, fix_y = mid_x, local_y2
+            else:              # B-mid → 固定上邊中點
+                fix_x, fix_y = mid_x, local_y1
+
+            # 固定點在螢幕上的位置（以舊中心旋轉）
+            fix_screen_x, fix_screen_y = rotate_point(fix_x, fix_y, old_cx, old_cy, angle)
 
             # 套用軸對齊縮放邏輯
             if anchor == 0:  # TL
@@ -1444,6 +1467,17 @@ class RectEditor:
             elif anchor == 7:  # B-mid
                 local_y2 = max(local_my, local_y1 + self.min_width)
 
+            # 平移補償：讓固定點的螢幕位置不變
+            new_cx = (local_x1 + local_x2) / 2
+            new_cy = (local_y1 + local_y2) / 2
+            fix_new_screen_x, fix_new_screen_y = rotate_point(fix_x, fix_y, new_cx, new_cy, angle)
+            shift_x = fix_screen_x - fix_new_screen_x
+            shift_y = fix_screen_y - fix_new_screen_y
+            local_x1 += shift_x
+            local_y1 += shift_y
+            local_x2 += shift_x
+            local_y2 += shift_y
+
             # 轉回原圖像座標
             rect_data["x1"] = (local_x1 - ox) / scale
             rect_data["y1"] = (local_y1 - oy) / scale
@@ -1451,11 +1485,11 @@ class RectEditor:
             rect_data["y2"] = (local_y2 - oy) / scale
 
             # 重新計算旋轉頂點並更新 polygon
-            new_cx = (local_x1 + local_x2) / 2
-            new_cy = (local_y1 + local_y2) / 2
+            final_cx = (local_x1 + local_x2) / 2
+            final_cy = (local_y1 + local_y2) / 2
             new_hw = (local_x2 - local_x1) / 2
             new_hh = (local_y2 - local_y1) / 2
-            corners_resize = get_rotated_corners(new_cx, new_cy, new_hw, new_hh, angle)
+            corners_resize = get_rotated_corners(final_cx, final_cy, new_hw, new_hh, angle)
             flat_resize = corners_to_flat(corners_resize)
             self.canvas.coords(rectId, *flat_resize)
 
