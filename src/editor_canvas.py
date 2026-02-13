@@ -2321,8 +2321,13 @@ class EditorCanvas:
             print("✓ 加回元器件模式已啟用")
         else:
             self.add_back_info_frame.grid_remove()
-            self.canvas.unbind('<Motion>')
-            self.canvas.unbind('<Double-Button-1>')
+            # 恢復 editor_rect 原始的 Motion 與 Double-Click 綁定
+            if hasattr(self, 'editor_rect') and self.editor_rect:
+                self.canvas.bind('<Motion>', self.editor_rect.on_mouse_move)
+                self.canvas.bind('<Double-Button-1>', self.editor_rect.on_double_click)
+            else:
+                self.canvas.unbind('<Motion>')
+                self.canvas.unbind('<Double-Button-1>')
             self._clear_add_back_preview()
             self._current_hover_component = None
             self._reset_add_back_info()
