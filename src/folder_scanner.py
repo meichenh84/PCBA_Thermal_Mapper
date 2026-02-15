@@ -6,7 +6,7 @@
     掃描指定資料夾中的所有檔案，根據檔案內容自動分類為六種類型：
       - heat       : 熱力圖影像（.jpg/.jpeg/.png，HSV 高飽和度 + 高色調變異）
       - layout     : Layout 佈局圖影像（.jpg/.jpeg/.png，黑色像素比例 > 60%）
-      - heatTemp   : 溫度數據（.csv，無表頭溫度矩陣）
+      - heatTemp   : 溫度數據（.csv，第一行皆為數字（含浮點數/小數）即視為溫度矩陣）
       - layoutXY   : 元器件座標檔（.xlsx，含 RefDes, Orient., X, Y）
       - layoutLWT  : 元器件尺寸檔（.xlsx，含 RefDes, L, W, T, 对象描述）
       - testReport : 測試報告（.xlsx，含 HIGH 字眼的 sheet）
@@ -152,6 +152,42 @@ def is_test_report_xlsx(file_path):
 # Excel 檔案分類函式
 # =============================================================================
 
+def is_temperature_csv(file_path):
+    """判斷指定 .csv 檔案是否為溫度數據。
+
+    讀取第一行，檢查所有欄位是否皆為數字（含浮點數）。
+    若第一行全為數字，則視為無表頭的溫度矩陣。
+
+    參數：
+        file_path (str): .csv 檔案的完整路徑
+
+    回傳：
+        bool: True 表示判定為溫度數據
+    """
+    try:
+        for encoding in ('utf-8', 'utf-8-sig', 'cp950', 'gbk'):
+            try:
+                df = pd.read_csv(file_path, nrows=1, header=None, encoding=encoding)
+                break
+            except (UnicodeDecodeError, UnicodeError):
+                continue
+        else:
+            return False
+
+        if df.empty or len(df.columns) == 0:
+            return False
+
+        # 檢查第一行所有值是否皆為數字
+        for val in df.iloc[0]:
+            try:
+                float(val)
+            except (ValueError, TypeError):
+                return False
+        return True
+    except Exception:
+        return False
+
+
 def classify_xlsx_file(file_path):
     """自動分類 .xlsx 檔案類型。
 
@@ -252,8 +288,9 @@ def scan_folder(folder_path):
                     file_info["testReport"].append((filename, mtime))
                 else:
                     file_info["heatTemp"].append((filename, mtime))
-            else:
-                file_info["heatTemp"].append((filename, mtime))
+            elif filename.lower().endswith('.csv'):
+                if is_temperature_csv(file_path):
+                    file_info["heatTemp"].append((filename, mtime))
 
     # 按修改時間排序（最新的在前）
     for category in file_info:

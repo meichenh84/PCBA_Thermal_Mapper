@@ -239,6 +239,13 @@ class TemplateDialog:
             # 关闭对话框
             dialog.destroy()
 
+        # 提示標籤：雙擊熱力圖可開啟編輯介面
+        hint_frame = tk.Frame(main_frame)
+        hint_frame.pack(pady=(10, 0))
+        tk.Label(hint_frame, text="⚠", font=("Arial", 14), fg="#e69e17").pack(side=tk.LEFT)
+        tk.Label(hint_frame, text=" 確認後，滑鼠雙擊左區熱力圖開啟 Edit Temperature 視窗進行編輯",
+                 font=("Arial", 9), fg="#666666").pack(side=tk.LEFT)
+
         # 确认按钮
         confirm_button = tk.Button(main_frame, text="  确认  ", command=on_confirm)
         confirm_button.pack(pady=10)

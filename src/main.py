@@ -641,7 +641,7 @@ class ResizableImagesApp:
             ),
             "heatTemp": (
                 "熱力圖溫度數據\n"
-                "支援格式：.csv（無表頭，Tab 或逗號分隔）\n"
+                "支援格式：.csv（無表頭，數字(含小數)Tab或逗號分隔）\n"
                 "內容：與熱力圖像素對應的溫度矩陣"
             ),
             "layoutXY": (
