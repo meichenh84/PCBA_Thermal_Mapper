@@ -659,7 +659,7 @@ class ResizableImagesApp:
             "testReport": (
                 "測試報告檔案\n"
                 "支援格式：.xlsx\n"
-                "辨識條件：含有 HIGH 字眼的 Sheet"
+                "辨識條件：轉大寫含有 HIGH 字眼的 Sheet"
             ),
         }
 

@@ -426,7 +426,7 @@ class EditorCanvas:
         # 點位名稱篩選輸入框
         self.filter_name_entry = PlaceholderEntry(
             filter_frame,
-            placeholder='點位名稱：輸入 C,HA',
+            placeholder='點位名稱：輸入 C,HS',
             placeholder_color="gray",
             font=("Arial", 9),
             width=FILTER_INPUT_WIDTH,
@@ -450,8 +450,8 @@ class EditorCanvas:
         Tooltip(name_info_label,
                 "名稱篩選說明：\n"
                 "• 單一值：輸入 C 篩選包含 C 的項目\n"
-                "• 多值（OR）：輸入 \"C\",\"HA\" 篩選包含 C 或 HA 的項目\n"
-                "• 格式支援：\"C\",\"HA\" 或 C,HA")
+                "• 多值（OR）：輸入 \"C\",\"HS\" 篩選包含 C 或 HS 的項目\n"
+                "• 格式支援：\"C\",\"HA\" 或 C,HS")
 
         # "刪除其他" 按鈕（在點位名稱篩選 ⓘ 圖示後方）
         self.delete_others_btn = tk.Button(
@@ -4071,7 +4071,7 @@ class EditorCanvas:
 
         支持的格式：
         - "C","HA"  : 引號包圍的多個值
-        - C,HA      : 未引號的多個值
+        - C,HS      : 未引號的多個值
         - C         : 單一值
 
         Args:
@@ -4096,7 +4096,7 @@ class EditorCanvas:
             # 找到引號格式，使用引號內的值
             return [v.strip().upper() for v in quoted_matches if v.strip()]
 
-        # 否則按逗號分割（支持 C,HA 格式）
+        # 否則按逗號分割（支持 C,HS 格式）
         values = [v.strip().upper() for v in input_str.split(',') if v.strip()]
 
         return values if values else [input_str.upper()]
