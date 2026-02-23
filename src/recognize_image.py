@@ -35,7 +35,7 @@ from recognize_pcb_boundary import recognize_pcb_boundary
 from point_transformer import PointTransformer
 from color_range import get_mask_boundary
 from load_tempA import TempLoader
-from yolo_v8 import YOLOv8Instance
+# from yolo_v8 import YOLOv8Instance  # YOLO 模組已停用，整個 yolo_v8.py 已註解
 from PIL import Image, ImageTk
 
 
