@@ -1625,6 +1625,8 @@ class EditorCanvas:
             
         # 获取canvas_frame的可用尺寸，而不是整个窗口尺寸
         canvas_frame = self.canvas.master
+        if not canvas_frame.winfo_exists():
+            return
         canvas_frame.update_idletasks()
         frame_width = canvas_frame.winfo_width()
         frame_height = canvas_frame.winfo_height()
