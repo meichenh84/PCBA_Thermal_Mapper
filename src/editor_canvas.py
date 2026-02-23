@@ -1839,7 +1839,10 @@ class EditorCanvas:
 
         # 當按鈕容器大小改變時更新滾動區域
         def _on_button_container_configure(event):
-            toolbar_canvas.configure(scrollregion=toolbar_canvas.bbox("all"))
+            bbox = toolbar_canvas.bbox("all")
+            if bbox:
+                # 強制 scrollregion 從 y=0 開始，避免上方出現空白
+                toolbar_canvas.configure(scrollregion=(0, 0, bbox[2], bbox[3]))
         button_container.bind('<Configure>', _on_button_container_configure)
 
         # 當 Canvas 寬度改變時同步按鈕容器寬度
@@ -1849,6 +1852,10 @@ class EditorCanvas:
 
         # 在工具列區域內啟用滑鼠滾輪滾動
         def _on_toolbar_mousewheel(event):
+            # 內容未超出可視區域時不捲動
+            bbox = toolbar_canvas.bbox("all")
+            if bbox and (bbox[3] - bbox[1]) <= toolbar_canvas.winfo_height():
+                return
             toolbar_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
         toolbar_canvas.bind('<MouseWheel>', _on_toolbar_mousewheel)
         button_container.bind('<MouseWheel>', _on_toolbar_mousewheel)
