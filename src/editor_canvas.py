@@ -138,47 +138,59 @@ class EditorCanvas:
         self.COLUMN_WIDTH_DESC = 28   # 描述欄位寬度
         self.COLUMN_WIDTH_TEMP = 3    # 溫度欄位寬度
 
+        # Treeview 儲存格 tooltip 相關變量
+        self._cell_tooltip = None      # tooltip Toplevel 視窗
+        self._cell_tooltip_key = None  # 目前 tooltip 對應的 (item, column) 鍵
+
         # 先设置dialog属性
         self.dialog = dialog
 
-        # 创建主框架，使用三列布局：左侧列表 + 中间canvas + 右侧操作条
+        # 创建主框架
         main_frame = tk.Frame(dialog)
         main_frame.grid(row=0, column=0, sticky="nsew")
-        
+
         # 配置dialog的grid属性
         dialog.grid_rowconfigure(0, weight=1)
         dialog.grid_columnconfigure(0, weight=1)
-        
-        # 配置列权重：左侧列表固定宽度，中间canvas自适应，右侧操作条固定100px
-        main_frame.grid_columnconfigure(0, weight=0)  # 左侧列表，固定宽度
-        main_frame.grid_columnconfigure(1, weight=1)  # 中间canvas，自适应
-        main_frame.grid_columnconfigure(2, weight=0)  # 右侧操作条，固定宽度
-        main_frame.grid_rowconfigure(0, weight=1)
 
-        # 创建左侧列表面板
-        self.create_rect_list_panel(main_frame)
+        main_frame.grid_rowconfigure(0, weight=1)
+        main_frame.grid_columnconfigure(0, weight=1)
+
+        # 使用 PanedWindow 讓左側面板可拖曳調整寬度
+        self.paned = tk.PanedWindow(main_frame, orient=tk.HORIZONTAL, sashwidth=5, sashrelief=tk.RAISED, bg=UIStyle.VERY_LIGHT_BLUE)
+        self.paned.grid(row=0, column=0, sticky="nsew")
+
+        # 创建左侧列表面板（加到 PanedWindow）
+        self.create_rect_list_panel(self.paned)
+
+        # 创建右侧容器（canvas + toolbar）
+        right_container = tk.Frame(self.paned)
+        right_container.grid_rowconfigure(0, weight=1)
+        right_container.grid_columnconfigure(0, weight=1)
+        right_container.grid_columnconfigure(1, weight=0)
+        self.paned.add(right_container, stretch="always")
 
         # 创建中间canvas区域，使用grid布局
-        canvas_frame = tk.Frame(main_frame, bg='white')  # 白色背景
-        canvas_frame.grid(row=0, column=1, sticky="nsew")
-        
+        canvas_frame = tk.Frame(right_container, bg='white')  # 白色背景
+        canvas_frame.grid(row=0, column=0, sticky="nsew")
+
         # 配置canvas_frame的grid属性，确保Canvas居中
         canvas_frame.grid_rowconfigure(0, weight=1)
         canvas_frame.grid_columnconfigure(0, weight=1)
-        
+
         # 创建 Canvas，使用grid布局实现真正的居中
         self.canvas = tk.Canvas(canvas_frame, bg='white')
         # 使用grid布局让Canvas在框架中居中
         self.canvas.grid(row=0, column=0, sticky="")
-        
+
         # 绑定框架大小变化事件，调用update_bg_image进行缩放
         canvas_frame.bind('<Configure>', lambda e: self.update_bg_image() if hasattr(self, 'canvas') and self.canvas is not None else None)
-        
+
         # 延迟执行一次调整，确保框架已初始化
         self.dialog.after(200, self.update_bg_image)
-        
+
         # 创建右侧操作条
-        self.create_vertical_toolbar(main_frame)
+        self.create_vertical_toolbar(right_container)
         
         # 绑定键盘Delete键和BackSpace键到对话框和Canvas
         print("🔍🔍🔍 绑定Delete键和BackSpace键事件到对话框和Canvas")
@@ -338,9 +350,19 @@ class EditorCanvas:
     def create_rect_list_panel(self, parent):
         """创建左侧矩形框列表面板"""
         # 创建左侧面板框架
-        left_panel = tk.Frame(parent, width=500, bg=UIStyle.VERY_LIGHT_BLUE)
-        left_panel.grid(row=0, column=0, sticky="ns", padx=5, pady=5)
-        left_panel.grid_propagate(False)  # 保持固定宽度
+        left_panel = tk.Frame(parent, width=340, bg=UIStyle.VERY_LIGHT_BLUE)
+        self.paned.add(left_panel, minsize=200, width=340, stretch="never")
+        self.left_panel = left_panel
+        # 限制左側面板最大寬度：不超過視窗寬度的 1/3
+        def _enforce_max_width(event=None):
+            try:
+                max_width = self.dialog.winfo_width() // 3
+                sash_pos = self.paned.sash_coord(0)[0]
+                if sash_pos > max_width:
+                    self.paned.sash_place(0, max_width, 0)
+            except (tk.TclError, IndexError):
+                pass
+        left_panel.bind('<Configure>', _enforce_max_width)
         
         # 配置左侧面板的grid属性
         left_panel.grid_rowconfigure(0, weight=0)  # 标题行，固定高度
@@ -409,21 +431,21 @@ class EditorCanvas:
         filter_frame = tk.Frame(left_panel, bg=UIStyle.VERY_LIGHT_BLUE)
         filter_frame.grid(row=2, column=0, sticky="ew", pady=(0, 5))
 
-        # 統一的篩選輸入框寬度
-        FILTER_INPUT_WIDTH = 35
+        # 統一的篩選輸入框寬度（縮減為原本的一半）
+        FILTER_INPUT_WIDTH = 17
 
-        # === 第一列：篩選保留標籤 + 點位名稱篩選輸入框 + 驚嘆號 + 刪除其他按鈕 ===
+        # === 第一列：篩選保留標籤 + 點位名稱篩選輸入框 + ⓘ ===
         # "篩選保留" 標籤
         filter_label = tk.Label(
             filter_frame,
             text="篩選保留",
-            font=("Arial", 9, "bold"),
+            font=("Arial", 10),
             bg=UIStyle.VERY_LIGHT_BLUE,
-            fg=UIStyle.DARK_BLUE
+            fg=UIStyle.DARK_GRAY
         )
         filter_label.grid(row=0, column=0, sticky="w", padx=(5, 5), pady=3)
 
-        # 點位名稱篩選輸入框
+        # 點位名稱篩選輸入框（與篩選保留同一列）
         self.filter_name_entry = PlaceholderEntry(
             filter_frame,
             placeholder='點位名稱：輸入 C,HS',
@@ -453,9 +475,12 @@ class EditorCanvas:
                 "• 多值（OR）：輸入 \"C\",\"HS\" 篩選包含 C 或 HS 的項目\n"
                 "• 格式支援：\"C\",\"HA\" 或 C,HS")
 
-        # "刪除其他" 按鈕（在點位名稱篩選 ⓘ 圖示後方）
+        # === 第二列：刪除其他按鈕 + ⓘ（篩選保留正下方） ===
+        delete_others_sub_frame = tk.Frame(filter_frame, bg=UIStyle.VERY_LIGHT_BLUE)
+        delete_others_sub_frame.grid(row=1, column=0, sticky="w", padx=(5, 5), pady=(0, 3))
+
         self.delete_others_btn = tk.Button(
-            filter_frame,
+            delete_others_sub_frame,
             text="\u26A0 刪除其他",
             font=("Arial", 8),
             bg=UIStyle.VERY_LIGHT_BLUE,
@@ -467,18 +492,18 @@ class EditorCanvas:
             command=self.on_delete_others,
             state='disabled'
         )
-        self.delete_others_btn.grid(row=0, column=3, sticky="w", padx=(2, 5), pady=3)
+        self.delete_others_btn.pack(side='left')
 
         # 刪除其他說明圖示
         delete_others_info_label = tk.Label(
-            filter_frame,
+            delete_others_sub_frame,
             text="ⓘ",
             font=("Arial", 12),
             bg=UIStyle.VERY_LIGHT_BLUE,
             fg=UIStyle.PRIMARY_BLUE,
             cursor="hand2"
         )
-        delete_others_info_label.grid(row=0, column=4, sticky="w", padx=(0, 5), pady=3)
+        delete_others_info_label.pack(side='left', padx=(4, 0))
         Tooltip(
             delete_others_info_label,
             "刪除其他說明：\n"
@@ -487,7 +512,7 @@ class EditorCanvas:
             "• 此操作不可復原，請確認後再執行"
         )
 
-        # === 第二列：描述篩選輸入框 + 驚嘆號 ===
+        # === 第三列：描述篩選輸入框 + ⓘ ===
         # 描述篩選輸入框
         self.filter_desc_entry = PlaceholderEntry(
             filter_frame,
@@ -563,18 +588,18 @@ class EditorCanvas:
             selectmode='extended'  # 支持多選
         )
 
-        # 配置欄位
+        # 配置欄位：名稱與溫度固定不縮小，描述欄位自動填滿可縮小
         self.tree.column('#0', width=0, stretch=tk.NO)  # 隱藏第一欄（tree column）
-        self.tree.column('name', width=int(self.COLUMN_WIDTH_NAME * 8), anchor='w')  # 點位名稱欄位
-        self.tree.column('desc', width=int(self.COLUMN_WIDTH_DESC * 8), anchor='w')  # 描述欄位
-        self.tree.column('temp', width=int(self.COLUMN_WIDTH_TEMP * 8), anchor='center')  # 溫度欄位
+        self.tree.column('name', width=70, minwidth=70, anchor='w', stretch=tk.NO)  # 點位名稱欄位（固定寬度）
+        self.tree.column('desc', width=180, minwidth=40, anchor='w', stretch=tk.YES)  # 描述欄位（可縮小，自動填滿）
+        self.tree.column('temp', width=60, minwidth=60, anchor='center', stretch=tk.NO)  # 溫度欄位（固定寬度）
 
         # 配置表頭
         self.tree.heading('name', text='點位名稱 ▼', command=self.toggle_sort_by_name)
         self.tree.heading('desc', text='描述', command=self.toggle_sort_by_desc)
         self.tree.heading('temp', text='溫度', command=self.toggle_sort_by_temp)
 
-        # 創建滾動條
+        # 創建垂直滾動條
         scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
 
@@ -591,11 +616,82 @@ class EditorCanvas:
         self.tree.bind('<<TreeviewSelect>>', self.on_tree_select)
         self.tree.bind('<Button-1>', self.on_tree_click)
 
+        # 綁定儲存格 hover tooltip 事件
+        self.tree.bind('<Motion>', self._on_tree_cell_motion)
+        self.tree.bind('<Leave>', self._on_tree_cell_leave)
+
         # 移除名称推荐下拉框
 
         # 初始化列表（應用預設排序：點位名稱 A~Z）
         # 注意：update_rect_list() 會自動調用 update_sort_indicators()
         self.update_rect_list()
+
+    def _on_tree_cell_motion(self, event):
+        """Treeview 儲存格 hover tooltip：偵測游標所在的 row+column 並顯示完整文字"""
+        try:
+            item = self.tree.identify_row(event.y)
+            col = self.tree.identify_column(event.x)
+            if not item or not col:
+                self._hide_cell_tooltip()
+                return
+
+            key = (item, col)
+            if key == self._cell_tooltip_key:
+                # 同一儲存格，只更新位置
+                if self._cell_tooltip:
+                    x = event.x_root + 15
+                    y = event.y_root + 10
+                    self._cell_tooltip.wm_geometry(f"+{x}+{y}")
+                return
+
+            # 取得儲存格文字
+            col_index = int(col.replace('#', '')) - 1
+            columns = ('name', 'desc', 'temp')
+            if col_index < 0 or col_index >= len(columns):
+                self._hide_cell_tooltip()
+                return
+            values = self.tree.item(item, 'values')
+            if not values or col_index >= len(values):
+                self._hide_cell_tooltip()
+                return
+            text = str(values[col_index])
+            if not text:
+                self._hide_cell_tooltip()
+                return
+
+            # 建立新的 tooltip
+            self._hide_cell_tooltip()
+            self._cell_tooltip_key = key
+            tw = tk.Toplevel(self.tree)
+            tw.wm_overrideredirect(True)
+            label = tk.Label(
+                tw, text=text, justify=tk.LEFT,
+                background="#FFFFCC", foreground="#000000",
+                relief=tk.SOLID, borderwidth=1,
+                font=("Arial", 9), padx=8, pady=6
+            )
+            label.pack()
+            x = event.x_root + 15
+            y = event.y_root + 10
+            tw.wm_geometry(f"+{x}+{y}")
+            tw.lift()
+            self._cell_tooltip = tw
+        except (tk.TclError, Exception):
+            pass
+
+    def _on_tree_cell_leave(self, event):
+        """離開 Treeview 時隱藏儲存格 tooltip"""
+        self._hide_cell_tooltip()
+
+    def _hide_cell_tooltip(self):
+        """銷毀儲存格 tooltip"""
+        if self._cell_tooltip:
+            try:
+                self._cell_tooltip.destroy()
+            except (tk.TclError, Exception):
+                pass
+            self._cell_tooltip = None
+        self._cell_tooltip_key = None
 
     def _on_mousewheel(self, event):
         """统一的滚轮事件处理 - 直接控制列表滚动"""
@@ -1700,22 +1796,54 @@ class EditorCanvas:
         """创建右侧竖向操作条"""
         # 创建操作条框架，宽度与左侧列表一致(200px)，样式与左侧保持一致
         toolbar_frame = tk.Frame(parent, width=200, bg=UIStyle.VERY_LIGHT_BLUE)
-        toolbar_frame.grid(row=0, column=2, sticky="ns", padx=5, pady=5)
+        toolbar_frame.grid(row=0, column=1, sticky="ns", padx=5, pady=5)
         toolbar_frame.grid_propagate(False)  # 保持固定宽度
-        
+
         # 配置右侧工具栏的grid属性
         toolbar_frame.grid_rowconfigure(0, weight=0)  # 标题行，固定高度
-        toolbar_frame.grid_rowconfigure(1, weight=1)  # 按钮区域，自适应高度
+        toolbar_frame.grid_rowconfigure(1, weight=1)  # 可滾動按鈕區域，自適應高度
         toolbar_frame.grid_columnconfigure(0, weight=1)  # 单列，占满宽度
-        
+
         # 添加工具栏标题，样式与左侧列表标题保持一致
         title_label = tk.Label(toolbar_frame, text="工具栏", font=UIStyle.TITLE_FONT, bg=UIStyle.VERY_LIGHT_BLUE, fg=UIStyle.BLACK)
-        title_label.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        
-        # 配置按钮容器，样式与左侧列表保持一致
-        button_container = tk.Frame(toolbar_frame, bg=UIStyle.VERY_LIGHT_BLUE)
-        button_container.grid(row=1, column=0, sticky="nsew", pady=10)
-        
+        title_label.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+
+        # 可滾動的工具列區域：Canvas + Scrollbar
+        toolbar_canvas = tk.Canvas(toolbar_frame, bg=UIStyle.VERY_LIGHT_BLUE, highlightthickness=0)
+        toolbar_scrollbar = ttk.Scrollbar(toolbar_frame, orient="vertical", command=toolbar_canvas.yview)
+        toolbar_canvas.configure(yscrollcommand=toolbar_scrollbar.set)
+
+        toolbar_canvas.grid(row=1, column=0, sticky="nsew")
+        toolbar_scrollbar.grid(row=1, column=1, sticky="ns")
+        toolbar_frame.grid_columnconfigure(1, weight=0)
+
+        # 按鈕容器放在 Canvas 內部
+        button_container = tk.Frame(toolbar_canvas, bg=UIStyle.VERY_LIGHT_BLUE)
+        toolbar_canvas_window = toolbar_canvas.create_window((0, 0), window=button_container, anchor="nw")
+
+        # 當按鈕容器大小改變時更新滾動區域
+        def _on_button_container_configure(event):
+            toolbar_canvas.configure(scrollregion=toolbar_canvas.bbox("all"))
+        button_container.bind('<Configure>', _on_button_container_configure)
+
+        # 當 Canvas 寬度改變時同步按鈕容器寬度
+        def _on_toolbar_canvas_configure(event):
+            toolbar_canvas.itemconfig(toolbar_canvas_window, width=event.width)
+        toolbar_canvas.bind('<Configure>', _on_toolbar_canvas_configure)
+
+        # 在工具列區域內啟用滑鼠滾輪滾動
+        def _on_toolbar_mousewheel(event):
+            toolbar_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        toolbar_canvas.bind('<MouseWheel>', _on_toolbar_mousewheel)
+        button_container.bind('<MouseWheel>', _on_toolbar_mousewheel)
+        # 為所有子元件遞迴綁定滾輪事件
+        def _bind_mousewheel_recursive(widget):
+            widget.bind('<MouseWheel>', _on_toolbar_mousewheel)
+            for child in widget.winfo_children():
+                _bind_mousewheel_recursive(child)
+        # 延遲綁定，等所有按鈕建立完成
+        self.dialog.after(300, lambda: _bind_mousewheel_recursive(button_container))
+
         # 配置按钮容器的grid属性，按钮固定高度，不拉伸
         for r in range(18):
             button_container.grid_rowconfigure(r, weight=0)
