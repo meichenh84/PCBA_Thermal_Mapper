@@ -72,7 +72,7 @@ class EditorCanvas:
         display_scale (float): 目前的顯示縮放比例
     """
 
-    def __init__(self, parent, image, mark_rect, on_close_callback=None, temp_file_path=None):
+    def __init__(self, parent, image, mark_rect, on_close_callback=None, temp_file_path=None, origin_mark_rect=None):
         """初始化溫度編輯畫布對話框。
 
         Args:
@@ -81,6 +81,7 @@ class EditorCanvas:
             mark_rect (list): 元器件標記資料列表
             on_close_callback (callable|None): 視窗關閉時的回呼函式
             temp_file_path (str|None): 溫度資料檔案路徑
+            origin_mark_rect (list|None): 原始辨識結果（用於跨 session 回到起點）
         """
         super().__init__()
 
@@ -89,6 +90,7 @@ class EditorCanvas:
         # 使用深拷贝避免修改主页面的原始数据
         import copy
         self.mark_rect = copy.deepcopy(mark_rect)
+        self.origin_mark_rect = copy.deepcopy(origin_mark_rect) if origin_mark_rect is not None else None
         self.temp_file_path = temp_file_path
         self.last_window_width = 0
           # 控制更新的频率
@@ -309,6 +311,19 @@ class EditorCanvas:
         # 儲存初始快照（所有矩形繪製完成後）
         self._initial_snapshot = self._create_snapshot()
 
+        # 建立原始辨識快照（用於跨 session 回到起點）
+        if self.origin_mark_rect is not None:
+            import copy
+            self._origin_snapshot = {
+                "rectangles": copy.deepcopy(self.origin_mark_rect),
+                "add_new_count": 0,
+                "delete_origin_count": 0,
+                "modify_origin_set": set(),
+            }
+        else:
+            self._origin_snapshot = None
+        self._update_reset_button_state()
+
     def _compute_excluded_components(self):
         """計算目前不在左側列表中的元器件，預先轉換為熱力圖像素座標與 Layout 圖中心座標"""
         self.excluded_components = []
@@ -508,8 +523,9 @@ class EditorCanvas:
             delete_others_info_label,
             "刪除其他說明：\n"
             "• 先用篩選條件篩選出要保留的元器件\n"
-            "• 點擊按鈕後，不符合篩選條件的項目將被永久刪除\n"
-            "• 此操作不可復原，請確認後再執行"
+            "• 點擊按鈕後，不符合篩選條件的項目將被刪除\n"
+            "• 可透過「回到上一步」復原，或用「加回元器件」找回\n"
+            "• 也可透過「回到起點」恢復為最初辨識結果"
         )
 
         # === 第三列：描述篩選輸入框 + ⓘ ===
@@ -1901,7 +1917,8 @@ class EditorCanvas:
         Tooltip(
             reset_info_label,
             "回到起點功能：\n"
-            "• 將所有元器件恢復為初始載入時的狀態\n"
+            "• 無視任何編輯與保存結果，直接恢復為溫度篩選後的原始辨識狀態\n"
+            "• 即使關閉編輯器後重新開啟，仍可恢復至最初辨識的完整元器件列表\n"
             "• 此操作會清除所有修改紀錄"
         )
 
@@ -2039,7 +2056,8 @@ class EditorCanvas:
         self.convert_to_rect_button = tk.Button(
             shape_btn_frame,
             text="轉為矩形 ⬜",
-            font=UIStyle.BUTTON_FONT,
+            font=("Arial", 8),
+            width=9,
             height=1,
             bg=UIStyle.GRAY,
             fg=UIStyle.DARK_GRAY,
@@ -2053,7 +2071,8 @@ class EditorCanvas:
         self.convert_to_circle_button = tk.Button(
             shape_btn_frame,
             text="轉為圓形 ⚪",
-            font=UIStyle.BUTTON_FONT,
+            font=("Arial", 8),
+            width=9,
             height=1,
             bg=UIStyle.GRAY,
             fg=UIStyle.DARK_GRAY,
@@ -2377,7 +2396,7 @@ class EditorCanvas:
         # ========== Row 18: 加回元器件資訊框 ==========
         self.add_back_info_frame = tk.LabelFrame(
             button_container,
-            text="可加回元器件資訊(雙擊加回)",
+            text="可加回元器件(雙擊加回)",
             font=("Arial", 9, "bold"),
             bg=UIStyle.VERY_LIGHT_BLUE,
             fg=UIStyle.DARK_BLUE,
@@ -2830,21 +2849,26 @@ class EditorCanvas:
         print(f"↩ 回到上一步，剩餘 {len(self._undo_stack)} 步")
 
     def on_reset(self):
-        """回到起點：恢復為編輯器開啟時的初始狀態。"""
+        """回到起點：優先恢復為原始辨識結果，否則恢復為編輯器開啟時的初始狀態。"""
         from tkinter import messagebox
-        if self._initial_snapshot is None:
+        # 優先使用原始辨識快照（跨 session 恢復）
+        target_snapshot = getattr(self, '_origin_snapshot', None) or self._initial_snapshot
+        if target_snapshot is None:
             return
+        msg = ("將所有元器件恢復為最初辨識的完整結果。\n\n確定要回到起點嗎？"
+               if getattr(self, '_origin_snapshot', None)
+               else "將所有元器件恢復為編輯器開啟時的初始狀態。\n\n確定要回到起點嗎？")
         result = messagebox.askyesno(
             "確認回到起點",
-            "將所有元器件恢復為編輯器開啟時的初始狀態。\n\n確定要回到起點嗎？",
+            msg,
             parent=self.dialog,
         )
         if not result:
             return
 
-        # 恢復初始快照
+        # 恢復快照
         import copy
-        snapshot = copy.deepcopy(self._initial_snapshot)
+        snapshot = copy.deepcopy(target_snapshot)
         self.editor_rect.restore_from_snapshot(
             snapshot["rectangles"],
             {
@@ -2893,11 +2917,17 @@ class EditorCanvas:
             )
 
     def _update_reset_button_state(self):
-        """更新回到起點按鈕的啟用狀態：有編輯動作時綠色，無編輯或已重置時灰色。"""
+        """更新回到起點按鈕的啟用狀態：有編輯動作或與原始辨識不同時綠色，否則灰色。"""
         if not hasattr(self, '_reset_button'):
             return
-        # 有 undo 歷史 代表有過編輯動作
+        # 有 undo 歷史 代表當次 session 有過編輯動作
         has_edits = len(self._undo_stack) > 0
+        # 檢查是否與原始辨識結果不同（跨 session 偵測）
+        if not has_edits and getattr(self, '_origin_snapshot', None) is not None:
+            origin_names = {r.get('name', '') for r in self._origin_snapshot["rectangles"]}
+            current_names = {r.get('name', '') for r in self.editor_rect.rectangles} if hasattr(self, 'editor_rect') and self.editor_rect else {r.get('name', '') for r in self.mark_rect}
+            if origin_names != current_names:
+                has_edits = True
         if has_edits:
             self._reset_button.config(
                 state=tk.NORMAL,

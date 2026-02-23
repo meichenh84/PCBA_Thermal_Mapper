@@ -2506,7 +2506,9 @@ class ResizableImagesApp:
             
             # 执行智能过滤版温度查询
             self.mark_rect_A, self.mark_rect_B = layout_query.query_temperature_by_layout_smart_filter(min_temp, max_temp)
-            
+            # 保存原始辨識結果（用於 EditorCanvas 回到起點跨 session 恢復）
+            self.origin_mark_rect_A = copy.deepcopy(self.mark_rect_A)
+
             print(f"智能过滤版Layout查询完成，找到 {len(self.mark_rect_A)} 个高温元器件")
             
         except Exception as e:
@@ -2965,7 +2967,11 @@ class ResizableImagesApp:
             
             # 创建新的EditorCanvas实例
             # 传递self作为parent，这样EditorCanvas可以访问到layout_data、point_transformer等属性
-            self.editor_canvas = EditorCanvas(self, self.imageA, self.mark_rect_A, self.on_close_editor, self.current_temp_file_path)
+            self.editor_canvas = EditorCanvas(
+                self, self.imageA, self.mark_rect_A, self.on_close_editor,
+                self.current_temp_file_path,
+                origin_mark_rect=getattr(self, 'origin_mark_rect_A', None)
+            )
     
     def init_UI_flow(self, root):
         # 创建顶部按钮区域
