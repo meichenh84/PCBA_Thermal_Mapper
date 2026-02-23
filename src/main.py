@@ -619,13 +619,14 @@ class ResizableImagesApp:
             self._hide_tree_tooltip()
             return
 
-        # 取得該項目的 category，只對類別標題（有 category 但沒有 filename）顯示 tooltip
+        # 取得該項目的 category
         values = self.folder_tree.item(item, "values")
-        if not values or not values[0] or values[1]:
+        if not values or not values[0]:
             self._hide_tree_tooltip()
             return
 
         category = values[0]
+        filename = values[1] if len(values) > 1 else ""
 
         # 定義需要顯示 tooltip 的類別及內容
         tooltip_texts = {
@@ -663,9 +664,15 @@ class ResizableImagesApp:
             ),
         }
 
-        if category not in tooltip_texts:
-            self._hide_tree_tooltip()
-            return
+        if filename:
+            # 檔案項目：tooltip 顯示完整檔案名稱
+            tooltip_content = filename
+        else:
+            # 類別標題：tooltip 顯示類別說明
+            tooltip_content = tooltip_texts.get(category)
+            if not tooltip_content:
+                self._hide_tree_tooltip()
+                return
 
         # 如果已經是同一個 item 的 tooltip，只更新位置
         if self._tree_tooltip and self._tree_tooltip_item == item:
@@ -681,7 +688,7 @@ class ResizableImagesApp:
         tw = tk.Toplevel(self.folder_tree)
         tw.wm_overrideredirect(True)
         label = tk.Label(
-            tw, text=tooltip_texts[category],
+            tw, text=tooltip_content,
             justify=tk.LEFT, background="#FFFFCC", foreground="#000000",
             relief=tk.SOLID, borderwidth=1, font=("Arial", 9),
             padx=8, pady=6
