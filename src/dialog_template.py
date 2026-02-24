@@ -243,7 +243,7 @@ class TemplateDialog:
         hint_frame = tk.Frame(main_frame)
         hint_frame.pack(pady=(10, 0))
         tk.Label(hint_frame, text="⚠", font=("Arial", 14), fg="#e69e17").pack(side=tk.LEFT)
-        tk.Label(hint_frame, text=" 確認後，滑鼠雙擊左區熱力圖開啟 Edit Temperature 視窗進行編輯",
+        tk.Label(hint_frame, text=" 點選確認後，游標雙擊左區熱力圖開啟 Edit Temperature 視窗編輯",
                  font=("Arial", 9), fg="#666666").pack(side=tk.LEFT)
 
         # 确认按钮

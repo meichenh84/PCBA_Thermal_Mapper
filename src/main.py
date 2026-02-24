@@ -619,13 +619,14 @@ class ResizableImagesApp:
             self._hide_tree_tooltip()
             return
 
-        # 取得該項目的 category，只對類別標題（有 category 但沒有 filename）顯示 tooltip
+        # 取得該項目的 category
         values = self.folder_tree.item(item, "values")
-        if not values or not values[0] or values[1]:
+        if not values or not values[0]:
             self._hide_tree_tooltip()
             return
 
         category = values[0]
+        filename = values[1] if len(values) > 1 else ""
 
         # 定義需要顯示 tooltip 的類別及內容
         tooltip_texts = {
@@ -659,13 +660,19 @@ class ResizableImagesApp:
             "testReport": (
                 "測試報告檔案\n"
                 "支援格式：.xlsx\n"
-                "辨識條件：含有 HIGH 字眼的 Sheet"
+                "辨識條件：轉大寫含有 HIGH 字眼的 Sheet"
             ),
         }
 
-        if category not in tooltip_texts:
-            self._hide_tree_tooltip()
-            return
+        if filename:
+            # 檔案項目：tooltip 顯示完整檔案名稱
+            tooltip_content = filename
+        else:
+            # 類別標題：tooltip 顯示類別說明
+            tooltip_content = tooltip_texts.get(category)
+            if not tooltip_content:
+                self._hide_tree_tooltip()
+                return
 
         # 如果已經是同一個 item 的 tooltip，只更新位置
         if self._tree_tooltip and self._tree_tooltip_item == item:
@@ -681,7 +688,7 @@ class ResizableImagesApp:
         tw = tk.Toplevel(self.folder_tree)
         tw.wm_overrideredirect(True)
         label = tk.Label(
-            tw, text=tooltip_texts[category],
+            tw, text=tooltip_content,
             justify=tk.LEFT, background="#FFFFCC", foreground="#000000",
             relief=tk.SOLID, borderwidth=1, font=("Arial", 9),
             padx=8, pady=6
@@ -2499,7 +2506,9 @@ class ResizableImagesApp:
             
             # 执行智能过滤版温度查询
             self.mark_rect_A, self.mark_rect_B = layout_query.query_temperature_by_layout_smart_filter(min_temp, max_temp)
-            
+            # 保存原始辨識結果（用於 EditorCanvas 回到起點跨 session 恢復）
+            self.origin_mark_rect_A = copy.deepcopy(self.mark_rect_A)
+
             print(f"智能过滤版Layout查询完成，找到 {len(self.mark_rect_A)} 个高温元器件")
             
         except Exception as e:
@@ -2958,7 +2967,11 @@ class ResizableImagesApp:
             
             # 创建新的EditorCanvas实例
             # 传递self作为parent，这样EditorCanvas可以访问到layout_data、point_transformer等属性
-            self.editor_canvas = EditorCanvas(self, self.imageA, self.mark_rect_A, self.on_close_editor, self.current_temp_file_path)
+            self.editor_canvas = EditorCanvas(
+                self, self.imageA, self.mark_rect_A, self.on_close_editor,
+                self.current_temp_file_path,
+                origin_mark_rect=getattr(self, 'origin_mark_rect_A', None)
+            )
     
     def init_UI_flow(self, root):
         # 创建顶部按钮区域
