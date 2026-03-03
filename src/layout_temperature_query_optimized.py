@@ -555,6 +555,9 @@ class LayoutTemperatureQueryOptimized:
     def convert_layout_to_thermal(self, c_left, c_top, c_right, c_bottom):
         """將 Layout 圖像素座標轉換為熱力圖像素座標。
 
+        透視變換（homography）會將矩形扭曲為四邊形，因此需要轉換全部 4 個角點，
+        再取軸對齊 bounding box，才能得到正確的熱力圖查詢區域。
+
         Args:
             c_left, c_top, c_right, c_bottom (float): Layout 圖座標（像素）
 
@@ -564,17 +567,23 @@ class LayoutTemperatureQueryOptimized:
         try:
             if self.point_transformer is None:
                 return None
-            
-            # 使用point_transformer进行坐标转换
-            a_left, a_top = self.point_transformer.B2A(c_left, c_top)
-            a_right, a_bottom = self.point_transformer.B2A(c_right, c_bottom)
-            
-            # 确保坐标顺序正确
-            a_left, a_right = min(a_left, a_right), max(a_left, a_right)
-            a_top, a_bottom = min(a_top, a_bottom), max(a_top, a_bottom)
-            
-            return (a_left, a_top, a_right, a_bottom)
-            
+
+            # 轉換矩形的 4 個角點（透視變換下矩形→四邊形）
+            corners_b = [
+                (c_left, c_top),      # TL
+                (c_right, c_top),     # TR
+                (c_right, c_bottom),  # BR
+                (c_left, c_bottom),   # BL
+            ]
+            xs, ys = [], []
+            for bx, by in corners_b:
+                ax, ay = self.point_transformer.B2A(bx, by)
+                xs.append(ax)
+                ys.append(ay)
+
+            # 取軸對齊 bounding box
+            return (min(xs), min(ys), max(xs), max(ys))
+
         except Exception as e:
             print(f"Layout坐标转换出错: {e}")
             return None
