@@ -233,7 +233,7 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
     print("draw_triangle_and_text------->>> ", point1, point2, point3, cx, cy)
 
 
-def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, size=8, font_scale=None):
+def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, size=8, font_scale=None, clip_bounds=None):
     """在 tkinter Canvas 上繪製元器件的矩形框、名稱標籤、三角形標記和溫度文字。
 
     Args:
@@ -244,6 +244,8 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
         imageIndex (int): 影像索引（0=熱力圖，1=Layout 圖）
         size (int): 三角形標記邊長（預設 8）
         font_scale (float): 字體縮放比例（預設 None，則自動從 imageScale 計算）
+        clip_bounds (tuple|None): 圖片邊界 (cl, ct, cr, cb)，框線裁切至此範圍，
+                                  名稱保持在範圍內可見。None 表示不裁切。
 
     Returns:
         tuple: (rectId, nameId, tempTextId, triangleId) Canvas 繪圖物件 ID
@@ -254,7 +256,7 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
 
     # 提取 item 中的值并应用缩放
     left, top, right, bottom, cx, cy, max_temp, name = (
-        item.get("x1"), item.get("y1"), item.get("x2"), item.get("y2"), 
+        item.get("x1"), item.get("y1"), item.get("x2"), item.get("y2"),
         item.get("cx"), item.get("cy"), item.get("max_temp"), item.get("name")
     )
 
@@ -263,7 +265,7 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
         print(f"错误：矩形框坐标包含None值: left={left}, top={top}, right={right}, bottom={bottom}, cx={cx}, cy={cy}")
         print(f"完整的item数据: {item}")
         raise ValueError(f"矩形框坐标不能为None")
-    
+
     if imageScale is None:
         print(f"错误：imageScale为None")
         raise ValueError(f"imageScale不能为None")
@@ -276,12 +278,19 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
     cx = int(cx * imageScale) + off_x
     cy = int(cy * imageScale) + off_y
 
-    # 🔥 移除邊界檢查，允許矩形超出可視範圍
-    # Canvas 會自動裁剪超出範圍的繪製，不需要手動修改座標
-    # 這在縮放模式下特別重要，因為矩形可能部分超出可視範圍
-    #
-    # 註：之前的邊界檢查會導致在縮放模式下，當矩形部分超出邊界時
-    # 座標被錯誤地裁剪，造成框線範圍變動的問題
+    # clip_bounds 裁切：框線最多畫到圖片邊界，完全在圖外的元器件跳過
+    if clip_bounds is not None:
+        cl, ct, cr, cb = clip_bounds
+        # 完全在圖片外 → 不繪製
+        if right <= cl or left >= cr or bottom <= ct or top >= cb:
+            return None, None, None, None
+        # 裁切框線座標至圖片邊界
+        left = max(left, cl)
+        top = max(top, ct)
+        right = min(right, cr)
+        bottom = min(bottom, cb)
+        cx = max(cl, min(cx, cr))
+        cy = max(ct, min(cy, cb))
 
     # 🔥 字體縮放：如果有傳入 font_scale 則使用，否則從 imageScale 計算
     # 在放大模式下，會傳入 font_scale=1.0 保持字體大小不變
@@ -381,10 +390,13 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
     else:
         name_center_x = (left + right) / 2  # 矩形框水平中心
         name_y = top - 3 * imageScale
+
+    name_anchor = "s"
+
     name_font_tuple = ("Arial", name_font_size_scaled, "bold")
-    nameOutlineIds = _create_outline_texts(canvas, name_center_x, name_y, f'{name}', name_font_tuple, anchor="s")
+    nameOutlineIds = _create_outline_texts(canvas, name_center_x, name_y, f'{name}', name_font_tuple, anchor=name_anchor)
     nameId = canvas.create_text(name_center_x, name_y, text=f'{name}',
-                       font=name_font_tuple, fill=textColor, anchor="s")
+                       font=name_font_tuple, fill=textColor, anchor=name_anchor)
 
     # 將描邊 ID 存入 item
     item["tempOutlineIds"] = tempOutlineIds

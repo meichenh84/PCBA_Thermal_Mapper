@@ -1696,9 +1696,12 @@ class ResizableImagesApp:
         if not self.is_aligning and len(self.mark_rect_A) > 0:
             for itemA in self.mark_rect_A:
                 draw_canvas_item(self.canvasA, itemA, self.imageA_scale, self.canvasA_offset, 0)
+            # Layout 圖：傳入圖片邊界，框線裁切在圖片範圍內，名稱不消失
+            clipB = (offsetB_x, offsetB_y,
+                     offsetB_x + self.resized_imageB.width,
+                     offsetB_y + self.resized_imageB.height)
             for itemB in self.mark_rect_B:
-                draw_canvas_item(self.canvasB, itemB, self.imageB_scale, self.canvasB_offset, 1)
-
+                draw_canvas_item(self.canvasB, itemB, self.imageB_scale, self.canvasB_offset, 1, clip_bounds=clipB)
 
         # if self.bg_imageA_id:
         #     self.canvasA.itemconfig(self.bg_imageA_id, image=self.tk_imageA)
