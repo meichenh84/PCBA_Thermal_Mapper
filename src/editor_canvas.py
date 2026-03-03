@@ -194,41 +194,28 @@ class EditorCanvas:
         # 创建右侧操作条
         self.create_vertical_toolbar(right_container)
         
-        # 绑定键盘Delete键和BackSpace键到对话框和Canvas
-        print("🔍🔍🔍 绑定Delete键和BackSpace键事件到对话框和Canvas")
-        # 尝试多种Delete键事件名称
+        # 绑定键盘 Delete / BackSpace 键到对话框和 Canvas
+        # 注意：on_delete_rect 內部會檢查事件來源，忽略來自 Entry/Text 的事件
         self.dialog.bind('<Delete>', self.on_delete_rect)
         self.dialog.bind('<KeyPress-Delete>', self.on_delete_rect)
         self.dialog.bind('<Key-Delete>', self.on_delete_rect)
         self.dialog.bind('<KP_Delete>', self.on_delete_rect)
-        # 添加BackSpace键绑定
         self.dialog.bind('<BackSpace>', self.on_delete_rect)
         self.dialog.bind('<KeyPress-BackSpace>', self.on_delete_rect)
         self.canvas.bind('<Delete>', self.on_delete_rect)
         self.canvas.bind('<KeyPress-Delete>', self.on_delete_rect)
         self.canvas.bind('<Key-Delete>', self.on_delete_rect)
         self.canvas.bind('<KP_Delete>', self.on_delete_rect)
-        # 添加BackSpace键绑定
         self.canvas.bind('<BackSpace>', self.on_delete_rect)
         self.canvas.bind('<KeyPress-BackSpace>', self.on_delete_rect)
-        
-        # 添加一个测试事件来验证绑定是否生效
-        def test_key(event):
-            print(f"🔍🔍🔍 测试按键事件被触发: {event.char}, keysym: {event.keysym}, keycode: {event.keycode}")
-            # 检查是否是Delete键或BackSpace键
-            if (event.keysym == 'Delete' or event.keycode == 46 or  # Delete键
-                event.keysym == 'BackSpace' or event.keycode == 8):  # BackSpace键
-                print(f"🔍🔍🔍 检测到删除键！keysym: {event.keysym}, keycode: {event.keycode}")
-                self.on_delete_rect(event)
-        
-        self.dialog.bind('<Key>', test_key)
-        self.canvas.bind('<Key>', test_key)
 
-        # 綁定 Ctrl+Z 快捷鍵到回到上一步
-        self.dialog.bind('<Control-z>', lambda e: self.on_undo())
-        self.canvas.bind('<Control-z>', lambda e: self.on_undo())
-
-        print("🔍🔍🔍 Delete键事件绑定完成")
+        # 綁定 Ctrl+Z 快捷鍵到回到上一步（排除文字輸入框）
+        def _on_ctrl_z(event):
+            if hasattr(event, 'widget') and isinstance(event.widget, (tk.Entry, ttk.Entry, tk.Text)):
+                return
+            self.on_undo()
+        self.dialog.bind('<Control-z>', _on_ctrl_z)
+        self.canvas.bind('<Control-z>', _on_ctrl_z)
         
         # 确保对话框可以接收键盘事件
         self.dialog.focus_set()
@@ -926,8 +913,11 @@ class EditorCanvas:
                 if rect_id:
                     try:
                         self.canvas.itemconfig(rect_id, state='normal')
-                    except:
-                        pass
+                    except tk.TclError:
+                        # Canvas item 已失效，重新繪製整個元器件
+                        if hasattr(self, 'editor_rect') and self.editor_rect:
+                            self.editor_rect._redraw_single_rect(rect)
+                        continue  # 重繪後所有子項目都是新的，跳過後續設定
                 if name_id:
                     try:
                         self.canvas.itemconfig(name_id, state='normal')
@@ -988,8 +978,11 @@ class EditorCanvas:
             if rect_id:
                 try:
                     self.canvas.itemconfig(rect_id, state=state)
-                except:
-                    pass
+                except tk.TclError:
+                    if state == 'normal' and hasattr(self, 'editor_rect') and self.editor_rect:
+                        # Canvas item 已失效，重新繪製整個元器件
+                        self.editor_rect._redraw_single_rect(rect)
+                    continue  # 重繪後所有子項目都是新的，或是要隱藏的失效項目直接跳過
             if name_id:
                 try:
                     self.canvas.itemconfig(name_id, state=state)
@@ -3721,13 +3714,11 @@ class EditorCanvas:
     
     def on_delete_rect(self, event=None):
         """删除矩形框按钮点击事件或键盘Delete键事件"""
-        print(f"🔍🔍🔍 on_delete_rect被调用: event={event}, selected_rect_id={self.selected_rect_id}, selected_rect_ids={self.selected_rect_ids}")
-        print(f"🔍🔍🔍 事件类型: {type(event)}")
-        if event:
-            print(f"🔍🔍🔍 事件详情: {event}")
-            print(f"🔍🔍🔍 事件字符: {getattr(event, 'char', 'N/A')}")
-            print(f"🔍🔍🔍 事件键码: {getattr(event, 'keycode', 'N/A')}")
-        
+        # 🔥 若鍵盤事件來自文字輸入框（篩選框等），不執行刪除
+        if event and hasattr(event, 'widget') and event.widget:
+            if isinstance(event.widget, (tk.Entry, ttk.Entry, tk.Text)):
+                return
+
         # 检查是否有选中的矩形框（支持单选和多选）
         if not self.selected_rect_id and len(self.selected_rect_ids) == 0:
             print("⚠️⚠️⚠️ 没有选中的矩形框，无法删除")
