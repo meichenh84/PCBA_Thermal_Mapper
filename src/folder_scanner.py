@@ -6,7 +6,7 @@
     掃描指定資料夾中的所有檔案，根據檔案內容自動分類為六種類型：
       - heat       : 熱力圖影像（.jpg/.jpeg/.png，HSV 高飽和度 + 高色調變異）
       - layout     : Layout 佈局圖影像（.jpg/.jpeg/.png，黑色像素比例 > 60%）
-      - heatTemp   : 溫度數據（.csv/.xlsx，第一行皆為數字（含浮點數/小數）即視為溫度矩陣）
+      - heatTemp   : 溫度數據（.csv/.xlsx，列數≥50 且數字佔比>90% 的寬數值矩陣，可容忍前幾行文字表頭）
       - layoutXY   : 元器件座標檔（.xlsx，含 RefDes, Orient., X, Y）
       - layoutLWT  : 元器件尺寸檔（.xlsx，含 RefDes, L, W, T, 对象描述）
       - testReport : 測試報告（.xlsx，含 HIGH 字眼的 sheet）
@@ -152,11 +152,67 @@ def is_test_report_xlsx(file_path):
 # Excel 檔案分類函式
 # =============================================================================
 
+def _check_temperature_matrix(df):
+    """判斷 DataFrame 是否為溫度數據矩陣。
+
+    判斷條件（全部通過才歸為溫度數據）：
+        1. 列數 ≥ 50：溫度矩陣通常很寬（每列對應影像的一個像素寬度）
+        2. 跳過表頭：從前 5 行中找到第一行數字佔比 > 80% 的位置作為數據起始行
+        3. 數字佔比 > 90%：取數據起始行後 5 行，所有 cell 中能轉為數字的比例 > 90%
+
+    參數：
+        df (pandas.DataFrame): 已讀取的前 20 行資料（header=None）
+
+    回傳：
+        bool: True 表示判定為溫度數據
+    """
+    if df.empty or len(df.columns) < 50:
+        return False
+
+    # 在前 5 行中找到數據起始行（數字佔比 > 80%）
+    data_start = None
+    scan_rows = min(5, len(df))
+    for i in range(scan_rows):
+        row = df.iloc[i]
+        numeric_count = 0
+        for val in row:
+            try:
+                float(val)
+                numeric_count += 1
+            except (ValueError, TypeError):
+                pass
+        if len(row) > 0 and numeric_count / len(row) > 0.8:
+            data_start = i
+            break
+
+    if data_start is None:
+        return False
+
+    # 從數據起始行取最多 5 行，檢查數字佔比 > 90%
+    check_end = min(data_start + 5, len(df))
+    check_df = df.iloc[data_start:check_end]
+    if check_df.empty:
+        return False
+
+    total_cells = 0
+    numeric_cells = 0
+    for _, row in check_df.iterrows():
+        for val in row:
+            total_cells += 1
+            try:
+                float(val)
+                numeric_cells += 1
+            except (ValueError, TypeError):
+                pass
+
+    return total_cells > 0 and numeric_cells / total_cells > 0.9
+
+
 def is_temperature_csv(file_path):
     """判斷指定 .csv 檔案是否為溫度數據。
 
-    讀取第一行，檢查所有欄位是否皆為數字（含浮點數）。
-    若第一行全為數字，則視為無表頭的溫度矩陣。
+    讀取前 20 行（自動偵測分隔符 tab/comma），再交由
+    _check_temperature_matrix() 判斷是否為寬數值矩陣。
 
     參數：
         file_path (str): .csv 檔案的完整路徑
@@ -165,25 +221,27 @@ def is_temperature_csv(file_path):
         bool: True 表示判定為溫度數據
     """
     try:
+        df = None
         for encoding in ('utf-8', 'utf-8-sig', 'cp950', 'gbk'):
-            try:
-                df = pd.read_csv(file_path, nrows=1, header=None, encoding=encoding)
+            for sep in ('\t', ','):
+                try:
+                    df = pd.read_csv(file_path, nrows=20, header=None,
+                                     encoding=encoding, sep=sep)
+                    if df is not None and len(df.columns) >= 50:
+                        break
+                except (UnicodeDecodeError, UnicodeError):
+                    df = None
+                    continue
+                except Exception:
+                    df = None
+                    continue
+            if df is not None and len(df.columns) >= 50:
                 break
-            except (UnicodeDecodeError, UnicodeError):
-                continue
-        else:
+
+        if df is None:
             return False
 
-        if df.empty or len(df.columns) == 0:
-            return False
-
-        # 檢查第一行所有值是否皆為數字
-        for val in df.iloc[0]:
-            try:
-                float(val)
-            except (ValueError, TypeError):
-                return False
-        return True
+        return _check_temperature_matrix(df)
     except Exception:
         return False
 
@@ -191,8 +249,7 @@ def is_temperature_csv(file_path):
 def is_temperature_xlsx(file_path):
     """判斷指定 .xlsx 檔案是否為溫度數據。
 
-    讀取第一行，檢查所有欄位是否皆為數字（含浮點數）。
-    若第一行全為數字，則視為無表頭的溫度矩陣。
+    讀取前 20 行，再交由 _check_temperature_matrix() 判斷是否為寬數值矩陣。
 
     參數：
         file_path (str): .xlsx 檔案的完整路徑
@@ -201,15 +258,8 @@ def is_temperature_xlsx(file_path):
         bool: True 表示判定為溫度數據
     """
     try:
-        df = pd.read_excel(file_path, nrows=1, header=None)
-        if df.empty or len(df.columns) == 0:
-            return False
-        for val in df.iloc[0]:
-            try:
-                float(val)
-            except (ValueError, TypeError):
-                return False
-        return True
+        df = pd.read_excel(file_path, nrows=20, header=None)
+        return _check_temperature_matrix(df)
     except Exception:
         return False
 
@@ -220,10 +270,15 @@ def classify_xlsx_file(file_path):
 
     根據欄位內容判斷是元器件座標檔 (layoutXY) 還是元器件尺寸檔 (layoutLWT)。
 
-    分類規則：
-        - layoutXY：必須含有 RefDes, Orient., X, Y 欄位
-        - layoutLWT：必須含有 RefDes, L, W, T, 对象描述 欄位
+    歸類規則（寬鬆）：
+        - layoutXY：同時含有 X, Y 欄位即歸類
+          完整欄位：RefDes, Orient., X, Y
+        - layoutLWT：同時含有 L, W, T 欄位即歸類
+          完整欄位：RefDes, 对象描述, L, W, T
         - 都不符合：回傳 (None, cols)
+
+    缺少 RefDes / Orient. / 对象描述 等欄位時仍可歸類，
+    但 validate_layout_data() 會彈出警告提示缺少的欄位。
 
     參數：
         file_path (str): 檔案路徑
@@ -238,11 +293,9 @@ def classify_xlsx_file(file_path):
             return None, []
         df = pd.read_excel(file_path, nrows=1)
         cols = df.columns.tolist()
-        if 'RefDes' not in cols:
-            return None, cols
-        if 'Orient.' in cols and 'X' in cols and 'Y' in cols:
+        if 'X' in cols and 'Y' in cols:
             return 'layoutXY', cols
-        if 'L' in cols and 'W' in cols and 'T' in cols and '对象描述' in cols:
+        if 'L' in cols and 'W' in cols and 'T' in cols:
             return 'layoutLWT', cols
         return None, cols
     except:
@@ -332,19 +385,26 @@ def scan_folder(folder_path):
 # =============================================================================
 
 def validate_layout_data(folder_files, xlsx_columns_cache):
-    """驗證 Layout 數據檔案的完整性。
+    """驗證 Layout 數據檔案的完整性與欄位齊全度。
 
     檢查邏輯：
-        - 兩者都沒有 → 不警告（回傳 None）
-        - 兩者都有   → 通過（分類時已確認必需欄位齊全，回傳 None）
-        - 只有一方有 → 回傳缺檔警告訊息字串
+        1. 檔案配對檢查：
+            - 兩者都沒有 → 不警告
+            - 只有一方有 → 回傳缺檔警告
+        2. 欄位完整性檢查（即使兩者都有也檢查）：
+            - layoutXY 完整欄位：RefDes, Orient., X, Y
+              缺少 RefDes 或 Orient. → 警告
+            - layoutLWT 完整欄位：RefDes, 对象描述, L, W, T
+              缺少 RefDes 或 对象描述 → 警告
 
     參數：
         folder_files (dict): scan_folder() 回傳的分類結果
         xlsx_columns_cache (dict): scan_folder() 回傳的欄位快取
 
     回傳：
-        str 或 None: 警告訊息字串，若無問題則回傳 None
+        tuple: (warning_msg, warned_categories)
+            - warning_msg (str 或 None): 警告訊息字串，若無問題則為 None
+            - warned_categories (set): 有問題的分類名稱集合（如 {"layoutXY", "layoutLWT"}）
     """
     xy_files = folder_files.get("layoutXY", [])
     lwt_files = folder_files.get("layoutLWT", [])
@@ -352,29 +412,54 @@ def validate_layout_data(folder_files, xlsx_columns_cache):
     has_xy = len(xy_files) > 0
     has_lwt = len(lwt_files) > 0
 
-    # 兩者都沒有 或 兩者都有 → 不警告
-    if (not has_xy and not has_lwt) or (has_xy and has_lwt):
-        return None
+    # 兩者都沒有 → 不警告
+    if not has_xy and not has_lwt:
+        return None, set()
 
-    # 只有一方有 → 組合缺檔警告訊息
-    msg = "Layout 數據檔案檢查結果：\n\n"
+    warnings = []
+    warned_categories = set()
 
+    # --- 檔案配對檢查 ---
     if has_xy and not has_lwt:
-        msg += f"\u2713 元器件座標：{xy_files[0]}\n"
-        xy_cols = xlsx_columns_cache.get(xy_files[0], [])
-        if xy_cols:
-            msg += f"   含有欄位：{', '.join(xy_cols)}\n\n"
-        msg += "\u2717 元器件尺寸：未偵測到\n"
-        msg += "   需要含有以下欄位的 .xlsx 檔案：\n"
-        msg += "   RefDes, L, W, T, 对象描述"
-
+        warned_categories.add("layoutXY")
+        warnings.append(
+            f"\u2713 元器件座標：{xy_files[0]}\n"
+            f"\u2717 元器件尺寸：未偵測到\n"
+            f"   需要同時含有 L, W, T 欄位的 .xlsx 檔案"
+        )
     elif has_lwt and not has_xy:
-        msg += "\u2717 元器件座標：未偵測到\n"
-        msg += "   需要含有以下欄位的 .xlsx 檔案：\n"
-        msg += "   RefDes, Orient., X, Y\n\n"
-        msg += f"\u2713 元器件尺寸：{lwt_files[0]}\n"
-        lwt_cols = xlsx_columns_cache.get(lwt_files[0], [])
-        if lwt_cols:
-            msg += f"   含有欄位：{', '.join(lwt_cols)}"
+        warned_categories.add("layoutLWT")
+        warnings.append(
+            f"\u2717 元器件座標：未偵測到\n"
+            f"   需要同時含有 X, Y 欄位的 .xlsx 檔案\n"
+            f"\u2713 元器件尺寸：{lwt_files[0]}"
+        )
 
-    return msg
+    # --- 欄位完整性檢查 ---
+    if has_xy:
+        xy_cols = xlsx_columns_cache.get(xy_files[0], [])
+        missing_xy = [f for f in ['RefDes', 'Orient.'] if f not in xy_cols]
+        if missing_xy:
+            warned_categories.add("layoutXY")
+            warnings.append(
+                f"\u2757 元器件座標 ({xy_files[0]}) 缺少欄位：{', '.join(missing_xy)}\n"
+                f"   目前欄位：{', '.join(xy_cols)}\n"
+                f"   完整欄位應為：RefDes, Orient., X, Y"
+            )
+
+    if has_lwt:
+        lwt_cols = xlsx_columns_cache.get(lwt_files[0], [])
+        missing_lwt = [f for f in ['RefDes', '对象描述'] if f not in lwt_cols]
+        if missing_lwt:
+            warned_categories.add("layoutLWT")
+            warnings.append(
+                f"\u2757 元器件尺寸 ({lwt_files[0]}) 缺少欄位：{', '.join(missing_lwt)}\n"
+                f"   目前欄位：{', '.join(lwt_cols)}\n"
+                f"   完整欄位應為：RefDes, 对象描述, L, W, T"
+            )
+
+    if not warnings:
+        return None, set()
+
+    msg = "Layout 數據檔案檢查結果：\n\n" + "\n\n".join(warnings)
+    return msg, warned_categories

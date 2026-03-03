@@ -498,15 +498,9 @@ class ResizableImagesApp:
 
             # 驗證 Layout 數據檔案完整性，並記錄有問題的分類
             self._category_warnings = set()
-            warning_msg = validate_layout_data(self.folder_files, self._xlsx_columns_cache)
+            warning_msg, warned_categories = validate_layout_data(self.folder_files, self._xlsx_columns_cache)
             if warning_msg:
-                # 判斷哪個分類有問題
-                has_xy = len(self.folder_files.get("layoutXY", [])) > 0
-                has_lwt = len(self.folder_files.get("layoutLWT", [])) > 0
-                if has_xy and not has_lwt:
-                    self._category_warnings.add("layoutXY")
-                elif has_lwt and not has_xy:
-                    self._category_warnings.add("layoutLWT")
+                self._category_warnings.update(warned_categories)
                 self.root.after(200, lambda: messagebox.showwarning("Layout 數據檢查", warning_msg))
 
             # 掃描完成後，自動載入可用的圖片
@@ -642,20 +636,23 @@ class ResizableImagesApp:
             ),
             "heatTemp": (
                 "熱力圖溫度數據\n"
-                "支援格式：.csv（無表頭，數字(含小數)Tab或逗號分隔）\n"
-                "內容：與熱力圖像素對應的溫度矩陣"
+                "支援格式：.csv（Tab/逗號分隔）或 .xlsx\n"
+                "辨識條件：列數≥50 的寬數值矩陣，數字佔比>90%\n"
+                "可容忍前幾行文字表頭（自動跳過）"
             ),
             "layoutXY": (
                 "元器件座標與角度檔案\n"
                 "支援格式：.xlsx\n"
-                "必需欄位：RefDes, Orient., X, Y\n"
-                "可選欄位：PartType, PartDecal, Pins, Layer"
+                "歸類條件：同時含有 X, Y 欄位\n"
+                "完整欄位：RefDes, Orient., X, Y\n"
+                "缺少 RefDes 或 Orient. 時會顯示警告"
             ),
             "layoutLWT": (
                 "元器件描述與長寬高檔案\n"
                 "支援格式：.xlsx\n"
-                "必需欄位：RefDes, L, W, T, 对象描述\n"
-                "可選欄位：PartsName"
+                "歸類條件：同時含有 L, W, T 欄位\n"
+                "完整欄位：RefDes, 对象描述, L, W, T\n"
+                "缺少 RefDes 或 对象描述 時會顯示警告"
             ),
             "testReport": (
                 "測試報告檔案\n"
