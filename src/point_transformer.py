@@ -28,10 +28,12 @@ import cv2
 import numpy as np
 
 class PointTransformer:
-    def __init__(self, points_A=None, points_B=None):
+    def __init__(self, points_A=None, points_B=None, matched=False):
         """
         points_A: 图A上的打点（原始图像坐标）
         points_B: 图B上的打点（原始图像坐标）
+        matched:  若為 True，表示傳入的點已按正確順序配對（例如矩形對齊），
+                  跳過智慧點匹配，直接使用傳入順序。
 
         优化用户体验：自动对点进行X轴排序，用户打点顺序不再有要求。
         当点数≥4时，采用单应性（透视变换）；当点数==3时，采用仿射；否则抛错。
@@ -42,8 +44,12 @@ class PointTransformer:
         if ptsA.shape[0] != ptsB.shape[0] or ptsA.shape[0] < 3:
             raise ValueError(f"点数量不足或不匹配，A:{ptsA.shape[0]} B:{ptsB.shape[0]}")
 
-        # 智能点匹配：自动找到最佳的点对应关系
-        self.points_A, self.points_B = self._smart_point_matching(ptsA, ptsB)
+        if matched:
+            # 矩形對齊等場景：點已按順序配對，直接使用
+            self.points_A, self.points_B = ptsA, ptsB
+        else:
+            # 智能点匹配：自动找到最佳的点对应关系
+            self.points_A, self.points_B = self._smart_point_matching(ptsA, ptsB)
         
         # 检查点的对应关系是否合理
         self._validate_point_correspondence()

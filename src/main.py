@@ -169,6 +169,14 @@ class ResizableImagesApp:
         
         # 圖像對齊狀態控制
         self.is_aligning = False  # 是否處於「對齊模式」（True=打點中，False=一般瀏覽模式）
+
+        # 矩形對齊模式狀態
+        self.is_rect_aligning = False       # 矩形對齊模式
+        self.rect_corners = None            # [TL, TR, BR, BL] 原始圖座標
+        self.rect_drag_start = None         # 拖曳起點（canvas 座標）
+        self.rect_dragging_corner = None    # 正在拖曳的角索引 (0-3)
+        self.rect_canvas_ids = []           # overlay 的 canvas item IDs
+        self.alignment_type = 'multi_point' # 'multi_point' 或 'rect'
         
         # 配置管理器
         self.config = GlobalConfig()    # 全域配置管理器（儲存視窗偏好、上次資料夾路徑等）
@@ -1613,15 +1621,24 @@ class ResizableImagesApp:
 
         if canvasA_width <= 1 or canvasA_height <= 1:
             return
-      
+
         # 计算每个图片的宽度和高度
-        imageA_width = canvasA_width
         imageB_width = canvasB_width
         self.canvasA_width = canvasA_width
 
-        # 计算高度，保持原始宽高比
-        aspectA = self.imageA.height / self.imageA.width
-        imageA_height = int(imageA_width * aspectA)
+        # 矩形對齊模式：contain-fit（同時適應寬度和高度，圖片完整顯示不溢出）
+        if self.is_rect_aligning:
+            aspectA = self.imageA.height / self.imageA.width
+            scale_by_w = canvasA_width / self.imageA.width
+            scale_by_h = canvasA_height / self.imageA.height
+            fit_scale = min(scale_by_w, scale_by_h)
+            imageA_width = int(self.imageA.width * fit_scale)
+            imageA_height = int(self.imageA.height * fit_scale)
+        else:
+            imageA_width = canvasA_width
+            # 计算高度，保持原始宽高比
+            aspectA = self.imageA.height / self.imageA.width
+            imageA_height = int(imageA_width * aspectA)
 
         # 缩放热力图
         self.resized_imageA = self.imageA.resize((imageA_width, imageA_height), Image.LANCZOS)
@@ -1702,6 +1719,10 @@ class ResizableImagesApp:
         #缩放比  当前图片 / 原始图片
         self.canvasA.config(height=imageA_height)  # 重新设置 Canvas 的高度
         self.canvasB.config(height=imageB_height)  # 重新设置 Canvas 的高度
+
+        # 矩形對齊模式：重繪 overlay
+        if self.is_rect_aligning and self.rect_corners is not None:
+            self._draw_rect_overlay()
 
     def on_resize(self, event):
         """視窗大小改變時的事件處理器。
@@ -1847,6 +1868,7 @@ class ResizableImagesApp:
                     'points_B': points_B_list,
                     'image_A_size': [aW, aH],
                     'image_B_size': [bW, bH],
+                    'alignment_type': self.alignment_type,
                     'timestamp': datetime.now().isoformat()
                 }
                 
@@ -2137,7 +2159,10 @@ class ResizableImagesApp:
             self.clean_magnifier()
 
             # self.start_margin()
-            self.align_button.config(text="对齐图像开始")  # 切换为结束状态
+            self.alignment_type = 'multi_point'
+            self.align_button.config(text="多点对齐")  # 切换为结束状态
+            # 恢復矩形對齊按鈕
+            self.rect_align_button.config(state=tk.NORMAL)
             # 隐藏清除对齐点按钮
             self.clear_heat_points_button.grid_forget()
             self.clear_layout_points_button.grid_forget()
@@ -2157,11 +2182,8 @@ class ResizableImagesApp:
             if self.config.get("magnifier_switch"):
                 self.init_magnifier()
 
-            # if self.config.get("circle_switch"):
-            #     self.recognize_circle_A = detect_A_circles(self.to_numpy_image(self.imageA))
-            #     self.recognize_circle_B = detect_B_circles(self.to_numpy_image(self.imageB))
-            #     print("recognize_circle_A ----->>", len(self.recognize_circle_A), len(self.recognize_circle_B))
-
+            # 禁用矩形對齊按鈕
+            self.rect_align_button.config(state=tk.DISABLED)
 
             # self.points_B = np.array(np.loadtxt(Constants.imageB_point_path(), delimiter=','), dtype=np.float32) * self.window_scale
             # 读取本地文件
@@ -2309,9 +2331,15 @@ class ResizableImagesApp:
                             data = json.load(f)
                         self.points_A = data.get('points_A', [])
                         self.points_B = data.get('points_B', [])
+                        self.alignment_type = data.get('alignment_type', 'multi_point')
                         print(f"load_points: loaded points_A = {self.points_A}")
                         print(f"load_points: loaded points_B = {self.points_B}")
-                        
+                        print(f"load_points: alignment_type = {self.alignment_type}")
+
+                        # 若是矩形對齊，恢復 rect_corners
+                        if self.alignment_type == 'rect' and len(self.points_A) == 4:
+                            self.rect_corners = [tuple(p) for p in self.points_A]
+
                         if hasattr(self, 'imageA') and hasattr(self, 'imageB') and self.imageA and self.imageB:
                             self.init_point_transformer()
                         # 加载完点位后，立即刷新按钮可见性
@@ -2343,7 +2371,8 @@ class ResizableImagesApp:
     def init_point_transformer(self):
         """初始化点转换器"""
         if len(self.points_A) > 0:
-            self.point_transformer = PointTransformer(self.points_A, self.points_B)
+            matched = (self.alignment_type == 'rect')
+            self.point_transformer = PointTransformer(self.points_A, self.points_B, matched=matched)
     
     def clear_and_reload_points(self):
         """清空当前对齐点数据并重新加载对应文件的点位数据"""
@@ -2980,10 +3009,14 @@ class ResizableImagesApp:
                                              width=16, bg=UIStyle.SUCCESS_GREEN, fg=UIStyle.WHITE, 
                                              relief=UIStyle.BUTTON_RELIEF, borderwidth=UIStyle.BUTTON_BORDER_WIDTH,
                                              font=UIStyle.BUTTON_FONT)
-        self.align_button = tk.Button(self.top_buttons_frame, text="对齐图像开始", command=self.start_point_mark, 
-                                     width=16, bg=UIStyle.WARNING_ORANGE, fg=UIStyle.WHITE, 
+        self.align_button = tk.Button(self.top_buttons_frame, text="多点对齐", command=self.start_point_mark,
+                                     width=16, bg=UIStyle.WARNING_ORANGE, fg=UIStyle.WHITE,
                                      relief=UIStyle.BUTTON_RELIEF, borderwidth=UIStyle.BUTTON_BORDER_WIDTH,
                                      font=UIStyle.BUTTON_FONT)
+        self.rect_align_button = tk.Button(self.top_buttons_frame, text="矩形对齐", command=self.start_rect_align,
+                                          width=16, bg=UIStyle.WARNING_ORANGE, fg=UIStyle.WHITE,
+                                          relief=UIStyle.BUTTON_RELIEF, borderwidth=UIStyle.BUTTON_BORDER_WIDTH,
+                                          font=UIStyle.BUTTON_FONT)
         def debug_open_template_dialog():
             print("温度过滤按钮被点击！")
             self.open_template_dialog()
@@ -3007,10 +3040,11 @@ class ResizableImagesApp:
 
         self.folder_control_button.grid(row=0, column=0, padx=8, pady=16)
         self.align_button.grid(row=0, column=1, padx=8, pady=16)
-        self.template_filter_button.grid(row=0, column=2, padx=8, pady=16)
-        self.export_button.grid(row=0, column=3, padx=8, pady=16)
-        self.test_report_button.grid(row=0, column=4, padx=8, pady=16)
-        self.settings_button.grid(row=0, column=5, padx=8, pady=16)
+        self.rect_align_button.grid(row=0, column=2, padx=8, pady=16)
+        self.template_filter_button.grid(row=0, column=3, padx=8, pady=16)
+        self.export_button.grid(row=0, column=4, padx=8, pady=16)
+        self.test_report_button.grid(row=0, column=5, padx=8, pady=16)
+        self.settings_button.grid(row=0, column=6, padx=8, pady=16)
 
         # 创建文件夹选择区域（固定宽度220像素，不可扩展）
         self.folder_container = tk.Frame(root, bg=UIStyle.VERY_LIGHT_BLUE, relief=tk.SUNKEN, bd=1, width=230)
@@ -3242,6 +3276,200 @@ class ResizableImagesApp:
             writer.writerow(row)  # 写入数据行
 
         print(f"CSV 文件已保存为 {csv_filename}")
+
+    # ==================== 矩形對齊功能 ====================
+
+    def _enter_rect_fullscreen(self):
+        """進入矩形對齊滿版模式：隱藏 canvasB，讓熱力圖佔滿"""
+        self.canvasB.grid_forget()
+        self.bottom_buttons_frame_B.grid_forget()
+        self.root.grid_columnconfigure(2, weight=0)
+        self.root.after(100, self.update_images)
+
+    def _exit_rect_fullscreen(self):
+        """退出矩形對齊滿版模式：恢復 canvasB"""
+        self.canvasB.grid(row=1, column=2, sticky="nsew")
+        self.root.grid_columnconfigure(2, weight=1)
+        self.root.after(100, self.update_images)
+
+    def start_rect_align(self):
+        """矩形對齊按鈕的主要處理邏輯（進入模式 / 確認對齊）"""
+        if not self.is_rect_aligning:
+            # ---- 進入矩形對齊模式 ----
+            if not self.imageA or not self.imageB:
+                show_toast(title='缺少圖片', message='請先載入熱力圖和Layout圖', duration=3000, toast_type='warning')
+                return
+
+            self.is_rect_aligning = True
+            self.rect_corners = None
+            self.rect_drag_start = None
+            self.rect_dragging_corner = None
+            self._clear_rect_overlay()
+
+            self._enter_rect_fullscreen()
+            self._bind_rect_events()
+
+            # 禁用多點對齊按鈕
+            self.align_button.config(state=tk.DISABLED)
+            self.rect_align_button.config(text="确认矩形对齐")
+
+        else:
+            # ---- 確認矩形對齊 ----
+            if self.rect_corners is None or len(self.rect_corners) != 4:
+                show_toast(title='尚未框選', message='請先在熱力圖上拖曳矩形框選 PCBA 區域', duration=3000, toast_type='warning')
+                return
+
+            # Layout 圖的 4 個角落
+            bW, bH = self.imageB.size
+            layout_corners = [(0, 0), (bW, 0), (bW, bH), (0, bH)]
+
+            try:
+                transformer = PointTransformer(self.rect_corners, layout_corners, matched=True)
+            except Exception as e:
+                show_toast(title='对齐失败', message=f'矩形对齐异常：{e}', duration=5000, toast_type='error')
+                return
+
+            # 成功 —— 儲存結果
+            self.point_transformer = transformer
+            self.alignment_type = 'rect'
+
+            # 將 rect_corners 也存入 points_A / points_B 以便 JSON 序列化
+            self.points_A = list(self.rect_corners)
+            self.points_B = layout_corners
+
+            self.save_points_json()
+            self.update_align_buttons_visibility()
+
+            # 清理模式
+            self._unbind_rect_events()
+            self._clear_rect_overlay()
+            self.is_rect_aligning = False
+
+            self._exit_rect_fullscreen()
+
+            # 恢復按鈕
+            self.align_button.config(state=tk.NORMAL)
+            self.rect_align_button.config(text="矩形对齐")
+
+            # 若之前有標記框，清除（重新對齊了）
+            if self.pont_marked:
+                self.mark_rect_A = []
+                self.mark_rect_B = []
+                self.pont_marked = False
+
+            show_toast(title='矩形对齐成功', message='已完成矩形对齐，可使用温度过滤', duration=3000, toast_type='success')
+
+    # ---- 矩形拖曳事件綁定 / 解綁 ----
+
+    def _bind_rect_events(self):
+        self.canvasA.bind("<ButtonPress-1>", self._on_rect_press)
+        self.canvasA.bind("<B1-Motion>", self._on_rect_drag)
+        self.canvasA.bind("<ButtonRelease-1>", self._on_rect_release)
+
+    def _unbind_rect_events(self):
+        self.canvasA.unbind("<ButtonPress-1>")
+        self.canvasA.unbind("<B1-Motion>")
+        self.canvasA.unbind("<ButtonRelease-1>")
+
+    # ---- 座標轉換 ----
+
+    def _canvas_to_original(self, cx, cy):
+        """canvas 座標 → 原始圖像座標"""
+        offX, offY = getattr(self, 'canvasA_offset', (0, 0))
+        scale = getattr(self, 'imageA_scale', 1.0)
+        if scale == 0:
+            scale = 1.0
+        ox = (cx - offX) / scale
+        oy = (cy - offY) / scale
+        return (ox, oy)
+
+    def _original_to_canvas(self, ox, oy):
+        """原始圖像座標 → canvas 座標"""
+        offX, offY = getattr(self, 'canvasA_offset', (0, 0))
+        scale = getattr(self, 'imageA_scale', 1.0)
+        cx = ox * scale + offX
+        cy = oy * scale + offY
+        return (cx, cy)
+
+    def _find_corner_at(self, cx, cy, threshold=12):
+        """在 canvas 座標附近尋找已有角點，回傳角索引 0-3 或 None"""
+        if self.rect_corners is None:
+            return None
+        for i, (ox, oy) in enumerate(self.rect_corners):
+            ccx, ccy = self._original_to_canvas(ox, oy)
+            if abs(cx - ccx) <= threshold and abs(cy - ccy) <= threshold:
+                return i
+        return None
+
+    # ---- 拖曳事件處理 ----
+
+    def _on_rect_press(self, event):
+        cx, cy = event.x, event.y
+        # 先嘗試抓取已有角點
+        corner_idx = self._find_corner_at(cx, cy)
+        if corner_idx is not None:
+            self.rect_dragging_corner = corner_idx
+            self.rect_drag_start = None
+            return
+        # 否則開始新矩形拖曳
+        self.rect_drag_start = (cx, cy)
+        self.rect_dragging_corner = None
+
+    def _on_rect_drag(self, event):
+        cx, cy = event.x, event.y
+        if self.rect_dragging_corner is not None:
+            # 移動單一角點
+            ox, oy = self._canvas_to_original(cx, cy)
+            self.rect_corners[self.rect_dragging_corner] = (ox, oy)
+            self._draw_rect_overlay()
+        elif self.rect_drag_start is not None:
+            # 畫新矩形
+            sx, sy = self.rect_drag_start
+            tl = self._canvas_to_original(min(sx, cx), min(sy, cy))
+            tr = self._canvas_to_original(max(sx, cx), min(sy, cy))
+            br = self._canvas_to_original(max(sx, cx), max(sy, cy))
+            bl = self._canvas_to_original(min(sx, cx), max(sy, cy))
+            self.rect_corners = [tl, tr, br, bl]
+            self._draw_rect_overlay()
+
+    def _on_rect_release(self, event):
+        self.rect_dragging_corner = None
+        self.rect_drag_start = None
+
+    # ---- 矩形 Overlay 繪製 ----
+
+    def _clear_rect_overlay(self):
+        for item_id in self.rect_canvas_ids:
+            self.canvasA.delete(item_id)
+        self.rect_canvas_ids = []
+
+    def _draw_rect_overlay(self):
+        """繪製矩形四邊形 overlay（4 綠線 + 彩色角手柄）"""
+        self._clear_rect_overlay()
+        if self.rect_corners is None or len(self.rect_corners) != 4:
+            return
+
+        canvas_pts = [self._original_to_canvas(ox, oy) for (ox, oy) in self.rect_corners]
+
+        # 4 條邊線（綠色）
+        for i in range(4):
+            x1, y1 = canvas_pts[i]
+            x2, y2 = canvas_pts[(i + 1) % 4]
+            lid = self.canvasA.create_line(x1, y1, x2, y2, fill="#00FF00", width=2, tags="rect_overlay")
+            self.rect_canvas_ids.append(lid)
+
+        # 4 個角手柄（TL=紅, TR=綠, BR=藍, BL=黃）
+        colors = ["#FF0000", "#00CC00", "#0066FF", "#FFCC00"]
+        labels = ["TL", "TR", "BR", "BL"]
+        r = 6
+        for i, (cx, cy) in enumerate(canvas_pts):
+            oid = self.canvasA.create_oval(cx - r, cy - r, cx + r, cy + r,
+                                           fill=colors[i], outline="white", width=2, tags="rect_overlay")
+            self.rect_canvas_ids.append(oid)
+            tid = self.canvasA.create_text(cx, cy - r - 8, text=labels[i],
+                                           fill=colors[i], font=("Arial", 9, "bold"), tags="rect_overlay")
+            self.rect_canvas_ids.append(tid)
+
     def toggle_folder_panel(self):
         """切换文件夹面板的可见性"""
         if self.folder_container.winfo_ismapped():
