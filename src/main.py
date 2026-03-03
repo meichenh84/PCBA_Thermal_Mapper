@@ -2862,6 +2862,46 @@ class ResizableImagesApp:
                 self.update_align_buttons_visibility()
         except Exception as e:
             print(f"加载图片时出错: {e}")
+    def _show_blended_window(self, title, blended_bgr):
+        """在 Toplevel 視窗中顯示重疊圖像，縮放/全螢幕時保持熱力圖原圖長寬比"""
+        blended_rgb = cv2.cvtColor(blended_bgr, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(blended_rgb)
+
+        top = tk.Toplevel(self.root)
+        top.title(title)
+        top.configure(bg='black')
+
+        canvas = tk.Canvas(top, bg='black', highlightthickness=0)
+        canvas.pack(fill=tk.BOTH, expand=True)
+
+        # 保留引用避免 GC
+        top._pil_img = pil_img
+        top._tk_img = None
+
+        def _on_resize(event):
+            cw, ch = event.width, event.height
+            if cw < 2 or ch < 2:
+                return
+            iw, ih = pil_img.size
+            scale = min(cw / iw, ch / ih)
+            new_w = max(1, int(iw * scale))
+            new_h = max(1, int(ih * scale))
+            resized = pil_img.resize((new_w, new_h), Image.LANCZOS)
+            top._tk_img = ImageTk.PhotoImage(resized)
+            canvas.delete("all")
+            canvas.create_image(cw // 2, ch // 2, image=top._tk_img, anchor='center')
+
+        canvas.bind('<Configure>', _on_resize)
+
+        # 初始視窗大小：螢幕 80% 內等比縮放
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        iw, ih = pil_img.size
+        init_scale = min((screen_w * 0.8) / iw, (screen_h * 0.8) / ih, 1.0)
+        init_w = max(400, int(iw * init_scale))
+        init_h = max(300, int(ih * init_scale))
+        top.geometry(f"{init_w}x{init_h}")
+
     def margin_before(self):
         try:
             # 检查图像是否存在
@@ -2869,70 +2909,71 @@ class ResizableImagesApp:
                self.resized_imageA is None or self.resized_imageB is None:
                 print("警告：图像数据不存在，无法进行图像混合")
                 return
-                
+
             # 将 Pillow 图像对象转换为 NumPy 数组
             imageB_np = np.array(self.resized_imageB)
             imageA_np = np.array(self.resized_imageA)
-            
+
             print(f"margin_before - 原始图像形状 - imageA: {imageA_np.shape}, imageB: {imageB_np.shape}")
-            
+
             # 检查图像尺寸是否匹配
             if imageA_np.shape != imageB_np.shape:
                 print(f"警告：图像尺寸不匹配 - imageA: {imageA_np.shape}, imageB: {imageB_np.shape}")
                 # 将imageB调整到与imageA相同的尺寸
                 imageB_np = cv2.resize(imageB_np, (imageA_np.shape[1], imageA_np.shape[0]))
                 print(f"调整后 - imageB: {imageB_np.shape}")
-            
+
             # 如果是 RGB 图像，OpenCV 默认处理 BGR 格式，所以需要转换颜色顺序
             if imageB_np.ndim == 3:  # 这是 RGB 图像
                 imageB_np = cv2.cvtColor(imageB_np, cv2.COLOR_RGB2BGR)
                 imageA_np = cv2.cvtColor(imageA_np, cv2.COLOR_RGB2BGR)
                 print(f"颜色转换后 - imageA: {imageA_np.shape}, imageB: {imageB_np.shape}")
-            
+
             # 最终检查
             if imageA_np.shape != imageB_np.shape:
                 print(f"错误：无法使两个图像尺寸匹配 - imageA: {imageA_np.shape}, imageB: {imageB_np.shape}")
                 return
-            
+
             print(f"开始图像混合 - imageA: {imageA_np.shape}, imageB: {imageB_np.shape}")
             blended = cv2.addWeighted(imageB_np, 0.33, imageA_np, 0.66, 0)
-            cv2.imshow('before margin', blended)
+            self._show_blended_window('对齐前图像', blended)
             print("margin_before 图像混合完成")
-            
+
         except Exception as e:
             print(f"margin_before 方法出错: {e}")
             import traceback
             traceback.print_exc()
+
     def margin_after(self):
         try:
             # 检查point_transformer是否存在
             if self.point_transformer is None:
                 print("警告：point_transformer为None，无法进行图像对齐")
                 return
-                
+
             # 检查图像是否存在
             if not hasattr(self, 'resized_imageA') or not hasattr(self, 'resized_imageB') or \
                self.resized_imageA is None or self.resized_imageB is None:
                 print("警告：图像数据不存在，无法进行图像对齐")
                 return
-                
+
             bW, bH = self.resized_imageB.size
             aW, aH = self.resized_imageA.size
-            
+
             print(f"图像尺寸 - imageA: {aW}x{aH}, imageB: {bW}x{bH}")
-            
+
             # 将 Pillow 图像对象转换为 NumPy 数组
             imageB_np = np.array(self.resized_imageB)
             imageA_np = np.array(self.resized_imageA)
-            
+
             print(f"NumPy数组形状 - imageA: {imageA_np.shape}, imageB: {imageB_np.shape}")
-            
+
             # 如果是 RGB 图像，OpenCV 默认处理 BGR 格式，所以需要转换颜色顺序
             if imageB_np.ndim == 3:  # 这是 RGB 图像
                 imageB_np = cv2.cvtColor(imageB_np, cv2.COLOR_RGB2BGR)
                 imageA_np = cv2.cvtColor(imageA_np, cv2.COLOR_RGB2BGR)
                 print(f"颜色转换后 - imageA: {imageA_np.shape}, imageB: {imageB_np.shape}")
-            
+
             # 获取原始坐标系下的 B->A 变换矩阵
             M_ori = self.point_transformer.get_B2A_matrix()
             M_ori = np.asarray(M_ori)
@@ -2959,24 +3000,24 @@ class ResizableImagesApp:
                 print(f"未知的变换矩阵尺寸: {M_ori.shape}")
                 return
             print(f"对齐后图像形状: {aligned_imageB.shape}")
-            
+
             # 检查对齐后的图像尺寸是否与imageA匹配
             if aligned_imageB.shape != imageA_np.shape:
                 print(f"警告：对齐后图像尺寸不匹配 - aligned_imageB: {aligned_imageB.shape}, imageA: {imageA_np.shape}")
                 # 如果仍然不匹配，调整aligned_imageB的尺寸
                 aligned_imageB = cv2.resize(aligned_imageB, (imageA_np.shape[1], imageA_np.shape[0]))
                 print(f"调整后图像形状: {aligned_imageB.shape}")
-            
+
             # 最终检查两个图像的形状是否完全匹配
             if aligned_imageB.shape != imageA_np.shape:
                 print(f"错误：无法使两个图像尺寸匹配 - aligned_imageB: {aligned_imageB.shape}, imageA: {imageA_np.shape}")
                 return
-            
+
             print(f"开始图像混合 - aligned_imageB: {aligned_imageB.shape}, imageA: {imageA_np.shape}")
             blended = cv2.addWeighted(aligned_imageB, 0.33, imageA_np, 0.66, 0)
-            cv2.imshow('after margin', blended)
+            self._show_blended_window('对齐后图像', blended)
             print("图像混合完成")
-            
+
         except Exception as e:
             print(f"margin_after 方法出错: {e}")
             import traceback
@@ -3301,10 +3342,9 @@ class ResizableImagesApp:
                 return
 
             self.is_rect_aligning = True
-            self.rect_corners = None
+            # 保留已有的 rect_corners（來自上次對齊或 JSON），進入後直接顯示供微調
             self.rect_drag_start = None
             self.rect_dragging_corner = None
-            self._clear_rect_overlay()
 
             self._enter_rect_fullscreen()
             self._bind_rect_events()
