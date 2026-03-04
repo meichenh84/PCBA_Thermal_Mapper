@@ -263,40 +263,28 @@ class RectEditor:
 
                 self._position_temp_text(rect, display_cx, display_cy, tempTextId, display_scale)
 
-    def _position_name_text(self, rect, display_left, display_top, display_right, display_bottom, nameId, display_scale):
-        """根據 rect 的 name_text_dir 定位名稱文字。
-
-        Args:
-            rect (dict): 元器件資料字典（含 name_text_dir 欄位）
-            display_left, display_top, display_right, display_bottom: 顯示座標邊界
-            nameId (int): Canvas 名稱文字物件 ID
-            display_scale (float): 目前的顯示縮放比例
-        """
+    def _position_name_text(self, rect, display_x1, display_y1, display_x2, display_y2, nameId, display_scale):
+        """根據 name_text_dir 定位名稱文字到框線 8 方向。"""
         direction = rect.get("name_text_dir", "T")
-        name_shape = rect.get("shape", "rectangle")
-        name_angle = rect.get("angle", 0)
-        x, y, anchor = calc_name_text_position(
-            direction, display_left, display_top, display_right, display_bottom,
-            display_scale, angle=name_angle, shape=name_shape, gap=3
+        name_x, name_y, anchor_str = calc_name_text_position(
+            direction, display_x1, display_y1, display_x2, display_y2,
+            rect.get("angle", 0), rect.get("shape", "rectangle"), display_scale
         )
-        self.canvas.coords(nameId, x, y)
-        self.canvas.itemconfig(nameId, anchor=anchor)
-        # 同步描邊
-        outline_ids = rect.get("nameOutlineIds")
-        if outline_ids:
-            for oid, (odx, ody) in zip(outline_ids, OUTLINE_OFFSETS):
-                try:
-                    self.canvas.coords(oid, x + odx, y + ody)
-                    self.canvas.itemconfig(oid, anchor=anchor)
-                except:
-                    pass
+        self.canvas.coords(nameId, name_x, name_y)
+        self.canvas.itemconfig(nameId, anchor=anchor_str)
+        self._move_outline(rect.get("nameOutlineIds"), name_x, name_y)
+        for oid in (rect.get("nameOutlineIds") or []):
+            try:
+                self.canvas.itemconfig(oid, anchor=anchor_str)
+            except:
+                pass
 
     def set_name_text_dir(self, rect_ids, direction):
         """設定指定元器件的名稱文字方向，並立即更新 Canvas 顯示。
 
         Args:
             rect_ids (list): 要設定的矩形框 rectId 列表
-            direction (str): 方向代碼 ("TL", "T", "TR", "L", "C", "R", "BL", "B", "BR")
+            direction (str): 方向代碼 ("TL", "T", "TR", "L", "R", "BL", "B", "BR")
         """
         rect_id_set = set(rect_ids)
         for rect in self.rectangles:
@@ -414,15 +402,15 @@ class RectEditor:
                 else:
                     self.canvas.coords(rectId, left, top, right, bottom)
 
-                # 更新名称标签位置和字體大小（根據 name_text_dir 動態定位）
+                # 更新名称标签位置和字體大小（根據 name_text_dir 定位）
                 if nameId:
+                    self._position_name_text(rect, left, top, right, bottom, nameId, self.display_scale)
                     self.canvas.itemconfig(nameId, font=("Arial", name_font_size_scaled, "bold"))
                     for oid in (rect.get("nameOutlineIds") or []):
                         try:
                             self.canvas.itemconfig(oid, font=("Arial", name_font_size_scaled, "bold"))
                         except:
                             pass
-                    self._position_name_text(rect, left, top, right, bottom, nameId, self.display_scale)
 
                 # 更新温度文本位置和字體大小
                 if tempTextId:
@@ -503,7 +491,6 @@ class RectEditor:
 
         if nameId:
             self.canvas.itemconfig(nameId, text=name)
-            # 同步描邊文字內容
             if target_rect:
                 for oid in (target_rect.get("nameOutlineIds") or []):
                     try:
@@ -511,6 +498,13 @@ class RectEditor:
                     except:
                         pass
                 self._position_name_text(target_rect, display_x1, display_y1, display_x2, display_y2, nameId, display_scale)
+            else:
+                # fallback: 無 target_rect 時使用預設 T 方向
+                name_x, name_y, anchor_str = calc_name_text_position(
+                    "T", display_x1, display_y1, display_x2, display_y2, 0, "rectangle", display_scale
+                )
+                self.canvas.coords(nameId, name_x, name_y)
+                self.canvas.itemconfig(nameId, anchor=anchor_str)
         if tempTextId:
             self.canvas.itemconfig(tempTextId, text=max_temp)
             # 同步描邊文字內容
@@ -1103,7 +1097,7 @@ class RectEditor:
                             display_scale = self.display_scale if self.display_scale > 0 else 1.0
                             font_scale = display_scale
 
-                        # 更新名称标签位置（根據 name_text_dir 動態定位）
+                        # 更新名称标签位置（根據 name_text_dir 定位）
                         self._position_name_text(rect, display_x1, display_y1, display_x2, display_y2, nameId, font_scale)
 
                         # 更新温度文本位置（根據方向定位）
@@ -1754,13 +1748,13 @@ class RectEditor:
                 target_rect = r
                 break
 
-        # 更新名称标签位置（根據 name_text_dir 動態定位）
+        # 更新名称标签位置（根據 name_text_dir 定位）
         if target_rect:
             self._position_name_text(target_rect, x1, y1, x2, y2, nameId, font_scale)
         else:
-            name_center_x = (x1 + x2) / 2
-            name_y = y1 - 3 * font_scale
-            self.canvas.coords(nameId, name_center_x, name_y)
+            name_x, name_y, anchor_str = calc_name_text_position("T", x1, y1, x2, y2, 0, "rectangle", font_scale)
+            self.canvas.coords(nameId, name_x, name_y)
+            self.canvas.itemconfig(nameId, anchor=anchor_str)
 
         # 使用原图像坐标查询温度和最高温度位置（支援旋轉）
         temp_angle = target_rect.get("angle", 0) if target_rect else 0
