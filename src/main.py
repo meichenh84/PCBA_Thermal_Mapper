@@ -2225,6 +2225,13 @@ class ResizableImagesApp:
             self.bottom_buttons_frame_B.grid(row=2, column=2)
             self.align_button.config(text="对齐图像结束")  # 切换为开始状态
     
+    def clear_rect_align(self):
+        """清除矩形對齊模式下的對齊框"""
+        self.rect_corners = None
+        self._clear_rect_overlay()
+        self.update_images()
+        show_toast(title='已清除', message='對齊框已清除，請重新拖曳框選', duration=2000, toast_type='info')
+
     def clear_heat_points(self):
         """清除热力图的对齐点"""
         try:
@@ -3243,6 +3250,12 @@ class ResizableImagesApp:
                                                 relief=UIStyle.BUTTON_RELIEF, borderwidth=UIStyle.BUTTON_BORDER_WIDTH,
                                                 font=UIStyle.BUTTON_FONT)
        
+        # 添加清除矩形對齊框按鈕
+        self.clear_rect_align_button = tk.Button(self.bottom_buttons_frame_A, text="清除對齊框",
+                                                 command=self.clear_rect_align, width=15, bg=UIStyle.PRIMARY_BLUE, fg=UIStyle.WHITE,
+                                                 relief=UIStyle.BUTTON_RELIEF, borderwidth=UIStyle.BUTTON_BORDER_WIDTH,
+                                                 font=UIStyle.BUTTON_FONT)
+
         self.bottom_buttons_frame_A.pack_propagate(False)  # 不允许frame自动调整大小
         # 初始根据是否存在打点JSON控制显示
         self.margin_before_button.grid_forget()
@@ -3250,6 +3263,7 @@ class ResizableImagesApp:
         self.update_align_buttons_visibility()
         # 初始隐藏清除按钮
         self.clear_heat_points_button.grid_forget()
+        self.clear_rect_align_button.grid_forget()
 
         self.bottom_buttons_frame_B = tk.Frame(root, bg=UIStyle.VERY_LIGHT_BLUE, relief=tk.FLAT, bd=0)
         self.bottom_buttons_frame_B.grid(row=2, column=2)
@@ -3398,8 +3412,11 @@ class ResizableImagesApp:
             self._enter_rect_fullscreen()
             self._bind_rect_events()
 
-            # 禁用多點對齊按鈕
+            # 禁用多點對齊按鈕，隱藏對齊前/後按鈕，顯示清除對齊框按鈕
             self.align_button.config(state=tk.DISABLED)
+            self.margin_before_button.grid_forget()
+            self.margin_after_button.grid_forget()
+            self.clear_rect_align_button.grid(row=0, column=0, padx=5, pady=5)
             self.rect_align_button.config(text="确认矩形对齐")
 
         else:
@@ -3436,6 +3453,7 @@ class ResizableImagesApp:
             self._unbind_rect_events()
             self._clear_rect_overlay()
             self.is_rect_aligning = False
+            self.clear_rect_align_button.grid_forget()
 
             has_layout = (hasattr(self, 'imageB') and self.imageB is not None
                           and self.current_files.get("layout"))
