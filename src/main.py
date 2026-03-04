@@ -1693,7 +1693,7 @@ class ResizableImagesApp:
         self.canvasA_offset = (offsetA_x, offsetA_y)
         self.canvasB_offset = (offsetB_x, offsetB_y)
 
-        if not self.is_aligning and len(self.mark_rect_A) > 0:
+        if not self.is_aligning and not self.is_rect_aligning and len(self.mark_rect_A) > 0:
             for itemA in self.mark_rect_A:
                 draw_canvas_item(self.canvasA, itemA, self.imageA_scale, self.canvasA_offset, 0)
             # Layout 圖：傳入圖片邊界，框線裁切在圖片範圍內，名稱不消失
