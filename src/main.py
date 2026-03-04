@@ -1448,7 +1448,7 @@ class ResizableImagesApp:
                         description = ''
 
                     # 计算外接矩形的四个角点坐标（考虑旋转）
-                    left, top, right, bottom = self.calculate_rotated_rectangle(x, y, l, t, orient)
+                    left, top, right, bottom = self.calculate_rotated_rectangle(x, y, l, w, orient)
 
                     c_info.append({
                         'RefDes': refdes,
