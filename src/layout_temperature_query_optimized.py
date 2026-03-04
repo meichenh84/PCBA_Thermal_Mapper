@@ -201,7 +201,8 @@ class LayoutTemperatureQueryOptimized:
                 top = component['top']
                 right = component['right']
                 bottom = component['bottom']
-                
+                orient = component.get('Orient.', 0)
+
                 # 调试前几个元器件
                 if index < 3:
                     print(f"\n处理元器件 {index+1}: {refdes}")
@@ -277,9 +278,10 @@ class LayoutTemperatureQueryOptimized:
                         "cy": ar1_cy,
                         "max_temp": max_temp_value,
                         "name": refdes,
-                        "refdes": refdes
+                        "refdes": refdes,
+                        "angle": orient
                     })
-                    
+
                     rectB_arr.append({
                         "x1": int(cr1_left),
                         "y1": int(cr1_top),
@@ -289,7 +291,8 @@ class LayoutTemperatureQueryOptimized:
                         "cy": int(cr1_cy),
                         "max_temp": max_temp_value,
                         "name": refdes,
-                        "refdes": refdes
+                        "refdes": refdes,
+                        "angle": orient
                     })
                     
                     print(f"找到高温元器件: {refdes} (Ar{index + 1}), 温度: {max_temp_value:.2f}°C")
@@ -355,7 +358,8 @@ class LayoutTemperatureQueryOptimized:
                 top = component['top']
                 right = component['right']
                 bottom = component['bottom']
-                
+                orient = component.get('Orient.', 0)
+
                 # PCB坐标转Layout图坐标
                 cr1_coords = self.convert_pcb_to_layout(left, top, right, bottom)
                 if cr1_coords is None:
@@ -417,7 +421,8 @@ class LayoutTemperatureQueryOptimized:
                             "max_temp": max_temp_value,
                             "name": refdes,
                             "refdes": refdes,
-                            "description": description
+                            "description": description,
+                            "angle": orient
                         },
                         'rectB': {
                             "x1": int(cr1_left),
@@ -429,7 +434,8 @@ class LayoutTemperatureQueryOptimized:
                             "max_temp": max_temp_value,
                             "name": refdes,
                             "refdes": refdes,
-                            "description": description
+                            "description": description,
+                            "angle": orient
                         },
                         'temp': max_temp_value
                     })
