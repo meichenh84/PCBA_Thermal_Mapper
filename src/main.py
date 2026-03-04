@@ -458,6 +458,10 @@ class ResizableImagesApp:
         選擇後會依序執行：儲存舊資料夾配置 -> 清空舊數據 -> 掃描新資料夾 ->
         更新檔案樹 -> 載入對齊點 -> 更新按鈕文字。
         """
+        if self.is_aligning or self.is_rect_aligning:
+            show_toast(title='對齊模式中', message='請先結束目前的對齊操作，再切換資料夾',
+                       duration=3000, toast_type='warning')
+            return
         folder_path = filedialog.askdirectory(title="选择包含热力图和Layout图的文件夹")
         if folder_path:
             # 保存当前文件夹的文件选择
@@ -523,6 +527,8 @@ class ResizableImagesApp:
 
             # 添加調試資訊
             print(f"scan_folder_files: 扫描完成，current_files: {self.current_files}")
+            # 根據 Layout 圖是否存在，更新對齊按鈕啟用狀態
+            self.update_align_buttons_state()
         except Exception as e:
             print(f"扫描文件夹时出错: {e}")
 
@@ -550,7 +556,12 @@ class ResizableImagesApp:
                 layout_image_path = os.path.join(self.current_folder_path, self.current_files["layout"])
                 self.set_image(layout_image_path, 1)
                 print(f"自动加载Layout图: {self.current_files['layout']}")
-            
+            else:
+                # 無 Layout 圖：隱藏 canvasB，僅顯示熱力圖（自適應視窗）
+                self.imageB = None
+                if self.canvasB.winfo_manager():
+                    self._enter_rect_fullscreen()
+
             # 加载点位数据（同步加载，快速显示）
             self.load_points()
             
@@ -563,7 +574,10 @@ class ResizableImagesApp:
             if self.folder_files.get("layoutXY") and self.folder_files.get("layoutLWT"):
                 # 自动加载所有layout数据文件
                 self.load_all_layout_data_async()
-                
+
+            # 根據 Layout 圖是否存在，更新對齊按鈕啟用狀態
+            self.update_align_buttons_state()
+
         except Exception as e:
             print(f"自动加载图片时出错: {e}")
     
@@ -1575,13 +1589,15 @@ class ResizableImagesApp:
         # 尺寸未变 不重复渲染
         old_canvas_width = self.canvasA_width
         new_canvas_width = self.canvasA.winfo_width()
-        print(f"🔧 update_on_resize: old={old_canvas_width}, new={new_canvas_width}")
-        if old_canvas_width == new_canvas_width:
+        old_canvas_height = self.canvasA_height
+        new_canvas_height = self.canvasA.winfo_height()
+        print(f"🔧 update_on_resize: old={old_canvas_width}x{old_canvas_height}, new={new_canvas_width}x{new_canvas_height}")
+        if old_canvas_width == new_canvas_width and old_canvas_height == new_canvas_height:
             print(f"  ⏭️ 尺寸未變，跳過更新")
             return
 
-        # 检查图片是否已加载
-        if not hasattr(self, 'imageA') or not hasattr(self, 'imageB') or not self.imageA or not self.imageB:
+        # 检查图片是否已加载（至少需要熱力圖）
+        if not hasattr(self, 'imageA') or not self.imageA:
             return
 
         # 直接更新图像显示，不修改原始坐标
@@ -1625,9 +1641,12 @@ class ResizableImagesApp:
         # 计算每个图片的宽度和高度
         imageB_width = canvasB_width
         self.canvasA_width = canvasA_width
+        self.canvasA_height = canvasA_height
 
-        # 矩形對齊模式：contain-fit（同時適應寬度和高度，圖片完整顯示不溢出）
-        if self.is_rect_aligning:
+        # canvasB 隱藏（矩形對齊模式或無 Layout 圖）時使用 contain-fit，
+        # 同時適應寬度和高度，圖片完整顯示不溢出
+        _canvasB_hidden = not self.canvasB.winfo_manager()
+        if self.is_rect_aligning or _canvasB_hidden:
             aspectA = self.imageA.height / self.imageA.width
             scale_by_w = canvasA_width / self.imageA.width
             scale_by_h = canvasA_height / self.imageA.height
@@ -1859,7 +1878,10 @@ class ResizableImagesApp:
             if len(self.points_A) >= 3 and len(self.points_B) >= 3:
                 # 获取原始图像尺寸
                 aW, aH = self.imageA.size
-                bW, bH = self.imageB.size
+                if hasattr(self, 'imageB') and self.imageB:
+                    bW, bH = self.imageB.size
+                else:
+                    bW, bH = aW, aH
                 
                 # 统一转为可序列化的list（兼容list/ndarray）
                 import numpy as _np
@@ -1882,11 +1904,11 @@ class ResizableImagesApp:
                     # 使用规范命名：热力图文件名 + '_' + Layout文件名 + '.json'
                     heat_filename = self.current_files.get("heat", "")
                     layout_filename = self.current_files.get("layout", "")
-                    if not heat_filename or not layout_filename:
-                        print("保存打点数据失败：缺少热力图或Layout图文件名")
+                    if not heat_filename:
+                        print("保存打点数据失败：缺少热力图文件名")
                         return
                     heat_name = os.path.splitext(heat_filename)[0]
-                    layout_name = os.path.splitext(layout_filename)[0]
+                    layout_name = os.path.splitext(layout_filename)[0] if layout_filename else "_no_layout"
                     points_file = os.path.join(points_dir, f"{heat_name}_{layout_name}.json")
                     print(f"保存打点数据到: {points_file}")
                     
@@ -2176,6 +2198,10 @@ class ResizableImagesApp:
             self.margin_after_button.grid(row=0, column=1, padx=5)
 
         else:
+            if not hasattr(self, 'imageB') or not self.imageB:
+                show_toast(title='缺少 Layout 圖', message='資料夾中未找到 Layout 圖，無法使用多點對齊',
+                           duration=3000, toast_type='warning')
+                return
             self.is_aligning = True
             self.bind_point_event(self.canvasA, 0)
             self.bind_point_event(self.canvasB, 1)
@@ -2321,11 +2347,11 @@ class ResizableImagesApp:
                 heat_filename = self.current_files.get("heat", "")
                 layout_filename = self.current_files.get("layout", "")
                 
-                if heat_filename and layout_filename:
+                if heat_filename:
                     # 去掉文件扩展名
                     heat_name = os.path.splitext(heat_filename)[0]
-                    layout_name = os.path.splitext(layout_filename)[0]
-                    
+                    layout_name = os.path.splitext(layout_filename)[0] if layout_filename else "_no_layout"
+
                     json_points_path = os.path.join(points_dir, f"{heat_name}_{layout_name}.json")
                     print(f"load_points: 尝试加载 {json_points_path}, exists = {os.path.exists(json_points_path)}")
                     
@@ -2343,14 +2369,15 @@ class ResizableImagesApp:
                         if self.alignment_type == 'rect' and len(self.points_A) == 4:
                             self.rect_corners = [tuple(p) for p in self.points_A]
 
-                        if hasattr(self, 'imageA') and hasattr(self, 'imageB') and self.imageA and self.imageB:
-                            self.init_point_transformer()
+                        if hasattr(self, 'imageA') and self.imageA:
+                            if (hasattr(self, 'imageB') and self.imageB) or self.alignment_type == 'rect':
+                                self.init_point_transformer()
                         # 加载完点位后，立即刷新按钮可见性
                         self.update_align_buttons_visibility()
                     else:
                         print("load_points: 未找到json点位文件")
                 else:
-                    print("load_points: 缺少热力图或Layout图文件名，无法加载点位数据")
+                    print("load_points: 缺少热力图文件名，无法加载点位数据")
             else:
                 print("load_points: points目录不存在")
         else:
@@ -2851,6 +2878,9 @@ class ResizableImagesApp:
                 # 切换Layout图后，清空对应打点，避免误判有点位
                 self.points_B = []
                 print(f"成功加载Layout图: {path}")
+                # 若 canvasB 之前被隱藏（無 Layout 模式），恢復雙圖顯示
+                if not self.canvasB.winfo_manager():
+                    self._exit_rect_fullscreen()
 
             if self.imageB and self.imageA:
                 print(f"图像尺寸 - 热力图: {self.imageA.width}x{self.imageA.height}, Layout图: {self.imageB.width}x{self.imageB.height}")
@@ -2863,6 +2893,9 @@ class ResizableImagesApp:
             # 根据是否存在打点数据，更新对齐按钮可见性
             if hasattr(self, 'update_align_buttons_visibility'):
                 self.update_align_buttons_visibility()
+            # Layout 圖載入/變更時，更新對齊按鈕啟用狀態
+            if index == 1 and hasattr(self, 'update_align_buttons_state'):
+                self.update_align_buttons_state()
         except Exception as e:
             print(f"加载图片时出错: {e}")
     def _show_blended_window(self, title, blended_bgr):
@@ -3245,11 +3278,11 @@ class ResizableImagesApp:
             points_dir = os.path.join(self.current_folder_path, "points")
             heat_filename = self.current_files.get("heat", "")
             layout_filename = self.current_files.get("layout", "")
-            if not heat_filename or not layout_filename:
+            if not heat_filename:
                 # 如果文件名未就绪，但内存中已有足够的点位，也认为可显示
                 return len(self.points_A) >= 3 and len(self.points_B) >= 3
             heat_name = os.path.splitext(heat_filename)[0]
-            layout_name = os.path.splitext(layout_filename)[0]
+            layout_name = os.path.splitext(layout_filename)[0] if layout_filename else "_no_layout"
             json_points_path = os.path.join(points_dir, f"{heat_name}_{layout_name}.json")
             return os.path.exists(json_points_path) or (len(self.points_A) >= 3 and len(self.points_B) >= 3)
         except Exception:
@@ -3261,6 +3294,19 @@ class ResizableImagesApp:
         else:
             self.margin_before_button.grid_forget()
             self.margin_after_button.grid_forget()
+    def update_align_buttons_state(self):
+        """根據 Layout 圖是否存在，控制多點對齊 / 對齊前後按鈕的啟用狀態。"""
+        has_layout = (hasattr(self, 'imageB') and self.imageB is not None
+                      and self.current_files.get("layout"))
+        if has_layout:
+            if not self.is_rect_aligning:
+                self.align_button.config(state=tk.NORMAL, bg=UIStyle.WARNING_ORANGE, fg=UIStyle.WHITE)
+            self.margin_before_button.config(state=tk.NORMAL)
+            self.margin_after_button.config(state=tk.NORMAL)
+        else:
+            self.align_button.config(state=tk.DISABLED, bg=UIStyle.GRAY, fg=UIStyle.DARK_GRAY)
+            self.margin_before_button.config(state=tk.DISABLED)
+            self.margin_after_button.config(state=tk.DISABLED)
     def load_local_data(self):
         """加载本地数据，现在从选择的文件夹中加载"""
         if self.current_folder_path:
@@ -3340,8 +3386,8 @@ class ResizableImagesApp:
         """矩形對齊按鈕的主要處理邏輯（進入模式 / 確認對齊）"""
         if not self.is_rect_aligning:
             # ---- 進入矩形對齊模式 ----
-            if not self.imageA or not self.imageB:
-                show_toast(title='缺少圖片', message='請先載入熱力圖和Layout圖', duration=3000, toast_type='warning')
+            if not self.imageA:
+                show_toast(title='缺少圖片', message='請先載入熱力圖', duration=3000, toast_type='warning')
                 return
 
             self.is_rect_aligning = True
@@ -3362,8 +3408,11 @@ class ResizableImagesApp:
                 show_toast(title='尚未框選', message='請先在熱力圖上拖曳矩形框選 PCBA 區域', duration=3000, toast_type='warning')
                 return
 
-            # Layout 圖的 4 個角落
-            bW, bH = self.imageB.size
+            # Layout 圖的 4 個角落（無 Layout 圖時以熱力圖尺寸代替）
+            if hasattr(self, 'imageB') and self.imageB:
+                bW, bH = self.imageB.size
+            else:
+                bW, bH = self.imageA.size
             layout_corners = [(0, 0), (bW, 0), (bW, bH), (0, bH)]
 
             try:
@@ -3388,10 +3437,16 @@ class ResizableImagesApp:
             self._clear_rect_overlay()
             self.is_rect_aligning = False
 
-            self._exit_rect_fullscreen()
+            has_layout = (hasattr(self, 'imageB') and self.imageB is not None
+                          and self.current_files.get("layout"))
+            if has_layout:
+                self._exit_rect_fullscreen()
+            else:
+                # 無 Layout 圖：維持僅顯示熱力圖的滿版模式
+                self.root.after(100, self.update_images)
 
             # 恢復按鈕
-            self.align_button.config(state=tk.NORMAL)
+            self.update_align_buttons_state()
             self.rect_align_button.config(text="矩形对齐")
 
             # 若之前有標記框，清除（重新對齊了）
