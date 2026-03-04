@@ -38,7 +38,7 @@ import numpy as np
 
 from dialog_component_setting import ComponentSettingDialog
 from load_tempA import TempLoader
-from draw_rect import draw_canvas_item, calc_temp_text_offset, calc_name_position_for_rotated, OUTLINE_OFFSETS
+from draw_rect import draw_canvas_item, calc_temp_text_offset, calc_name_position_for_rotated, calc_name_text_position, OUTLINE_OFFSETS
 from rotation_utils import (
     get_rotated_corners, get_rotated_anchor_positions,
     corners_to_flat, point_in_polygon, rotate_point
@@ -263,6 +263,69 @@ class RectEditor:
 
                 self._position_temp_text(rect, display_cx, display_cy, tempTextId, display_scale)
 
+    def _position_name_text(self, rect, display_left, display_top, display_right, display_bottom, nameId, display_scale):
+        """根據 rect 的 name_text_dir 定位名稱文字。
+
+        Args:
+            rect (dict): 元器件資料字典（含 name_text_dir 欄位）
+            display_left, display_top, display_right, display_bottom: 顯示座標邊界
+            nameId (int): Canvas 名稱文字物件 ID
+            display_scale (float): 目前的顯示縮放比例
+        """
+        direction = rect.get("name_text_dir", "T")
+        name_shape = rect.get("shape", "rectangle")
+        name_angle = rect.get("angle", 0)
+        x, y, anchor = calc_name_text_position(
+            direction, display_left, display_top, display_right, display_bottom,
+            display_scale, angle=name_angle, shape=name_shape, gap=3
+        )
+        self.canvas.coords(nameId, x, y)
+        self.canvas.itemconfig(nameId, anchor=anchor)
+        # 同步描邊
+        outline_ids = rect.get("nameOutlineIds")
+        if outline_ids:
+            for oid, (odx, ody) in zip(outline_ids, OUTLINE_OFFSETS):
+                try:
+                    self.canvas.coords(oid, x + odx, y + ody)
+                    self.canvas.itemconfig(oid, anchor=anchor)
+                except:
+                    pass
+
+    def set_name_text_dir(self, rect_ids, direction):
+        """設定指定元器件的名稱文字方向，並立即更新 Canvas 顯示。
+
+        Args:
+            rect_ids (list): 要設定的矩形框 rectId 列表
+            direction (str): 方向代碼 ("TL", "T", "TR", "L", "C", "R", "BL", "B", "BR")
+        """
+        rect_id_set = set(rect_ids)
+        for rect in self.rectangles:
+            if rect.get("rectId") in rect_id_set:
+                rect["name_text_dir"] = direction
+                nameId = rect.get("nameId")
+                if not nameId:
+                    continue
+
+                # 計算顯示座標
+                x1 = rect.get("x1", 0)
+                y1 = rect.get("y1", 0)
+                x2 = rect.get("x2", 0)
+                y2 = rect.get("y2", 0)
+                if self.magnifier_mode_enabled and abs(self.zoom_scale - 1.0) > 0.001:
+                    display_x1 = x1 * self.zoom_scale + self.canvas_offset_x
+                    display_y1 = y1 * self.zoom_scale + self.canvas_offset_y
+                    display_x2 = x2 * self.zoom_scale + self.canvas_offset_x
+                    display_y2 = y2 * self.zoom_scale + self.canvas_offset_y
+                    display_scale = self._base_font_scale
+                else:
+                    display_scale = self.display_scale if self.display_scale > 0 else 1.0
+                    display_x1 = x1 * display_scale
+                    display_y1 = y1 * display_scale
+                    display_x2 = x2 * display_scale
+                    display_y2 = y2 * display_scale
+
+                self._position_name_text(rect, display_x1, display_y1, display_x2, display_y2, nameId, display_scale)
+
     def set_rotation_angle(self, rect_ids, angle):
         """設定指定元器件的旋轉角度，並重新查詢溫度。
 
@@ -351,25 +414,15 @@ class RectEditor:
                 else:
                     self.canvas.coords(rectId, left, top, right, bottom)
 
-                # 更新名称标签位置和字體大小（旋轉時定位到最高頂點上方）
+                # 更新名称标签位置和字體大小（根據 name_text_dir 動態定位）
                 if nameId:
-                    angle = rect.get("angle", 0)
-                    if angle != 0 and rect.get("shape", "rectangle") != "circle":
-                        corners_n = get_rotated_corners((left + right) / 2, (top + bottom) / 2,
-                                                         (right - left) / 2, (bottom - top) / 2, angle)
-                        name_center_x, name_y = calc_name_position_for_rotated(corners_n, self.display_scale)
-                    else:
-                        name_center_x = (left + right) / 2
-                        name_y = top - 3 * self.display_scale
-                    self.canvas.coords(nameId, name_center_x, name_y)
                     self.canvas.itemconfig(nameId, font=("Arial", name_font_size_scaled, "bold"))
-                    # 同步描邊
-                    self._move_outline(rect.get("nameOutlineIds"), name_center_x, name_y)
                     for oid in (rect.get("nameOutlineIds") or []):
                         try:
                             self.canvas.itemconfig(oid, font=("Arial", name_font_size_scaled, "bold"))
                         except:
                             pass
+                    self._position_name_text(rect, left, top, right, bottom, nameId, self.display_scale)
 
                 # 更新温度文本位置和字體大小
                 if tempTextId:
@@ -450,23 +503,14 @@ class RectEditor:
 
         if nameId:
             self.canvas.itemconfig(nameId, text=name)
-            update_angle = target_rect.get("angle", 0) if target_rect else 0
-            if update_angle != 0 and (not target_rect or target_rect.get("shape", "rectangle") != "circle"):
-                corners_n = get_rotated_corners((display_x1 + display_x2) / 2, (display_y1 + display_y2) / 2,
-                                                 (display_x2 - display_x1) / 2, (display_y2 - display_y1) / 2, update_angle)
-                name_center_x, name_y = calc_name_position_for_rotated(corners_n, display_scale)
-            else:
-                name_center_x = (display_x1 + display_x2) / 2
-                name_y = display_y1 - 3 * display_scale
-            self.canvas.coords(nameId, name_center_x, name_y)
-            # 同步描邊
+            # 同步描邊文字內容
             if target_rect:
                 for oid in (target_rect.get("nameOutlineIds") or []):
                     try:
                         self.canvas.itemconfig(oid, text=name)
                     except:
                         pass
-                self._move_outline(target_rect.get("nameOutlineIds"), name_center_x, name_y)
+                self._position_name_text(target_rect, display_x1, display_y1, display_x2, display_y2, nameId, display_scale)
         if tempTextId:
             self.canvas.itemconfig(tempTextId, text=max_temp)
             # 同步描邊文字內容
@@ -1059,17 +1103,8 @@ class RectEditor:
                             display_scale = self.display_scale if self.display_scale > 0 else 1.0
                             font_scale = display_scale
 
-                        # 更新名称标签位置（旋轉時定位到最高頂點上方）
-                        coord_angle = rect.get("angle", 0)
-                        if coord_angle != 0 and rect.get("shape", "rectangle") != "circle":
-                            corners_n = get_rotated_corners((display_x1 + display_x2) / 2, (display_y1 + display_y2) / 2,
-                                                             (display_x2 - display_x1) / 2, (display_y2 - display_y1) / 2, coord_angle)
-                            name_center_x, name_y = calc_name_position_for_rotated(corners_n, font_scale)
-                        else:
-                            name_center_x = (display_x1 + display_x2) / 2
-                            name_y = display_y1 - 3 * font_scale
-                        self.canvas.coords(nameId, name_center_x, name_y)
-                        self._move_outline(rect.get("nameOutlineIds"), name_center_x, name_y)
+                        # 更新名称标签位置（根據 name_text_dir 動態定位）
+                        self._position_name_text(rect, display_x1, display_y1, display_x2, display_y2, nameId, font_scale)
 
                         # 更新温度文本位置（根據方向定位）
                         self.canvas.itemconfig(tempTextId, text=max_temp)
@@ -1719,18 +1754,13 @@ class RectEditor:
                 target_rect = r
                 break
 
-        # 更新名称标签位置（旋轉時定位到最高頂點上方）
-        temp_angle = target_rect.get("angle", 0) if target_rect else 0
-        if temp_angle != 0 and (not target_rect or target_rect.get("shape", "rectangle") != "circle"):
-            corners_n = get_rotated_corners((x1 + x2) / 2, (y1 + y2) / 2,
-                                             (x2 - x1) / 2, (y2 - y1) / 2, temp_angle)
-            name_center_x, name_y = calc_name_position_for_rotated(corners_n, font_scale)
+        # 更新名称标签位置（根據 name_text_dir 動態定位）
+        if target_rect:
+            self._position_name_text(target_rect, x1, y1, x2, y2, nameId, font_scale)
         else:
             name_center_x = (x1 + x2) / 2
             name_y = y1 - 3 * font_scale
-        self.canvas.coords(nameId, name_center_x, name_y)
-        if target_rect:
-            self._move_outline(target_rect.get("nameOutlineIds"), name_center_x, name_y)
+            self.canvas.coords(nameId, name_center_x, name_y)
 
         # 使用原图像坐标查询温度和最高温度位置（支援旋轉）
         temp_angle = target_rect.get("angle", 0) if target_rect else 0

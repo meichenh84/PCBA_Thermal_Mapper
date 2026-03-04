@@ -2084,9 +2084,75 @@ class EditorCanvas:
         )
         self.convert_to_circle_button.pack(side='left', expand=True, fill='x', padx=(2, 0))
 
-        # ========== Row 9: 溫度位置標籤 + ⓘ ==========
+        # ========== Row 8: 名稱位置標籤 + ⓘ ==========
+        name_dir_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        name_dir_label_frame.grid(row=8, column=0, pady=(8, 2), padx=10, sticky="w")
+
+        name_dir_label = tk.Label(
+            name_dir_label_frame,
+            text="名稱位置",
+            font=("Arial", 9),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.DARK_GRAY
+        )
+        name_dir_label.pack(side=tk.LEFT)
+
+        name_dir_info_label = tk.Label(
+            name_dir_label_frame,
+            text=" ⓘ",
+            font=("Arial", 12),
+            bg=UIStyle.VERY_LIGHT_BLUE,
+            fg=UIStyle.PRIMARY_BLUE,
+            cursor="hand2"
+        )
+        name_dir_info_label.pack(side=tk.LEFT, padx=(2, 0))
+        Tooltip(
+            name_dir_info_label,
+            "名稱文字位置功能：\n"
+            "• 設定元器件名稱相對於框線的方向\n"
+            "• 點擊八個方位按鈕即可調整\n"
+            "• 中心為框線位置（不可點擊）\n"
+            "• 支援多選批次設定",
+            delay=200
+        )
+
+        # ========== Row 9: 名稱位置九宮格 ==========
+        name_grid_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
+        name_grid_frame.grid(row=9, column=0, pady=(2, 5), padx=10)
+
+        name_dir_map = [
+            ("↖", "TL", 0, 0), ("↑", "T", 0, 1), ("↗", "TR", 0, 2),
+            ("←", "L",  1, 0), ("■", None, 1, 1), ("→", "R",  1, 2),
+            ("↙", "BL", 2, 0), ("↓", "B", 2, 1), ("↘", "BR", 2, 2),
+        ]
+
+        self.name_dir_buttons = {}
+        self.current_name_dir = None
+
+        for label, code, r, c in name_dir_map:
+            if code is None:
+                center_label = tk.Label(
+                    name_grid_frame, text=label, width=3, height=1,
+                    font=("Arial", 14),
+                    bg=UIStyle.GRAY, fg=UIStyle.DARK_GRAY,
+                    relief=tk.SUNKEN, bd=1
+                )
+                center_label.grid(row=r, column=c, padx=1, pady=1)
+            else:
+                btn = tk.Button(
+                    name_grid_frame, text=label, width=3, height=1,
+                    font=("Arial", 12),
+                    bg=UIStyle.WHITE, fg=UIStyle.BLACK,
+                    relief=tk.RAISED, bd=1,
+                    command=lambda d=code: self.on_name_dir_click(d),
+                    state=tk.DISABLED
+                )
+                btn.grid(row=r, column=c, padx=1, pady=1)
+                self.name_dir_buttons[code] = btn
+
+        # ========== Row 10: 溫度位置標籤 + ⓘ ==========  (was Row 9)
         temp_dir_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        temp_dir_label_frame.grid(row=9, column=0, pady=(8, 2), padx=10, sticky="w")
+        temp_dir_label_frame.grid(row=10, column=0, pady=(8, 2), padx=10, sticky="w")
 
         temp_dir_label = tk.Label(
             temp_dir_label_frame,
@@ -2116,9 +2182,9 @@ class EditorCanvas:
             delay=200
         )
 
-        # ========== Row 10: 九宮格 ==========
+        # ========== Row 11: 溫度位置九宮格 ==========  (was Row 10)
         grid_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        grid_frame.grid(row=10, column=0, pady=(2, 5), padx=10)
+        grid_frame.grid(row=11, column=0, pady=(2, 5), padx=10)
 
         dir_map = [
             ("↖", "TL", 0, 0), ("↑", "T", 0, 1), ("↗", "TR", 0, 2),
@@ -2151,9 +2217,9 @@ class EditorCanvas:
                 btn.grid(row=r, column=c, padx=1, pady=1)
                 self.temp_dir_buttons[code] = btn
 
-        # ========== Row 11: 旋轉角度標籤 + ⓘ ==========
+        # ========== Row 13: 旋轉角度標籤 + ⓘ ==========  (was Row 11)
         rotation_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        rotation_label_frame.grid(row=11, column=0, pady=(8, 2), padx=10, sticky="w")
+        rotation_label_frame.grid(row=13, column=0, pady=(8, 2), padx=10, sticky="w")
 
         rotation_label = tk.Label(
             rotation_label_frame,
@@ -2184,9 +2250,9 @@ class EditorCanvas:
             delay=200
         )
 
-        # ========== Row 12: 預設角度按鈕 ==========
+        # ========== Row 14: 預設角度按鈕 ==========  (was Row 12)
         rotation_btn_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        rotation_btn_frame.grid(row=12, column=0, pady=(2, 2), padx=10, sticky="ew")
+        rotation_btn_frame.grid(row=14, column=0, pady=(2, 2), padx=10, sticky="ew")
 
         self.rotation_buttons = {}
         self.current_rotation_angle = 0
@@ -2207,9 +2273,9 @@ class EditorCanvas:
             btn.pack(side=tk.LEFT, padx=1)
             self.rotation_buttons[a] = btn
 
-        # ========== Row 13: 自訂角度輸入 ==========
+        # ========== Row 15: 自訂角度輸入 ==========  (was Row 13)
         custom_rotation_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        custom_rotation_frame.grid(row=13, column=0, pady=(2, 5), padx=10, sticky="ew")
+        custom_rotation_frame.grid(row=15, column=0, pady=(2, 5), padx=10, sticky="ew")
 
         self.custom_rotation_entry = tk.Entry(
             custom_rotation_frame,
@@ -2240,9 +2306,9 @@ class EditorCanvas:
         )
         self.custom_rotation_apply_btn.pack(side=tk.LEFT)
 
-        # ========== Row 14: 放大模式 + ⓘ ==========
+        # ========== Row 16: 放大模式 + ⓘ ==========  (was Row 14)
         magnifier_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        magnifier_frame.grid(row=14, column=0, pady=(8, 8), padx=10, sticky="ew")
+        magnifier_frame.grid(row=16, column=0, pady=(8, 8), padx=10, sticky="ew")
 
         self.magnifier_var = tk.BooleanVar(value=True)
         self.magnifier_checkbox = tk.Checkbutton(
@@ -2277,9 +2343,9 @@ class EditorCanvas:
             "• 取消勾選自動恢復預設顯示"
         )
 
-        # ========== Row 15: 溫度座標 + ⓘ ==========
+        # ========== Row 17: 溫度座標 + ⓘ ==========  (was Row 15)
         realtime_temp_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        realtime_temp_frame.grid(row=15, column=0, pady=(0, 8), padx=10, sticky="ew")
+        realtime_temp_frame.grid(row=17, column=0, pady=(0, 8), padx=10, sticky="ew")
 
         self.realtime_temp_var = tk.BooleanVar(value=True)
         self.realtime_temp_checkbox = tk.Checkbutton(
@@ -2319,9 +2385,9 @@ class EditorCanvas:
             "移出熱力圖範圍後會自動隱藏"
         )
 
-        # ========== Row 16: 多選模式 + ⓘ ==========
+        # ========== Row 18: 多選模式 + ⓘ ==========  (was Row 16)
         multi_select_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        multi_select_frame.grid(row=16, column=0, pady=(0, 8), padx=10, sticky="ew")
+        multi_select_frame.grid(row=18, column=0, pady=(0, 8), padx=10, sticky="ew")
 
         self.multi_select_var = tk.BooleanVar(value=True)
         self.multi_select_checkbox = tk.Checkbutton(
@@ -2356,9 +2422,9 @@ class EditorCanvas:
             "• 選取多個後可批次轉換形狀或刪除"
         )
         
-        # ========== Row 17: 加回元器件 + ⓘ ==========
+        # ========== Row 19: 加回元器件 + ⓘ ==========  (was Row 17)
         add_back_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
-        add_back_frame.grid(row=17, column=0, pady=(0, 8), padx=10, sticky="ew")
+        add_back_frame.grid(row=19, column=0, pady=(0, 8), padx=10, sticky="ew")
 
         self.add_back_var = tk.BooleanVar(value=False)
         self.add_back_checkbox = tk.Checkbutton(
@@ -2394,7 +2460,7 @@ class EditorCanvas:
             "• 雙擊即可加回熱力圖和列表"
         )
 
-        # ========== Row 18: 加回元器件資訊框 ==========
+        # ========== Row 20: 加回元器件資訊框 ==========  (was Row 18)
         self.add_back_info_frame = tk.LabelFrame(
             button_container,
             text="可加回元器件(雙擊加回)",
@@ -2402,7 +2468,7 @@ class EditorCanvas:
             bg=UIStyle.VERY_LIGHT_BLUE,
             fg=UIStyle.DARK_BLUE,
         )
-        self.add_back_info_frame.grid(row=18, column=0, pady=(0, 8), padx=10, sticky="ew")
+        self.add_back_info_frame.grid(row=20, column=0, pady=(0, 8), padx=10, sticky="ew")
 
         # 元器件名稱（大字、藍色）
         self.add_back_name_label = tk.Label(
@@ -3259,6 +3325,74 @@ class EditorCanvas:
             # 方向不一致：不高亮
             self._update_temp_dir_highlight(None)
 
+    # ========== 九宮格名稱位置控制 ==========
+
+    def on_name_dir_click(self, direction):
+        """名稱位置九宮格方向按鈕點擊事件"""
+        rect_ids = []
+        if self.selected_rect_ids:
+            rect_ids = list(self.selected_rect_ids)
+        elif self.selected_rect_id is not None:
+            rect_ids = [self.selected_rect_id]
+
+        if not rect_ids or not hasattr(self, 'editor_rect') or not self.editor_rect:
+            return
+
+        self._push_undo()
+        self.editor_rect.set_name_text_dir(rect_ids, direction)
+        self._update_name_dir_highlight(direction)
+
+    def _update_name_dir_highlight(self, direction=None):
+        """更新名稱位置九宮格按鈕的高亮狀態"""
+        if not hasattr(self, 'name_dir_buttons'):
+            return
+
+        self.current_name_dir = direction
+
+        for code, btn in self.name_dir_buttons.items():
+            if code == direction:
+                btn.config(bg=UIStyle.PRIMARY_BLUE, fg=UIStyle.WHITE)
+            else:
+                btn.config(bg=UIStyle.WHITE, fg=UIStyle.BLACK)
+
+    def update_name_dir_buttons_state(self):
+        """根據選取狀態更新名稱位置九宮格按鈕的啟用/禁用和高亮"""
+        if not hasattr(self, 'name_dir_buttons'):
+            return
+
+        has_selection = (
+            (self.selected_rect_id is not None) or
+            (len(self.selected_rect_ids) > 0)
+        )
+
+        state = tk.NORMAL if has_selection else tk.DISABLED
+        for code, btn in self.name_dir_buttons.items():
+            btn.config(state=state)
+
+        if not has_selection:
+            self._update_name_dir_highlight(None)
+            return
+
+        if not hasattr(self, 'editor_rect') or not self.editor_rect:
+            self._update_name_dir_highlight(None)
+            return
+
+        rect_ids = []
+        if self.selected_rect_ids:
+            rect_ids = list(self.selected_rect_ids)
+        elif self.selected_rect_id is not None:
+            rect_ids = [self.selected_rect_id]
+
+        directions = set()
+        for rect in self.editor_rect.rectangles:
+            if rect.get("rectId") in rect_ids:
+                directions.add(rect.get("name_text_dir", "T"))
+
+        if len(directions) == 1:
+            self._update_name_dir_highlight(directions.pop())
+        else:
+            self._update_name_dir_highlight(None)
+
     # ========== 旋轉角度控制 ==========
 
     def on_rotation_click(self, angle):
@@ -4084,7 +4218,8 @@ class EditorCanvas:
         self.update_merge_button_state()
         self.update_shape_buttons_state()
         self.update_temp_dir_buttons_state()
-    
+        self.update_name_dir_buttons_state()
+
     def update_merge_button_state(self):
         """更新合并按钮的状态（选中>1个矩形框时可用）"""
         if hasattr(self, 'merge_button'):

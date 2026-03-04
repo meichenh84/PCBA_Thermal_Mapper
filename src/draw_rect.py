@@ -35,6 +35,96 @@ from rotation_utils import get_rotated_corners, corners_to_flat
 
 OUTLINE_OFFSETS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 
+def calc_name_text_position(direction, left, top, right, bottom, scale, angle=0, shape="rectangle", gap=3):
+    """根據方向、形狀計算名稱文字的座標與 anchor。
+
+    Args:
+        direction: "TL"/"T"/"TR"/"L"/"C"/"R"/"BL"/"B"/"BR"
+        left, top, right, bottom: 形狀邊界（顯示座標）
+        scale: 顯示縮放比例
+        angle: 旋轉角度（度）
+        shape: "rectangle" 或 "circle"
+        gap: 名稱與邊界的間距（預設 3px）
+
+    Returns:
+        (x, y, anchor_str)
+    """
+    # 旋轉矩形：計算旋轉角點的 AABB
+    if angle != 0 and shape != "circle":
+        geo_cx = (left + right) / 2
+        geo_cy = (top + bottom) / 2
+        half_w = (right - left) / 2
+        half_h = (bottom - top) / 2
+        corners = get_rotated_corners(geo_cx, geo_cy, half_w, half_h, angle)
+        xs = [c[0] for c in corners]
+        ys = [c[1] for c in corners]
+        bb_left = min(xs)
+        bb_top = min(ys)
+        bb_right = max(xs)
+        bb_bottom = max(ys)
+    else:
+        bb_left = left
+        bb_top = top
+        bb_right = right
+        bb_bottom = bottom
+
+    center_x = (bb_left + bb_right) / 2
+    center_y = (bb_top + bb_bottom) / 2
+    g = gap * scale
+
+    pos_map = {
+        "T":  (center_x,  bb_top - g,    "s"),
+        "B":  (center_x,  bb_bottom + g,  "n"),
+        "L":  (bb_left - g,  center_y,    "e"),
+        "R":  (bb_right + g, center_y,    "w"),
+        "TL": (bb_left,     bb_top - g,    "sw"),
+        "TR": (bb_right,    bb_top - g,    "se"),
+        "BL": (bb_left,     bb_bottom + g, "nw"),
+        "BR": (bb_right,    bb_bottom + g, "ne"),
+        "C":  (center_x,    center_y,      "center"),
+    }
+    return pos_map.get(direction, pos_map["T"])
+
+
+def _anchor_to_cv2_topleft(x, y, anchor, tw, th):
+    """將 anchor 式座標轉換為 cv2 putText 的左下角座標 (int, int)。"""
+    # 先算出左上角
+    ax, ay = _anchor_to_topleft(x, y, anchor, tw, th)
+    # cv2 putText 的 org 是文字基線左端，近似為左下角
+    return (int(ax), int(ay + th))
+
+
+def _anchor_to_pil_topleft(x, y, anchor, tw, th):
+    """將 anchor 式座標轉換為 PIL draw.text 的左上角座標 (int, int)。"""
+    ax, ay = _anchor_to_topleft(x, y, anchor, tw, th)
+    return (int(ax), int(ay))
+
+
+def _anchor_to_topleft(x, y, anchor, tw, th):
+    """將 tkinter anchor 式座標轉換為左上角座標。"""
+    # anchor 對應的偏移
+    if anchor == "center":
+        return x - tw / 2, y - th / 2
+    elif anchor == "n":
+        return x - tw / 2, y
+    elif anchor == "s":
+        return x - tw / 2, y - th
+    elif anchor == "w":
+        return x, y - th / 2
+    elif anchor == "e":
+        return x - tw, y - th / 2
+    elif anchor == "nw":
+        return x, y
+    elif anchor == "ne":
+        return x - tw, y
+    elif anchor == "sw":
+        return x, y - th
+    elif anchor == "se":
+        return x - tw, y - th
+    else:
+        return x - tw / 2, y - th
+
+
 def calc_name_position_for_rotated(corners, scale, gap=3):
     """計算旋轉矩形名稱的定位座標（最高頂點正上方置中）。
 
@@ -200,16 +290,15 @@ def draw_triangle_and_text(imageA, item, imageScale = 1, imageIndex = 0, size=8)
     name_font_scale = (name_font_size / 12.0) * 0.55 * textScale
     temp_font_scale = (temp_font_size / 10.0) * 0.55 * textScale
     
-    # 名稱文字 4 方向描邊（旋轉時定位到最高頂點上方）
-    if angle != 0:
-        corners_n = get_rotated_corners((left + right) / 2, (top + bottom) / 2,
-                                         (right - left) / 2, (bottom - top) / 2, angle)
-        min_y_n = min(c[1] for c in corners_n)
-        top_pts_n = [c for c in corners_n if abs(c[1] - min_y_n) < 0.5]
-        name_pos = (int(sum(c[0] for c in top_pts_n) / len(top_pts_n)),
-                    int(min_y_n) - int(4 * textScale))
-    else:
-        name_pos = (left, top - int(4 * textScale))
+    # 名稱文字根據 name_text_dir 動態定位
+    name_text_dir = item.get("name_text_dir", "T")
+    (ntw, nth), _ = cv2.getTextSize(f'{name}', cv2.FONT_HERSHEY_COMPLEX, name_font_scale, 1)
+    nx, ny, n_anchor = calc_name_text_position(
+        name_text_dir, left, top, right, bottom, 1.0,
+        angle=angle, shape=shape, gap=int(4 * textScale)
+    )
+    # cv2 putText 使用左下角錨點，從 anchor 式座標轉換
+    name_pos = _anchor_to_cv2_topleft(nx, ny, n_anchor, ntw, nth)
     for odx, ody in OUTLINE_OFFSETS:
         cv2.putText(imageA, f'{name}', (name_pos[0] + odx, name_pos[1] + ody), cv2.FONT_HERSHEY_COMPLEX, name_font_scale, shadowColor, 1, cv2.LINE_AA)
     cv2.putText(imageA, f'{name}', name_pos, cv2.FONT_HERSHEY_COMPLEX, name_font_scale, textColor, 1, cv2.LINE_AA)
@@ -381,21 +470,18 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
         for oid, (odx, ody) in zip(tempOutlineIds, OUTLINE_OFFSETS):
             canvas.coords(oid, cx + odx, cy - 16 * imageScale + ody)
 
-    # 名称文字置中于矩形框上方外侧（anchor="s" 使文字底部對齊指定 Y 座標）
-    angle_name = item.get("angle", 0)
-    if angle_name != 0 and item.get("shape", "rectangle") != "circle":
-        corners_n = get_rotated_corners((left + right) / 2, (top + bottom) / 2,
-                                         (right - left) / 2, (bottom - top) / 2, angle_name)
-        name_center_x, name_y = calc_name_position_for_rotated(corners_n, imageScale)
-    else:
-        name_center_x = (left + right) / 2  # 矩形框水平中心
-        name_y = top - 3 * imageScale
-
-    name_anchor = "s"
+    # 名称文字根據 name_text_dir 動態定位
+    name_text_dir = item.get("name_text_dir", "T")
+    name_shape = item.get("shape", "rectangle")
+    name_angle = item.get("angle", 0)
+    name_x, name_y, name_anchor = calc_name_text_position(
+        name_text_dir, left, top, right, bottom, imageScale,
+        angle=name_angle, shape=name_shape, gap=3
+    )
 
     name_font_tuple = ("Arial", name_font_size_scaled, "bold")
-    nameOutlineIds = _create_outline_texts(canvas, name_center_x, name_y, f'{name}', name_font_tuple, anchor=name_anchor)
-    nameId = canvas.create_text(name_center_x, name_y, text=f'{name}',
+    nameOutlineIds = _create_outline_texts(canvas, name_x, name_y, f'{name}', name_font_tuple, anchor=name_anchor)
+    nameId = canvas.create_text(name_x, name_y, text=f'{name}',
                        font=name_font_tuple, fill=textColor, anchor=name_anchor)
 
     # 將描邊 ID 存入 item
@@ -449,10 +535,15 @@ def update_canvas_item(canvas, item, imageScale=1):
     else:
         canvas.coords(rectId, x1, y1, x2, y2)
 
-    # 名称文字置中于矩形框上方外侧
-    name_center_x = (x1 + x2) / 2
-    canvas.coords(nameId, name_center_x, y1 - 3 * imageScale)
-    canvas.itemconfig(nameId, font=("Arial", int(28 * font_scale), "bold"))
+    # 名稱文字根據 name_text_dir 動態定位
+    name_text_dir = item.get("name_text_dir", "T")
+    name_shape = item.get("shape", "rectangle")
+    name_x, name_y_pos, name_anchor = calc_name_text_position(
+        name_text_dir, x1, y1, x2, y2, imageScale,
+        angle=angle, shape=name_shape, gap=3
+    )
+    canvas.coords(nameId, name_x, name_y_pos)
+    canvas.itemconfig(nameId, font=("Arial", int(28 * font_scale), "bold"), anchor=name_anchor)
 
     # 根據方向計算溫度文字偏移
     canvas.itemconfig(tempTextId, font=("Arial", int(14 * font_scale)))
@@ -703,20 +794,16 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
         temp_text_x = int(cx + dx - tw / 2)
         temp_text_y = int(cy + dy - th / 2)
 
-        # 計算名稱文字位置（旋轉時定位到最高頂點上方置中）
+        # 計算名稱文字位置（根據 name_text_dir 動態定位）
+        name_text_dir = item.get("name_text_dir", "T")
         name_bbox = draw.textbbox((0, 0), name, font=name_font)
         name_tw = name_bbox[2] - name_bbox[0]
-        if angle != 0:
-            corners_n = get_rotated_corners((left + right) / 2, (top + bottom) / 2,
-                                             (right - left) / 2, (bottom - top) / 2, angle)
-            min_y_n = min(c[1] for c in corners_n)
-            top_pts_n = [c for c in corners_n if abs(c[1] - min_y_n) < 0.5]
-            name_cx = sum(c[0] for c in top_pts_n) / len(top_pts_n)
-            name_text_x = int(name_cx - name_tw / 2)
-            name_text_y = int(min_y_n) - int(name_font_scale) - int(4 * textScale)
-        else:
-            name_text_x = int((left + right) / 2 - name_tw / 2)
-            name_text_y = top - int(name_font_scale) - int(4 * textScale)
+        name_th = name_bbox[3] - name_bbox[1]
+        nx, ny, n_anchor = calc_name_text_position(
+            name_text_dir, left, top, right, bottom, 1.0,
+            angle=angle, shape=shape, gap=int(name_font_scale) + int(4 * textScale)
+        )
+        name_text_x, name_text_y = _anchor_to_pil_topleft(nx, ny, n_anchor, name_tw, name_th)
 
         # 对于Layout图，检查文本位置是否在边界内
         if imageIndex != 0:
