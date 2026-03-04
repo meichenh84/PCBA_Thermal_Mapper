@@ -65,6 +65,7 @@ class ComponentSettingDialog(tk.Toplevel):
         self.fields = [
             ("name", "器件名称: ", tk.Entry(frame)),
             ("max_temp", "最高温度: ", tk.Entry(frame)),
+            ("_orient", "Orient.: ", tk.Entry(frame)),
             # 其他字段暂时注释掉
             # ("cx", "最高温度 x坐标: ", tk.Entry(frame)),
             # ("cy", "最高温度 y坐标: ", tk.Entry(frame)),
@@ -81,9 +82,19 @@ class ComponentSettingDialog(tk.Toplevel):
         for idx, (key, label, entry) in enumerate(self.fields):
             tk.Label(frame, text=label).grid(row=idx, column=0, padx=10, pady=5, sticky="e")
             if oldRect:
-                entry.insert(0, oldRect[key])  # 将 oldRect[key] 的值插入到 entry 中
-                if key == "max_temp":  # 最高温度字段设为只读
+                if key == "_orient":
+                    # Orient. 顯示原始值，從 angle 欄位讀取
+                    raw_orient = oldRect.get("angle", None)
+                    import math
+                    if raw_orient is None or (isinstance(raw_orient, float) and math.isnan(raw_orient)):
+                        entry.insert(0, "空值")
+                    else:
+                        entry.insert(0, raw_orient)
                     entry.config(state='readonly')
+                else:
+                    entry.insert(0, oldRect[key])  # 将 oldRect[key] 的值插入到 entry 中
+                    if key == "max_temp":  # 最高温度字段设为只读
+                        entry.config(state='readonly')
             entry.grid(row=idx, column=1, padx=10, pady=5)
 
         # 创建确认按钮
@@ -105,6 +116,8 @@ class ComponentSettingDialog(tk.Toplevel):
         """確認按鈕點擊事件處理器。驗證輸入值、保留原始座標資料，並透過 callback 回傳結果。"""
         values = {}
         for key, label, entry in self.fields:
+            if key == "_orient":  # Orient. 為唯讀顯示欄位，不回傳
+                continue
             value = entry.get()
             if key == "name":  # 对"器件名称"字段不做类型转换，保留字符串
                 values[key] = value
