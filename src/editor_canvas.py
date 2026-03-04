@@ -342,6 +342,7 @@ class EditorCanvas:
                 'RefDes': refdes,
                 'X': comp.get('X', 0), 'Y': comp.get('Y', 0),
                 'L': comp.get('L', 0), 'W': comp.get('W', 0), 'T': comp.get('T', 0),
+                'Orient.': comp.get('Orient.', 0),
                 'Description': comp.get('Description', ''),
                 'ar1_left': ar1_left, 'ar1_top': ar1_top,
                 'ar1_right': ar1_right, 'ar1_bottom': ar1_bottom,
@@ -2554,6 +2555,7 @@ class EditorCanvas:
                         f"長: {matched['L']}",
                         f"寬: {matched['W']}",
                         f"高: {matched['T']}",
+                        f"旋轉: {matched.get('Orient.', 0)}°",
                     ]
                     if desc:
                         detail_lines.append(f"描述:")
@@ -2706,6 +2708,7 @@ class EditorCanvas:
                 'RefDes': refdes,
                 'X': comp.get('X', 0), 'Y': comp.get('Y', 0),
                 'L': comp.get('L', 0), 'W': comp.get('W', 0), 'T': comp.get('T', 0),
+                'Orient.': comp.get('Orient.', 0),
                 'Description': comp.get('Description', ''),
                 'ar1_left': ar1_left, 'ar1_top': ar1_top,
                 'ar1_right': ar1_right, 'ar1_bottom': ar1_bottom,
