@@ -2595,11 +2595,25 @@ class EditorCanvas:
         cx2 = comp['ar1_right'] * scale + offset_x
         cy2 = comp['ar1_bottom'] * scale + offset_y
 
-        self.canvas.create_rectangle(
-            cx1, cy1, cx2, cy2,
-            outline='lime', width=2, dash=(6, 4),
-            tags='add_back_preview'
-        )
+        orient = comp.get('Orient.', 0)
+        if orient and orient != 0:
+            from rotation_utils import get_rotated_corners, corners_to_flat
+            geo_cx = (cx1 + cx2) / 2
+            geo_cy = (cy1 + cy2) / 2
+            half_w = (cx2 - cx1) / 2
+            half_h = (cy2 - cy1) / 2
+            corners = get_rotated_corners(geo_cx, geo_cy, half_w, half_h, orient)
+            flat = corners_to_flat(corners)
+            self.canvas.create_polygon(
+                flat, outline='lime', fill='', width=2, dash=(6, 4),
+                tags='add_back_preview'
+            )
+        else:
+            self.canvas.create_rectangle(
+                cx1, cy1, cx2, cy2,
+                outline='lime', width=2, dash=(6, 4),
+                tags='add_back_preview'
+            )
 
     def _on_canvas_double_click_add_back(self, event):
         """雙擊加回元器件"""
@@ -2641,6 +2655,7 @@ class EditorCanvas:
                 "name": comp['RefDes'],
                 "description": comp['Description'],
                 "add_new": True,
+                "angle": comp.get('Orient.', 0),
             }
 
             # 建立矩形並加入列表
