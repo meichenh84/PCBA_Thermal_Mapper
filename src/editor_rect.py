@@ -348,14 +348,17 @@ class RectEditor:
             if angle != 0:
                 corners = get_rotated_corners(geo_cx, geo_cy, half_w, half_h, angle)
                 max_temp = self.tempALoader.get_max_temp_in_polygon(corners, 1.0)
+                avg_temp = self.tempALoader.get_avg_temp_in_polygon(corners, 1.0)
                 cx, cy = self.tempALoader.get_max_temp_coords_in_polygon(corners, 1.0)
             else:
                 max_temp = self.tempALoader.get_max_temp(int(x1), int(y1), int(x2), int(y2), 1.0)
+                avg_temp = self.tempALoader.get_avg_temp(int(x1), int(y1), int(x2), int(y2), 1.0)
                 cx, cy = self.tempALoader.get_max_temp_coords(int(x1), int(y1), int(x2), int(y2), 1.0)
 
             rect["cx"] = cx
             rect["cy"] = cy
             rect["max_temp"] = max_temp
+            rect["avg_temp"] = avg_temp
 
             if abs(max_temp - old_temp) > 0.01:
                 temp_changed = True
@@ -701,23 +704,24 @@ class RectEditor:
                 
                 # 查询这个区域的最高温度和最高温度点坐标
                 max_temp = self.tempALoader.get_max_temp(int(x1), int(y1), int(x2), int(y2), 1.0)
+                avg_temp = self.tempALoader.get_avg_temp(int(x1), int(y1), int(x2), int(y2), 1.0)
                 temp_cx, temp_cy = self.tempALoader.get_max_temp_coords(int(x1), int(y1), int(x2), int(y2), 1.0)
-                
+
                 # 确保所有坐标值都不是None
                 if temp_cx is None or temp_cy is None:
                     print(f"警告：温度坐标查询失败，使用区域中心点坐标")
                     temp_cx = (x1 + x2) / 2
                     temp_cy = (y1 + y2) / 2
-                
+
                 if max_temp is None:
                     print(f"警告：温度查询失败，使用默认值0")
                     max_temp = 0
-                
+
                 rectItem = {
-                    "x1": x1, "y1": y1, "x2": x2, "y2": y2, 
-                    "cx": temp_cx, "cy": temp_cy, 
-                    "max_temp": max_temp, 
-                    "name": name, 
+                    "x1": x1, "y1": y1, "x2": x2, "y2": y2,
+                    "cx": temp_cx, "cy": temp_cy,
+                    "max_temp": max_temp, "avg_temp": avg_temp,
+                    "name": name,
                     "rectId": 0, "nameId": 0, "triangleId": 0, "tempTextId": 0
                 }
                 
@@ -734,8 +738,9 @@ class RectEditor:
                 
                 # 查询温度数据，包括最高温度值和最高温度点坐标
                 max_temp = self.tempALoader.get_max_temp(int(x1), int(y1), int(x2), int(y2), 1.0)
+                avg_temp = self.tempALoader.get_avg_temp(int(x1), int(y1), int(x2), int(y2), 1.0)
                 temp_cx, temp_cy = self.tempALoader.get_max_temp_coords(int(x1), int(y1), int(x2), int(y2), 1.0)
-                rectItem = {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "cx": temp_cx, "cy": temp_cy, "max_temp": max_temp, "name": name, "rectId": 0, "nameId": 0, "triangleId": 0, "tempTextId": 0}
+                rectItem = {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "cx": temp_cx, "cy": temp_cy, "max_temp": max_temp, "avg_temp": avg_temp, "name": name, "rectId": 0, "nameId": 0, "triangleId": 0, "tempTextId": 0}
               
                 # 关闭当前弹窗（如果存在）
                 self.close_current_dialog()
@@ -817,10 +822,13 @@ class RectEditor:
             geometric_cx, geometric_cy, radius, 1.0)
         max_temp = self.tempALoader.get_max_temp_in_circle(
             geometric_cx, geometric_cy, radius, 1.0)
+        avg_temp = self.tempALoader.get_avg_temp_in_circle(
+            geometric_cx, geometric_cy, radius, 1.0)
 
         rect["cx"] = cx
         rect["cy"] = cy
         rect["max_temp"] = max_temp
+        rect["avg_temp"] = avg_temp
 
         # 刪除舊的 Canvas 物件，重新繪製
         self._redraw_single_rect(rect)
@@ -852,16 +860,20 @@ class RectEditor:
             half_h = (y2 - y1) / 2
             corners = get_rotated_corners(geo_cx, geo_cy, half_w, half_h, angle)
             max_temp = self.tempALoader.get_max_temp_in_polygon(corners, 1.0)
+            avg_temp = self.tempALoader.get_avg_temp_in_polygon(corners, 1.0)
             cx, cy = self.tempALoader.get_max_temp_coords_in_polygon(corners, 1.0)
         else:
             cx, cy = self.tempALoader.get_max_temp_coords(
                 int(x1), int(y1), int(x2), int(y2), 1.0)
             max_temp = self.tempALoader.get_max_temp(
                 int(x1), int(y1), int(x2), int(y2), 1.0)
+            avg_temp = self.tempALoader.get_avg_temp(
+                int(x1), int(y1), int(x2), int(y2), 1.0)
 
         rect["cx"] = cx
         rect["cy"] = cy
         rect["max_temp"] = max_temp
+        rect["avg_temp"] = avg_temp
 
         # 刪除舊的 Canvas 物件，重新繪製
         self._redraw_single_rect(rect)
@@ -939,6 +951,15 @@ class RectEditor:
         rect["y2"] = dot_cy + 0.5
 
         rect["shape"] = "dot"
+
+        # 溫度點位置設為中心點，查詢該像素的溫度（max == avg）
+        rect["cx"] = dot_cx
+        rect["cy"] = dot_cy
+        pixel_temp = self.tempALoader.get_max_temp(
+            int(dot_cx), int(dot_cy),
+            int(dot_cx) + 1, int(dot_cy) + 1, 1.0)
+        rect["max_temp"] = pixel_temp
+        rect["avg_temp"] = pixel_temp
 
         # 刪除舊的 Canvas 物件，重新繪製
         self._redraw_single_rect(rect)
@@ -1072,13 +1093,22 @@ class RectEditor:
                     # 根據形狀類型查詢溫度數據
                     shape = rect.get("shape", "rectangle")
                     rect_angle = rect.get("angle", 0)
-                    if shape == "circle":
+                    if shape == "dot":
+                        # 圓點：查詢新位置中心像素的溫度（max == avg）
+                        cx = (x1 + x2) / 2
+                        cy = (y1 + y2) / 2
+                        pixel_temp = self.tempALoader.get_max_temp(
+                            int(cx), int(cy), int(cx) + 1, int(cy) + 1, 1.0)
+                        max_temp = pixel_temp
+                        avg_temp = pixel_temp
+                    elif shape == "circle":
                         # 圓形：只考慮圓形內部的點
                         center_x = (x1 + x2) / 2
                         center_y = (y1 + y2) / 2
                         radius = (x2 - x1) / 2
                         cx, cy = self.tempALoader.get_max_temp_coords_in_circle(center_x, center_y, radius, 1.0)
                         max_temp = self.tempALoader.get_max_temp_in_circle(center_x, center_y, radius, 1.0)
+                        avg_temp = self.tempALoader.get_avg_temp_in_circle(center_x, center_y, radius, 1.0)
                     elif rect_angle != 0:
                         # 旋轉矩形：使用多邊形區域查詢
                         geo_cx_q = (x1 + x2) / 2
@@ -1088,15 +1118,18 @@ class RectEditor:
                         corners_q = get_rotated_corners(geo_cx_q, geo_cy_q, half_w_q, half_h_q, rect_angle)
                         cx, cy = self.tempALoader.get_max_temp_coords_in_polygon(corners_q, 1.0)
                         max_temp = self.tempALoader.get_max_temp_in_polygon(corners_q, 1.0)
+                        avg_temp = self.tempALoader.get_avg_temp_in_polygon(corners_q, 1.0)
                     else:
                         # 矩形：使用矩形區域查詢
                         cx, cy = self.tempALoader.get_max_temp_coords(int(x1), int(y1), int(x2), int(y2), 1.0)
                         max_temp = self.tempALoader.get_max_temp(int(x1), int(y1), int(x2), int(y2), 1.0)
+                        avg_temp = self.tempALoader.get_avg_temp(int(x1), int(y1), int(x2), int(y2), 1.0)
 
                     # 更新数据
                     rect["cx"] = cx
                     rect["cy"] = cy
                     rect["max_temp"] = max_temp
+                    rect["avg_temp"] = avg_temp
                     
                     # 🔥 关键修复：同时更新canvas显示
                     nameId = rect.get("nameId")
@@ -1202,6 +1235,11 @@ class RectEditor:
         # Create anchors for the given rectangle
         self.delete_anchors()
 
+        # 圓點不建立錨點（不允許縮放，僅允許拖曳移動）
+        rect_data = self._get_rect_data_by_canvas_id(rect)
+        if rect_data and rect_data.get("shape") == "dot":
+            return
+
         try:
             coords = self.canvas.coords(rect)
             if not coords or len(coords) < 4:
@@ -1297,7 +1335,14 @@ class RectEditor:
                     angle = rect.get("angle", 0)
 
                     hit = False
-                    if angle != 0 and len(coords) == 8:
+                    shape = rect.get("shape", "rectangle")
+                    if shape == "dot" and len(coords) >= 4:
+                        # 圓點：擴大點擊偵測範圍（中心 ±10px）
+                        dot_cx = (coords[0] + coords[2]) / 2
+                        dot_cy = (coords[1] + coords[3]) / 2
+                        hit_r = 10
+                        hit = (event.x - dot_cx) ** 2 + (event.y - dot_cy) ** 2 <= hit_r ** 2
+                    elif angle != 0 and len(coords) == 8:
                         # 旋轉矩形：用 point_in_polygon 偵測點擊
                         polygon_corners = [(coords[i], coords[i+1]) for i in range(0, 8, 2)]
                         hit = point_in_polygon(event.x, event.y, polygon_corners)
@@ -1446,6 +1491,16 @@ class RectEditor:
             if abs(dx) > self.drag_threshold or abs(dy) > self.drag_threshold:
                 # print("-------->>> ", dx, dy, self.drag_data["x"], self.drag_data["y"], event.x, event.y)
                 self.canvas.move(self.drag_data["rectId"], dx, dy)
+                # 圓點拖曳時同步移動名稱/溫度/三角形文字
+                rect_data = self._get_rect_data_by_canvas_id(self.drag_data["rectId"])
+                if rect_data and rect_data.get("shape") == "dot":
+                    for kid in ("nameId", "triangleId", "tempTextId"):
+                        cid = rect_data.get(kid)
+                        if cid:
+                            self.canvas.move(cid, dx, dy)
+                    for outline_key in ("tempOutlineIds", "nameOutlineIds", "triangleOutlineIds"):
+                        for oid in rect_data.get(outline_key, []):
+                            self.canvas.move(oid, dx, dy)
                 self.drag_data["x"] = event.x
                 self.drag_data["y"] = event.y
                 self.drag_data["has_moved"] = True  # 标记实际发生了移动
@@ -2049,22 +2104,25 @@ class RectEditor:
         max_temp = self.tempALoader.get_max_temp(
             int(min_x1), int(min_y1), int(max_x2), int(max_y2), 1.0
         )
+        avg_temp = self.tempALoader.get_avg_temp(
+            int(min_x1), int(min_y1), int(max_x2), int(max_y2), 1.0
+        )
         temp_cx, temp_cy = self.tempALoader.get_max_temp_coords(
             int(min_x1), int(min_y1), int(max_x2), int(max_y2), 1.0
         )
-        
+
         # 确保温度坐标不为None
         if temp_cx is None or temp_cy is None:
             print(f"⚠️ 温度坐标查询失败，使用区域中心点")
             temp_cx = (min_x1 + max_x2) / 2
             temp_cy = (min_y1 + max_y2) / 2
-        
+
         if max_temp is None:
             print(f"⚠️ 温度查询失败，使用默认值0")
             max_temp = 0
-        
+
         print(f"  最高温度: {max_temp:.2f}°C，位置: ({temp_cx:.2f}, {temp_cy:.2f})")
-        
+
         # 4. 创建新的矩形框数据
         merged_rect_item = {
             "x1": min_x1,
@@ -2074,6 +2132,7 @@ class RectEditor:
             "cx": temp_cx,
             "cy": temp_cy,
             "max_temp": max_temp,
+            "avg_temp": avg_temp,
             "name": merged_name,
             "rectId": 0,
             "nameId": 0,

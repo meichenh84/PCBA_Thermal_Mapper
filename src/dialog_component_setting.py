@@ -65,6 +65,7 @@ class ComponentSettingDialog(tk.Toplevel):
         self.fields = [
             ("name", "器件名称: ", tk.Entry(frame)),
             ("max_temp", "最高温度: ", tk.Entry(frame)),
+            ("avg_temp", "平均温度: ", tk.Entry(frame)),
             ("_orient", "Orient.: ", tk.Entry(frame)),
             # 其他字段暂时注释掉
             # ("cx", "最高温度 x坐标: ", tk.Entry(frame)),
@@ -92,8 +93,8 @@ class ComponentSettingDialog(tk.Toplevel):
                         entry.insert(0, raw_orient)
                     entry.config(state='readonly')
                 else:
-                    entry.insert(0, oldRect[key])  # 将 oldRect[key] 的值插入到 entry 中
-                    if key == "max_temp":  # 最高温度字段设为只读
+                    entry.insert(0, oldRect.get(key, 0))  # 将 oldRect[key] 的值插入到 entry 中
+                    if key in ("max_temp", "avg_temp"):  # 温度字段设为只读
                         entry.config(state='readonly')
             entry.grid(row=idx, column=1, padx=10, pady=5)
 
@@ -116,7 +117,7 @@ class ComponentSettingDialog(tk.Toplevel):
         """確認按鈕點擊事件處理器。驗證輸入值、保留原始座標資料，並透過 callback 回傳結果。"""
         values = {}
         for key, label, entry in self.fields:
-            if key == "_orient":  # Orient. 為唯讀顯示欄位，不回傳
+            if key in ("_orient", "avg_temp"):  # 唯讀顯示欄位，不回傳
                 continue
             value = entry.get()
             if key == "name":  # 对"器件名称"字段不做类型转换，保留字符串

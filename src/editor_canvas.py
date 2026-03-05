@@ -2043,10 +2043,10 @@ class EditorCanvas:
         Tooltip(
             shape_info_label,
             "形狀轉換功能：\n"
-            "• 矩形 ↔ 圓形 互相轉換\n"
-            "• 圓點：縮為極小標記點，僅顯示名稱與溫度\n"
+            "• 矩形 ↔ 圓形 ↔ 圓點 互相轉換\n"
             "• 轉換後會重新查找圈選形狀範圍內的最高溫度\n"
             "• 圓形只計算圓形內部的溫度點（排除四角）\n"
+            "• 圓點為極小圓形，僅顯示名稱與溫度\n"
             "• 支援多選批次轉換",
             delay=200
         )
@@ -2059,7 +2059,7 @@ class EditorCanvas:
             shape_btn_frame,
             text="矩形 ⬜",
             font=("Arial", 8),
-            width=6,
+            width=5,
             height=1,
             bg=UIStyle.GRAY,
             fg=UIStyle.DARK_GRAY,
@@ -2074,7 +2074,7 @@ class EditorCanvas:
             shape_btn_frame,
             text="圓形 ⚪",
             font=("Arial", 8),
-            width=6,
+            width=5,
             height=1,
             bg=UIStyle.GRAY,
             fg=UIStyle.DARK_GRAY,
@@ -2087,9 +2087,9 @@ class EditorCanvas:
 
         self.convert_to_dot_button = tk.Button(
             shape_btn_frame,
-            text="圓點 •",
+            text="圓點 ●",
             font=("Arial", 8),
-            width=6,
+            width=5,
             height=1,
             bg=UIStyle.GRAY,
             fg=UIStyle.DARK_GRAY,

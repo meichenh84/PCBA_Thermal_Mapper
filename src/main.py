@@ -2637,11 +2637,12 @@ class ResizableImagesApp:
             ws = wb.active
             ws.title = "温度报告"
             # 添加标题行（比照 EditorCanvas Treeview 三欄）
-            ws.append(["點位名稱", "描述", "溫度"])
+            ws.append(["點位名稱", "描述", "最高溫度", "平均溫度"])
             # 将 rect_arr 中的数据写入到 Excel 文件
             for item in self.mark_rect_A:
                 max_temp = item.get("max_temp", 0)
-                ws.append([item.get("name", ""), item.get("description", ""), f"{max_temp:.1f}°C"])
+                avg_temp = item.get("avg_temp", 0)
+                ws.append([item.get("name", ""), item.get("description", ""), f"{max_temp:.1f}°C", f"{avg_temp:.1f}°C"])
                
             # 保存Excel文件到当前文件夹的output目录，如果文件被占用则自动重命名
             excel_path = self.get_available_excel_path(output_dir, "report.xlsx")
@@ -2771,7 +2772,8 @@ class ResizableImagesApp:
             bold_font = Font(bold=True)
             ws.cell(row=1, column=1, value="點位名稱").font = bold_font
             ws.cell(row=1, column=2, value="描述").font = bold_font
-            ws.cell(row=1, column=3, value="溫度").font = bold_font
+            ws.cell(row=1, column=3, value="最高溫度").font = bold_font
+            ws.cell(row=1, column=4, value="平均溫度").font = bold_font
 
             # 寫入元器件資料（格式與 EditorCanvas Treeview 一致）
             for i, item in enumerate(self.mark_rect_A):
@@ -2779,12 +2781,15 @@ class ResizableImagesApp:
                 ws.cell(row=row, column=1, value=item.get("name", ""))
                 ws.cell(row=row, column=2, value=item.get("description", ""))
                 max_temp = item.get("max_temp", 0)
+                avg_temp = item.get("avg_temp", 0)
                 ws.cell(row=row, column=3, value=f"{max_temp:.1f}°C")
+                ws.cell(row=row, column=4, value=f"{avg_temp:.1f}°C")
 
             # 調整欄寬
             ws.column_dimensions['A'].width = 18
             ws.column_dimensions['B'].width = 30
             ws.column_dimensions['C'].width = 16
+            ws.column_dimensions['D'].width = 16
 
             # 生成帶標記的熱力圖影像並暫存為 jpg，固定放在 E1
             imageA_input = cv2.cvtColor(np.array(self.imageA), cv2.COLOR_RGB2BGR)

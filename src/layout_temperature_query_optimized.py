@@ -250,9 +250,10 @@ class LayoutTemperatureQueryOptimized:
                     continue
                 
                 max_temp_value = np.max(thermal_region)
+                avg_temp_value = float(np.mean(thermal_region))
                 if index < 3:
                     print(f"  区域最高温度: {max_temp_value:.2f}°C")
-                
+
                 # 步骤4: 检查温度是否在过滤范围内
                 if min_temp <= max_temp_value <= max_temp:
                     processed_count += 1
@@ -262,12 +263,12 @@ class LayoutTemperatureQueryOptimized:
                     # 转换为全局坐标（相对于整个热力图）
                     ar1_cy = ar1_top + max_temp_coords[0]  # 注意：numpy数组是[row, col]，对应[y, x]
                     ar1_cx = ar1_left + max_temp_coords[1]
-                    
+
                     # 将热力图坐标转换为Layout图坐标
                     cr1_x, cr1_y = self.point_transformer.A2B(ar1_cx, ar1_cy)
                     cr1_cx = int(cr1_x)
                     cr1_cy = int(cr1_y)
-                    
+
                     # 添加到结果列表
                     rectA_arr.append({
                         "x1": ar1_left,
@@ -277,6 +278,7 @@ class LayoutTemperatureQueryOptimized:
                         "cx": ar1_cx,
                         "cy": ar1_cy,
                         "max_temp": max_temp_value,
+                        "avg_temp": avg_temp_value,
                         "name": refdes,
                         "refdes": refdes,
                         "angle": orient
@@ -290,6 +292,7 @@ class LayoutTemperatureQueryOptimized:
                         "cx": int(cr1_cx),
                         "cy": int(cr1_cy),
                         "max_temp": max_temp_value,
+                        "avg_temp": avg_temp_value,
                         "name": refdes,
                         "refdes": refdes,
                         "angle": orient
@@ -392,7 +395,8 @@ class LayoutTemperatureQueryOptimized:
                     continue
                 
                 max_temp_value = np.max(thermal_region)
-                
+                avg_temp_value = float(np.mean(thermal_region))
+
                 # 检查温度是否在过滤范围内
                 if min_temp <= max_temp_value <= max_temp:
                     # 计算最高温度点的坐标
@@ -400,12 +404,12 @@ class LayoutTemperatureQueryOptimized:
                     max_temp_coords = np.unravel_index(max_temp_index, thermal_region.shape)
                     ar1_cy = ar1_top + max_temp_coords[0]
                     ar1_cx = ar1_left + max_temp_coords[1]
-                    
+
                     # 将热力图坐标转换为Layout图坐标
                     cr1_x, cr1_y = self.point_transformer.A2B(ar1_cx, ar1_cy)
                     cr1_cx = int(cr1_x)
                     cr1_cy = int(cr1_y)
-                    
+
                     # 從 component 中取得描述資訊
                     description = component.get('Description', '')
 
@@ -419,6 +423,7 @@ class LayoutTemperatureQueryOptimized:
                             "cx": ar1_cx,
                             "cy": ar1_cy,
                             "max_temp": max_temp_value,
+                            "avg_temp": avg_temp_value,
                             "name": refdes,
                             "refdes": refdes,
                             "description": description,
@@ -432,6 +437,7 @@ class LayoutTemperatureQueryOptimized:
                             "cx": int(cr1_cx),
                             "cy": int(cr1_cy),
                             "max_temp": max_temp_value,
+                            "avg_temp": avg_temp_value,
                             "name": refdes,
                             "refdes": refdes,
                             "description": description,
@@ -471,7 +477,8 @@ class LayoutTemperatureQueryOptimized:
             
             # 重新计算当前区域的最高温度（可能已被其他矩形框影响）
             current_max_temp = np.max(current_region)
-            
+            current_avg_temp = float(np.mean(current_region))
+
             # 检查重新计算后的温度是否仍然符合条件
             if min_temp <= current_max_temp <= max_temp:
                 # 更新最高温度点坐标
@@ -479,20 +486,22 @@ class LayoutTemperatureQueryOptimized:
                 max_temp_coords = np.unravel_index(max_temp_index, current_region.shape)
                 ar1_cy = ar1_top + max_temp_coords[0]
                 ar1_cx = ar1_left + max_temp_coords[1]
-                
+
                 # 更新矩形框数据
                 rectA['cx'] = ar1_cx
                 rectA['cy'] = ar1_cy
                 rectA['max_temp'] = current_max_temp
-                
+                rectA['avg_temp'] = current_avg_temp
+
                 # 将热力图坐标转换为Layout图坐标
                 cr1_x, cr1_y = self.point_transformer.A2B(ar1_cx, ar1_cy)
                 cr1_cx = int(cr1_x)
                 cr1_cy = int(cr1_y)
-                
+
                 rectB['cx'] = cr1_cx
                 rectB['cy'] = cr1_cy
                 rectB['max_temp'] = current_max_temp
+                rectB['avg_temp'] = current_avg_temp
                 
                 # 添加到最终结果
                 final_rectA_arr.append(rectA)

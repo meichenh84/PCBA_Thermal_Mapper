@@ -180,7 +180,28 @@ class TempLoader:
         if sub_matrix is not None and sub_matrix.size > 0:
             return np.max(sub_matrix)  # 回傳子矩陣中的最大溫度值
         return 0
-    
+
+    def get_avg_temp(self, x1, y1, x2, y2, scale=1):
+        """查詢指定矩形區域內的平均溫度值。
+
+        Args:
+            x1, y1, x2, y2: 矩形區域邊界座標（縮放後）。
+            scale: 座標縮放比例，預設為 1。
+
+        Returns:
+            float: 指定區域內的平均溫度值（攝氏度）。若區域為空或無效，則回傳 0。
+        """
+        maxH, maxW = self._tempA.shape
+        _x1 = max(0, int(x1 / scale))
+        _y1 = max(0, int(y1 / scale))
+        _x2 = min(maxW, int(x2 / scale))
+        _y2 = min(maxH, int(y2 / scale))
+        sub_matrix = self._tempA[_y1:_y2, _x1:_x2]
+
+        if sub_matrix is not None and sub_matrix.size > 0:
+            return float(np.mean(sub_matrix))
+        return 0
+
     def get_max_temp_coords(self, x1, y1, x2, y2, scale = 1):
         """
         查詢指定矩形區域內最高溫度點的座標。
@@ -255,6 +276,38 @@ class TempLoader:
 
         return max_temp if found else 0
 
+    def get_avg_temp_in_circle(self, cx, cy, radius, scale=1):
+        """查詢指定圓形區域內的平均溫度值（僅考慮圓形內部的點）。
+
+        Args:
+            cx, cy: 圓心座標（縮放後）。
+            radius: 圓形半徑（縮放後）。
+            scale: 座標縮放比例，預設為 1。
+
+        Returns:
+            float: 圓形區域內的平均溫度值。若區域為空或無效，則回傳 0。
+        """
+        maxH, maxW = self._tempA.shape
+        x1 = max(0, int((cx - radius) / scale))
+        y1 = max(0, int((cy - radius) / scale))
+        x2 = min(maxW, int((cx + radius) / scale))
+        y2 = min(maxH, int((cy + radius) / scale))
+
+        center_x = cx / scale
+        center_y = cy / scale
+        radius_in_matrix = radius / scale
+
+        total = 0.0
+        count = 0
+        for y in range(y1, y2):
+            for x in range(x1, x2):
+                distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+                if distance <= radius_in_matrix:
+                    total += self._tempA[y, x]
+                    count += 1
+
+        return total / count if count > 0 else 0
+
     def get_max_temp_coords_in_circle(self, cx, cy, radius, scale=1):
         """
         查詢指定圓形區域內最高溫度點的座標（僅考慮圓形內部的點）。
@@ -327,6 +380,28 @@ class TempLoader:
 
         if masked.size > 0:
             return float(np.max(masked))
+        return 0
+
+    def get_avg_temp_in_polygon(self, corners, scale=1):
+        """查詢旋轉多邊形區域內的平均溫度值。
+
+        Args:
+            corners: 多邊形頂點座標（縮放後座標系）。
+            scale: 座標縮放比例，預設為 1。
+
+        Returns:
+            float: 多邊形區域內的平均溫度值。若區域無效，則回傳 0。
+        """
+        from rotation_utils import create_polygon_mask
+
+        maxH, maxW = self._tempA.shape
+        matrix_corners = [(x / scale, y / scale) for x, y in corners]
+
+        mask = create_polygon_mask(matrix_corners, (maxH, maxW))
+        masked = self._tempA[mask]
+
+        if masked.size > 0:
+            return float(np.mean(masked))
         return 0
 
     def get_max_temp_coords_in_polygon(self, corners, scale=1):
