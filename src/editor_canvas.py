@@ -2044,21 +2044,22 @@ class EditorCanvas:
             shape_info_label,
             "形狀轉換功能：\n"
             "• 矩形 ↔ 圓形 互相轉換\n"
+            "• 圓點：縮為極小標記點，僅顯示名稱與溫度\n"
             "• 轉換後會重新查找圈選形狀範圍內的最高溫度\n"
             "• 圓形只計算圓形內部的溫度點（排除四角）\n"
             "• 支援多選批次轉換",
             delay=200
         )
 
-        # ========== Row 7: 轉為矩形 + 轉為圓形（同一列） ==========
+        # ========== Row 7: 矩形 + 圓形 + 圓點（同一列） ==========
         shape_btn_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
         shape_btn_frame.grid(row=7, column=0, pady=(0, 3), padx=10, sticky="ew")
 
         self.convert_to_rect_button = tk.Button(
             shape_btn_frame,
-            text="轉為矩形 ⬜",
+            text="矩形 ⬜",
             font=("Arial", 8),
-            width=9,
+            width=6,
             height=1,
             bg=UIStyle.GRAY,
             fg=UIStyle.DARK_GRAY,
@@ -2071,9 +2072,9 @@ class EditorCanvas:
 
         self.convert_to_circle_button = tk.Button(
             shape_btn_frame,
-            text="轉為圓形 ⚪",
+            text="圓形 ⚪",
             font=("Arial", 8),
-            width=9,
+            width=6,
             height=1,
             bg=UIStyle.GRAY,
             fg=UIStyle.DARK_GRAY,
@@ -2082,7 +2083,22 @@ class EditorCanvas:
             command=lambda: self.on_convert_shape("circle"),
             state=tk.DISABLED
         )
-        self.convert_to_circle_button.pack(side='left', expand=True, fill='x', padx=(2, 0))
+        self.convert_to_circle_button.pack(side='left', expand=True, fill='x', padx=(2, 2))
+
+        self.convert_to_dot_button = tk.Button(
+            shape_btn_frame,
+            text="圓點 •",
+            font=("Arial", 8),
+            width=6,
+            height=1,
+            bg=UIStyle.GRAY,
+            fg=UIStyle.DARK_GRAY,
+            relief=UIStyle.BUTTON_RELIEF,
+            bd=UIStyle.BUTTON_BORDER_WIDTH,
+            command=lambda: self.on_convert_shape("dot"),
+            state=tk.DISABLED
+        )
+        self.convert_to_dot_button.pack(side='left', expand=True, fill='x', padx=(2, 0))
 
         # ========== Row 8: 名稱位置標籤 + ⓘ ==========
         name_dir_label_frame = tk.Frame(button_container, bg=UIStyle.VERY_LIGHT_BLUE)
@@ -3244,6 +3260,8 @@ class EditorCanvas:
             self.convert_to_rect_button.config(state=btn_state, bg=bg, fg=fg)
         if hasattr(self, 'convert_to_circle_button'):
             self.convert_to_circle_button.config(state=btn_state, bg=bg, fg=fg)
+        if hasattr(self, 'convert_to_dot_button'):
+            self.convert_to_dot_button.config(state=btn_state, bg=bg, fg=fg)
 
     # ========== 九宮格溫度位置控制 ==========
 

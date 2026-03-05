@@ -915,12 +915,40 @@ class RectEditor:
         rect["tempTextId"] = tempTextId
         rect["nameId"] = nameId
 
+    def convert_to_dot(self, rect):
+        """將矩形/圓形轉換為圓點（極小的標記點）
+
+        Args:
+            rect (dict): 矩形資料字典
+        """
+        # 記住轉換前的矩形邊界，以便轉回矩形時恢復
+        if "_rect_bounds" not in rect:
+            rect["_rect_bounds"] = (rect["x1"], rect["y1"], rect["x2"], rect["y2"])
+
+        # 保存旋轉角度
+        if "_saved_angle" not in rect:
+            rect["_saved_angle"] = rect.get("angle", 0)
+        rect["angle"] = 0
+
+        # 以 cx/cy（最高溫度點）為中心縮為 1×1 的點
+        dot_cx = rect.get("cx", (rect["x1"] + rect["x2"]) / 2)
+        dot_cy = rect.get("cy", (rect["y1"] + rect["y2"]) / 2)
+        rect["x1"] = dot_cx - 0.5
+        rect["y1"] = dot_cy - 0.5
+        rect["x2"] = dot_cx + 0.5
+        rect["y2"] = dot_cy + 0.5
+
+        rect["shape"] = "dot"
+
+        # 刪除舊的 Canvas 物件，重新繪製
+        self._redraw_single_rect(rect)
+
     def convert_shapes_batch(self, rect_ids, target_shape):
         """批次轉換形狀
 
         Args:
             rect_ids (list): 要轉換的矩形 ID 列表
-            target_shape (str): "rectangle" 或 "circle"
+            target_shape (str): "rectangle"、"circle" 或 "dot"
 
         Returns:
             int: 成功轉換的數量
@@ -945,7 +973,9 @@ class RectEditor:
                 continue
 
             # 執行轉換
-            if target_shape == "circle":
+            if target_shape == "dot":
+                self.convert_to_dot(rect)
+            elif target_shape == "circle":
                 self.convert_to_circle(rect)
             else:
                 self.convert_to_rectangle(rect)

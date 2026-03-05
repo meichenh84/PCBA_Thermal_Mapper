@@ -386,10 +386,17 @@ def draw_canvas_item(canvas, item, imageScale=1, offset=(0, 0), imageIndex=0, si
 
     shadowColor = "#000000"  # 黑色
 
-    # 绘制形状（矩形或圆形，支援旋轉）
+    # 绘制形状（矩形、圆形或圓點，支援旋轉）
     shape = item.get("shape", "rectangle")  # 預設為矩形
     angle = item.get("angle", 0)
-    if shape == "circle":
+    if shape == "dot":
+        # 圓點：以 cx/cy 為中心繪製小實心圓
+        dot_r = max(3, int(4 * font_scale))
+        rectId = canvas.create_oval(
+            cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r,
+            fill=rectColor, outline=rectColor, width=1
+        )
+    elif shape == "circle":
         rectId = canvas.create_oval(left, top, right, bottom, outline=rectColor, width=rectWidth)
     elif angle != 0:
         # 旋轉矩形：用 create_polygon 替代 create_rectangle
@@ -669,10 +676,13 @@ def draw_numpy_image_item(imageA, mark_rect_A, imageScale=1, imageIndex=0, size=
             cx = max(0, min(cx, img_width - 1))
             cy = max(0, min(cy, img_height - 1))
 
-        # 繪製框（支援圓形和旋轉）
+        # 繪製框（支援圓形、圓點和旋轉）
         shape = item.get("shape", "rectangle")
         angle = item.get("angle", 0)
-        if shape == "circle":
+        if shape == "dot":
+            dot_r = max(3, int(4 * textScale))
+            cv2.circle(imageA, (cx, cy), dot_r, rectColor, -1, cv2.LINE_AA)
+        elif shape == "circle":
             center_x = int((left + right) / 2)
             center_y = int((top + bottom) / 2)
             axis_x = int((right - left) / 2)
